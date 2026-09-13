@@ -1,0 +1,36 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="Shared.uss" />
+    <ui:VisualElement class="screen">
+        <ui:VisualElement class="card">
+            <ui:Label text="TWO BIRDS" class="eyebrow" />
+            <ui:Label text="A little room to move." class="title" />
+            <ui:VisualElement name="main-page">
+                <ui:Button name="solo" text="Solo" />
+                <ui:Button name="host" text="Host" />
+                <ui:Button name="join" text="Join" />
+                <ui:Button name="settings" text="Settings · coming later" />
+                <ui:Button name="quit" text="Quit · coming later" />
+            </ui:VisualElement>
+            <ui:VisualElement name="host-page" style="display: none;">
+                <ui:Label text="Host a session" class="heading" />
+                <ui:DropdownField name="lan-address" label="Address to share" />
+                <ui:Button name="refresh" text="Refresh addresses" />
+                <ui:TextField name="host-port" label="UDP port" value="7770" max-length="5" />
+                <ui:Label name="endpoint" class="hint" />
+                <ui:Button name="copy" text="Copy Address" />
+                <ui:Label text="LAN addresses work on your local network. Internet joining needs a reachable public IPv4 address and UDP forwarding / firewall configuration." class="hint" />
+                <ui:Button name="start-host" text="Start Hosting" />
+                <ui:Button name="host-back" text="Back" />
+            </ui:VisualElement>
+            <ui:VisualElement name="join-page" style="display: none;">
+                <ui:Label text="Join a session" class="heading" />
+                <ui:TextField name="join-ip" label="Host IP" value="127.0.0.1" max-length="15" />
+                <ui:TextField name="join-port" label="UDP port" value="7770" max-length="5" />
+                <ui:Button name="connect" text="Connect" />
+                <ui:Button name="join-back" text="Back" />
+            </ui:VisualElement>
+            <ui:Label name="status" class="status" />
+            <ui:Button name="cancel" text="Cancel connection" style="display: none;" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

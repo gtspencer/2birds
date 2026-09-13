@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="Shared.uss" />
+    <ui:VisualElement class="overlay" picking-mode="Ignore">
+        <ui:VisualElement class="hud">
+            <ui:Label name="session-info" />
+            <ui:Label name="share-endpoint" />
+            <ui:Button name="copy" text="Copy Address" />
+            <ui:Label text="WASD · move    Mouse · look    Space · jump    Esc · session" class="hint" />
+        </ui:VisualElement>
+        <ui:VisualElement name="session-panel" class="card pause" style="display: none;">
+            <ui:Label text="Session" class="title" />
+            <ui:Label name="status" class="status" />
+            <ui:Button name="resume" text="Resume" />
+            <ui:Button name="leave" text="Leave Session" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

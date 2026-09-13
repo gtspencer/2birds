@@ -1,0 +1,18 @@
+:root { color: rgb(231, 237, 241); font-size: 18px; }
+.screen { flex-grow: 1; align-items: center; justify-content: center; background-color: rgb(20, 28, 36); }
+.card { width: 500px; padding: 28px; background-color: rgb(34, 45, 56); border-radius: 12px; }
+.eyebrow { color: rgb(143, 192, 183); font-size: 14px; letter-spacing: 3px; }
+.title { font-size: 30px; margin-bottom: 20px; white-space: normal; }
+.heading { font-size: 24px; margin-bottom: 12px; }
+Button { height: 42px; margin-top: 5px; margin-bottom: 5px; background-color: rgb(58, 76, 88); color: rgb(245, 247, 249); border-width: 1px; border-color: rgb(92, 113, 125); border-radius: 5px; }
+Button:hover { background-color: rgb(74, 99, 109); }
+Button:focus { border-color: rgb(165, 225, 204); border-width: 2px; }
+TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
+.unity-base-field__input { background-color: rgb(20, 28, 36); color: rgb(231, 237, 241); border-color: rgb(92, 113, 125); }
+.unity-base-text-field__input, .unity-base-popup-field__input { background-color: rgb(20, 28, 36); color: rgb(231, 237, 241); padding-left: 10px; padding-right: 10px; min-height: 36px; }
+.unity-base-text-field__input:focus, .unity-base-popup-field__input:focus { border-color: rgb(165, 225, 204); }
+.hint { white-space: normal; color: rgb(179, 195, 205); font-size: 14px; margin-top: 8px; margin-bottom: 8px; }
+.status { white-space: normal; color: rgb(255, 204, 147); margin-top: 10px; }
+.overlay { flex-grow: 1; }
+.hud { position: absolute; left: 20px; top: 20px; padding: 14px; background-color: rgba(20, 28, 36, 0.88); border-radius: 8px; }
+.pause { position: absolute; align-self: center; top: 28%; }
