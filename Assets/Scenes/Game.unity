@@ -147,7 +147,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc3a113434e2bac4a93f50c76bfa0530, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.GamePlayerSpawner
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 247118956}
@@ -166,7 +166,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Object.NetworkObject
   _localLevelOfDetailCalculationType: 0
   _useLevelOfDetail: 0
@@ -367,6 +367,7 @@ GameObject:
   - component: {fileID: 1612057865}
   - component: {fileID: 1612057864}
   - component: {fileID: 1612057863}
+  - component: {fileID: 1612057867}
   m_Layer: 0
   m_Name: Session overlay
   m_TagString: Untagged
@@ -384,7 +385,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b02742cd4d868764e81c949154e4e5c9, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.SessionOverlay
 --- !u!114 &1612057864
 MonoBehaviour:
@@ -396,7 +397,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
   m_PanelSettings: {fileID: 11400000, guid: 650f3bc1fe0b3a3418c4caeb443d82d1, type: 2}
   m_ParentUI: {fileID: 0}
@@ -424,6 +425,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1612057867
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1612057862}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5761b24f29ac22645aed96eeb3ab26f3, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: TwoBirds.Runtime::TwoBirds.InventoryHudPresenter
 --- !u!1 &1806569640
 GameObject:
   m_ObjectHideFlags: 0

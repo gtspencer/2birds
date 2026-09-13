@@ -13,6 +13,7 @@ namespace TwoBirds
         private Vector2 movement;
         private bool jumpPending;
         private bool gameplay;
+        private int resumeFrame;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         internal System.Func<MoveInput> AutomatedInput;
 #endif
@@ -29,13 +30,16 @@ namespace TwoBirds
             look = actions.FindAction("Look");
             jump = actions.FindAction("Jump");
             InputSystem.onAfterUpdate += ReadInput;
-            SetGameplay(true);
+            SetGameplay(false);
             SessionController.Instance.PlayerReady(GetComponent<PlayerMotor>());
         }
 
         public void SetGameplay(bool value)
         {
-            gameplay = value && IsOwner;
+            bool next = value && IsOwner;
+            if (gameplay == next && actions != null && actions.enabled == next) return;
+            gameplay = next;
+            resumeFrame = Time.frameCount;
             Clear();
             if (actions == null) return;
             if (gameplay) actions.Enable(); else actions.Disable();
@@ -45,7 +49,7 @@ namespace TwoBirds
 
         private void ReadInput()
         {
-            if (!gameplay || !IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
+            if (!gameplay || !IsOwner || Time.frameCount == resumeFrame || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
             jumpPending |= jump.WasPressedThisFrame();
             Vector2 delta = look.ReadValue<Vector2>();
@@ -78,6 +82,7 @@ namespace TwoBirds
         public override void OnStopClient() => Release();
         private void Release()
         {
+            SessionController.Instance?.PlayerGone(GetComponent<PlayerMotor>());
             InputSystem.onAfterUpdate -= ReadInput;
             if (actions != null) SetGameplay(false);
             actions = null;

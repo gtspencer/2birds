@@ -37,6 +37,7 @@ namespace TwoBirds.Editor
             var transport = new SerializedObject(root.GetComponent<GameTransport>());
             Require(!transport.FindProperty("_enableIpv6").boolValue, "IPv6 must be disabled.");
             Require(!transport.FindProperty("_reuseAddress").boolValue, "Socket reuse must be disabled.");
+            InventoryAssets.Validate();
             Debug.Log("MVP endpoint and asset configuration checks passed.");
         }
         private static void Require(bool condition, string message)

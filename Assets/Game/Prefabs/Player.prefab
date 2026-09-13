@@ -101,7 +101,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 453481867b26f7c43b5bf38802a5f50e, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Component.Transforming.Beta.NetworkTickSmoother
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 7591321746754792407}
@@ -141,6 +141,8 @@ GameObject:
   - component: {fileID: 4659292104217571434}
   - component: {fileID: 4126219784820780728}
   - component: {fileID: 5928213028283149461}
+  - component: {fileID: 208229541233581874}
+  - component: {fileID: 3599995745275039269}
   m_Layer: 6
   m_Name: Player
   m_TagString: Untagged
@@ -224,7 +226,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Object.NetworkObject
   _localLevelOfDetailCalculationType: 0
   _useLevelOfDetail: 0
@@ -281,7 +283,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0d81bf10eddd08945ac2c16aaece2a95, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.PlayerNetworkState
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 7591321746754792407}
@@ -296,7 +298,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 72b71f07f3c012d439873cb976263a63, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.PlayerInputReader
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 7591321746754792407}
@@ -311,7 +313,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 11ff2f0c5b2bd8840a2fbbf2a5be1955, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.PlayerMotor
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 7591321746754792407}
@@ -328,9 +330,42 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2bbec09249b77f14fa46c2392127fffb, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.PlayerPresentation
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 7591321746754792407}
   _networkObjectCache: {fileID: 0}
   graphics: {fileID: 7462204748692948878}
+  eyeHeight: 0.75
+--- !u!114 &208229541233581874
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5304375756855324889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e4216c8d0568ac4393527ce3bfd2cf6, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: TwoBirds.Runtime::TwoBirds.PlayerInventory
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 7591321746754792407}
+  _networkObjectCache: {fileID: 0}
+  catalog: {fileID: 11400000, guid: 36513694a87947a449f0be6284f3b48a, type: 2}
+--- !u!114 &3599995745275039269
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5304375756855324889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbd4a50625ff9f140b19fe734e3b64cc, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: TwoBirds.Runtime::TwoBirds.PlayerHealth
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 7591321746754792407}
+  _networkObjectCache: {fileID: 0}
+  defaultMaximum: 100

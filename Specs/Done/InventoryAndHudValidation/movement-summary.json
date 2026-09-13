@@ -1,0 +1,62 @@
+﻿[
+  {
+    "file": "host\\player-0-session-1.csv",
+    "samples": 0,
+    "role": "server",
+    "error_p95_m": null,
+    "error_p99_m": null,
+    "error_max_m": null,
+    "replay_correction_max_m": null,
+    "tick_cpu_p95_ms": 0.4711,
+    "replay_cpu_p95_ms": null,
+    "tick_hz": 60.00180087260464,
+    "rtt_median_ms": null,
+    "tail_error_max_m": null,
+    "reset_revision": 0
+  },
+  {
+    "file": "host\\player-1-session-1.csv",
+    "samples": 0,
+    "role": "server",
+    "error_p95_m": null,
+    "error_p99_m": null,
+    "error_max_m": null,
+    "replay_correction_max_m": null,
+    "tick_cpu_p95_ms": 0.5862,
+    "replay_cpu_p95_ms": null,
+    "tick_hz": 60.03370585814027,
+    "rtt_median_ms": null,
+    "tail_error_max_m": null,
+    "reset_revision": 0
+  },
+  {
+    "file": "join\\player-0-session-1.csv",
+    "samples": 664,
+    "role": "spectator",
+    "error_p95_m": 0.008491,
+    "error_p99_m": 0.010278,
+    "error_max_m": 0.253231,
+    "replay_correction_max_m": 0.707506,
+    "tick_cpu_p95_ms": 2.1984,
+    "replay_cpu_p95_ms": 1.9091,
+    "tick_hz": 60.04156091631144,
+    "rtt_median_ms": 17.0,
+    "tail_error_max_m": 0.003334,
+    "reset_revision": 0
+  },
+  {
+    "file": "join\\player-1-session-1.csv",
+    "samples": 662,
+    "role": "owner",
+    "error_p95_m": 0.0,
+    "error_p99_m": 0.0,
+    "error_max_m": 0.0,
+    "replay_correction_max_m": 0.034722,
+    "tick_cpu_p95_ms": 2.2717,
+    "replay_cpu_p95_ms": 1.9156,
+    "tick_hz": 60.04156091631144,
+    "rtt_median_ms": 17.0,
+    "tail_error_max_m": 0.0,
+    "reset_revision": 0
+  }
+]

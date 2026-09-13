@@ -40,15 +40,23 @@ def main():
         selector.register(front, selectors.EVENT_READ)
         selector.register(back, selectors.EVENT_READ)
         end = time.monotonic() + args.seconds
+        report_at = time.monotonic() + 5
+        print(f"delay_ms={args.delay} jitter_ms={args.jitter} loss={args.loss} seed={args.seed}", flush=True)
         while time.monotonic() < end:
             now = time.monotonic()
+            if now >= report_at:
+                print(f"forwarded={forwarded} dropped={dropped} pending={len(queue)}", flush=True)
+                report_at = now + 5
             while queue and queue[0][0] <= now:
                 _, _, sock, destination, data = heapq.heappop(queue)
                 sock.sendto(data, destination)
                 forwarded += 1
             timeout = max(0, min(.01, queue[0][0] - now)) if queue else .01
             for key, _ in selector.select(timeout):
-                data, source = key.fileobj.recvfrom(65535)
+                try:
+                    data, source = key.fileobj.recvfrom(65535)
+                except ConnectionResetError:
+                    continue
                 if key.fileobj is front:
                     if client is not None and source != client:
                         continue

@@ -1,0 +1,4 @@
+Inventory asset configuration checks passed.
+MVP endpoint and asset configuration checks passed.
+Build Finished, Result: Success.
+Exiting batchmode successfully now!

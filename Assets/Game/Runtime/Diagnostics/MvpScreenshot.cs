@@ -34,8 +34,10 @@ namespace TwoBirds
             yield return new WaitForSecondsRealtime(3f);
             // Hidden validation windows have no capturable swap-chain buffer. Render the camera
             // and UI panel to textures instead, then composite their actual rendered pixels.
-            var sceneTexture = new RenderTexture(1280, 720, 24);
-            var uiTexture = new RenderTexture(1280, 720, 0);
+            int width = int.TryParse(MvpValidation.Argument("-captureWidth"), out int w) ? w : 1280;
+            int height = int.TryParse(MvpValidation.Argument("-captureHeight"), out int h) ? h : 720;
+            var sceneTexture = new RenderTexture(width, height, 24);
+            var uiTexture = new RenderTexture(width, height, 0);
             sceneTexture.Create();
             uiTexture.Create();
             var cameras = Camera.allCameras;

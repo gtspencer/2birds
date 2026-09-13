@@ -10,6 +10,8 @@ Items can be used (mouse click or right trigger), or they can be dropped (q or c
 
 Ensure this uses a similar networking stack/solution to the players.  Thrown items need relatively high replication synchronization, but we don't want to overwhelm the host with networking calls, and we want to make sure the thrower of the rock, if not the host, sees the most accurate representation of the trajectory of the rock.
 
+There is a rock model in C:\Users\spenc\source\repos\2birds\Assets\Art\Rock\Rock_Basalt that you should use as the first holdable/throwable
+
 ### Success Criteria
 - Player A can pick a rock up off the ground, and it goes into their inventory.
 - Player B no longer sees the rock

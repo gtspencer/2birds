@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="12" result="Passed" total="12" passed="12" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-09-13 18:55:16Z" end-time="2026-09-13 18:55:17Z" duration="0.0666176">
+  <test-suite type="TestSuite" id="1000" name="2birds" fullname="2birds" runstate="Runnable" testcasecount="12" result="Passed" start-time="2026-09-13 18:55:16Z" end-time="2026-09-13 18:55:17Z" duration="0.066618" total="12" passed="12" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1015" name="TwoBirds.Inventory.Tests.dll" fullname="C:/Users/spenc/source/repos/2birds/.utmp/InventoryValidation/Library/ScriptAssemblies/TwoBirds.Inventory.Tests.dll" runstate="Runnable" testcasecount="12" result="Passed" start-time="2026-09-13 18:55:16Z" end-time="2026-09-13 18:55:17Z" duration="0.058278" total="12" passed="12" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="458256" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1016" name="TwoBirds" fullname="TwoBirds" runstate="Runnable" testcasecount="12" result="Passed" start-time="2026-09-13 18:55:16Z" end-time="2026-09-13 18:55:17Z" duration="0.057244" total="12" passed="12" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1017" name="Tests" fullname="TwoBirds.Tests" runstate="Runnable" testcasecount="12" result="Passed" start-time="2026-09-13 18:55:16Z" end-time="2026-09-13 18:55:17Z" duration="0.056990" total="12" passed="12" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestFixture" id="1001" name="InventoryModelTests" fullname="TwoBirds.Tests.InventoryModelTests" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" testcasecount="12" result="Passed" start-time="2026-09-13 18:55:16Z" end-time="2026-09-13 18:55:17Z" duration="0.056057" total="12" passed="12" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1003" name="CapacityReturnsRemainderAndDoesNotOverflow" fullname="TwoBirds.Tests.InventoryModelTests.CapacityReturnsRemainderAndDoesNotOverflow" methodname="CapacityReturnsRemainderAndDoesNotOverflow" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="78213269" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.020724" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1013" name="CatalogRejectsDuplicatesMissingIdsAndInvalidLimits" fullname="TwoBirds.Tests.InventoryModelTests.CatalogRejectsDuplicatesMissingIdsAndInvalidLimits" methodname="CatalogRejectsDuplicatesMissingIdsAndInvalidLimits" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="1244441295" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.003903" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1005" name="CompleteMergeRetiresOnlySourceIdentity" fullname="TwoBirds.Tests.InventoryModelTests.CompleteMergeRetiresOnlySourceIdentity" methodname="CompleteMergeRetiresOnlySourceIdentity" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="1296549950" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.002557" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-suite type="ParameterizedMethod" id="1011" name="DropIsAtomicAndBlocksReentrancy" fullname="TwoBirds.Tests.InventoryModelTests.DropIsAtomicAndBlocksReentrancy" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.005267" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1008" name="DropIsAtomicAndBlocksReentrancy(False,False)" fullname="TwoBirds.Tests.InventoryModelTests.DropIsAtomicAndBlocksReentrancy(False,False)" methodname="DropIsAtomicAndBlocksReentrancy" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="238796175" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.002140" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1009" name="DropIsAtomicAndBlocksReentrancy(False,True)" fullname="TwoBirds.Tests.InventoryModelTests.DropIsAtomicAndBlocksReentrancy(False,True)" methodname="DropIsAtomicAndBlocksReentrancy" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="103587885" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.000289" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1010" name="DropIsAtomicAndBlocksReentrancy(True,False)" fullname="TwoBirds.Tests.InventoryModelTests.DropIsAtomicAndBlocksReentrancy(True,False)" methodname="DropIsAtomicAndBlocksReentrancy" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="2114342212" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.000588" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-case id="1002" name="InsertionUsesAllFourPriorityGroups" fullname="TwoBirds.Tests.InventoryModelTests.InsertionUsesAllFourPriorityGroups" methodname="InsertionUsesAllFourPriorityGroups" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="382444948" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.000666" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1007" name="InvalidAndStaleOperationsPreserveState" fullname="TwoBirds.Tests.InventoryModelTests.InvalidAndStaleOperationsPreserveState" methodname="InvalidAndStaleOperationsPreserveState" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="799011777" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.001235" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1012" name="MissingSinkPreservesEntryAndSnapshotsAreDetached" fullname="TwoBirds.Tests.InventoryModelTests.MissingSinkPreservesEntryAndSnapshotsAreDetached" methodname="MissingSinkPreservesEntryAndSnapshotsAreDetached" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="2144992907" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.000455" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1004" name="MovesSwapsAndMergesConserveQuantityAndIdentity" fullname="TwoBirds.Tests.InventoryModelTests.MovesSwapsAndMergesConserveQuantityAndIdentity" methodname="MovesSwapsAndMergesConserveQuantityAndIdentity" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="498227097" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.000789" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1006" name="UniqueEntriesSwapAndDuplicateIdentityIsRejected" fullname="TwoBirds.Tests.InventoryModelTests.UniqueEntriesSwapAndDuplicateIdentityIsRejected" methodname="UniqueEntriesSwapAndDuplicateIdentityIsRejected" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="1156134917" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.004817" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1014" name="UniqueTransferKeepsIdentityAndCannotExistInTwoInventories" fullname="TwoBirds.Tests.InventoryModelTests.UniqueTransferKeepsIdentityAndCannotExistInTwoInventories" methodname="UniqueTransferKeepsIdentityAndCannotExistInTwoInventories" classname="TwoBirds.Tests.InventoryModelTests" runstate="Runnable" seed="1498758140" result="Passed" start-time="2026-09-13 18:55:17Z" end-time="2026-09-13 18:55:17Z" duration="0.000700" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[Saving results to: C:/Users/spenc/AppData/LocalLow/DefaultCompany/2birds\TestResults.xml
+]]></output>
+            </test-case>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

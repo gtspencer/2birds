@@ -1,0 +1,97 @@
+Session 1: Host StartingServer. Starting server…
+Session 1: Host Connecting. Connecting local player…
+Session 1: Host LoadingGame. Loading game…
+INVENTORY PASS: server grant
+INVENTORY PASS: unique grant
+INVENTORY PASS: health 50/100
+INVENTORY PASS: health clamps to zero
+INVENTORY PASS: health rejects zero maximum
+INVENTORY PASS: health clamps to maximum
+INVENTORY PASS: health setter
+Session 1: Host InGame. 
+INVENTORY PASS: owner initial inventory
+INVENTORY PASS: owner health initial sync
+INVENTORY PASS: submit merge
+INVENTORY PASS: pending or host completion
+INVENTORY PASS: request completed
+INVENTORY PASS: merge confirmed
+INVENTORY PASS: late snapshot cannot roll back confirmed state
+INVENTORY PASS: duplicate suppressed
+INVENTORY PASS: submit unavailable drop
+INVENTORY PASS: request completed
+INVENTORY PASS: drop preserves contents and feedback
+INVENTORY PASS: repeated move
+INVENTORY PASS: request completed
+INVENTORY PASS: close during request conserves contents
+INVENTORY PASS: repeated move
+INVENTORY PASS: request completed
+INVENTORY PASS: close during request conserves contents
+INVENTORY PASS: repeated move
+INVENTORY PASS: request completed
+INVENTORY PASS: close during request conserves contents
+INVENTORY PASS: repeated move
+INVENTORY PASS: request completed
+INVENTORY PASS: close during request conserves contents
+INVENTORY PASS: repeated move
+INVENTORY PASS: request completed
+INVENTORY PASS: close during request conserves contents
+INVENTORY PASS: repeated move
+INVENTORY PASS: request completed
+INVENTORY PASS: close during request conserves contents
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: inventory gates gameplay
+INVENTORY PASS: cancel closes only inventory
+INVENTORY PASS: cancel opens session
+INVENTORY PASS: cancel resumes
+INVENTORY PASS: one HUD with shared slot presentations
+INVENTORY PASS: Escape cancels captured drag before closing inventory
+INVENTORY PASS: canceled drag preserves contents
+INVENTORY PASS: close releases pointer capture
+INVENTORY PASS: server grant
+INVENTORY PASS: unique grant
+INVENTORY PASS: health 50/100
+INVENTORY PASS: health clamps to zero
+INVENTORY PASS: health rejects zero maximum
+INVENTORY PASS: health clamps to maximum
+INVENTORY PASS: health setter
+INVENTORY PASS: concurrent server grant converges
+INVENTORY PASS: server grant cancels captured drag
+INVENTORY PASS: owner receives all health transitions
+INVENTORY VALIDATION COMPLETE
+Session 1: Host Stopping. 
+Session 1: Host Idle. 

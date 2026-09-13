@@ -5,6 +5,7 @@ using FishNet.Managing.Scened;
 using FishNet.Transporting;
 using FishNet.Transporting.Tugboat;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using SceneManager = UnityEngine.SceneManagement.SceneManager;
 
@@ -25,11 +26,17 @@ namespace TwoBirds
         public uint SessionId { get; private set; }
         public bool PanelOpen { get; private set; }
         public PlayerMotor LocalPlayer { get; private set; }
+        public bool InventoryOpen { get; private set; }
+        public bool ApplicationFocused { get; private set; } = true;
+        public Func<bool> CancelInventoryDrag;
+        public bool GameplayAllowed => Phase == SessionPhase.InGame && LocalPlayer != null &&
+            LocalPlayer.IsOwner && ApplicationFocused && !PanelOpen && !InventoryOpen;
         public event Action Changed;
         private Tugboat transport;
         private float deadline;
         private bool sceneLoading;
         private int attempt;
+        private InputAction uiNavigate, uiSubmit;
 
         private void Awake()
         {
@@ -41,6 +48,8 @@ namespace TwoBirds
 
         private void Start()
         {
+            uiNavigate = InputSystem.actions.FindAction("UI/Navigate");
+            uiSubmit = InputSystem.actions.FindAction("UI/Submit");
             Network = GetComponent<NetworkManager>();
             transport = GetComponent<Tugboat>();
             Network.ServerManager.OnServerConnectionState += ServerState;
@@ -61,6 +70,7 @@ namespace TwoBirds
             Mode = mode;
             LocalPlayer = null;
             PanelOpen = false;
+            InventoryOpen = false;
             ShareEndpoint = mode == SessionMode.Host && !string.IsNullOrEmpty(shareAddress) ? $"{shareAddress}:{port}" : "";
             transport.SetServerBindAddress(mode == SessionMode.Solo ? "127.0.0.1" : "0.0.0.0", IPAddressType.IPv4);
             transport.SetServerBindAddress("", IPAddressType.IPv6);
@@ -127,8 +137,44 @@ namespace TwoBirds
         public void SetPanel(bool open)
         {
             PanelOpen = open;
-            if (LocalPlayer != null) LocalPlayer.GetComponent<PlayerInputReader>().SetGameplay(!open);
+            if (open) { CancelInventoryDrag?.Invoke(); InventoryOpen = false; }
+            RefreshInput();
             Changed?.Invoke();
+        }
+
+        public void SetInventory(bool open)
+        {
+            if (open && (Phase != SessionPhase.InGame || LocalPlayer == null || PanelOpen || !ApplicationFocused)) return;
+            CancelInventoryDrag?.Invoke();
+            InventoryOpen = open;
+            RefreshInput();
+            Changed?.Invoke();
+        }
+        public void CancelModal()
+        {
+            if (CancelInventoryDrag?.Invoke() == true) return;
+            if (InventoryOpen) SetInventory(false);
+            else if (Phase == SessionPhase.InGame) SetPanel(!PanelOpen);
+            else Leave();
+        }
+        public void RefreshInput()
+        {
+            if (GameplayAllowed) { uiNavigate?.Disable(); uiSubmit?.Disable(); }
+            else { uiNavigate?.Enable(); uiSubmit?.Enable(); }
+            if (LocalPlayer != null) LocalPlayer.GetComponent<PlayerInputReader>().SetGameplay(GameplayAllowed);
+        }
+        public void PlayerGone(PlayerMotor player)
+        {
+            if (LocalPlayer != player) return;
+            SetPanel(true);
+            LocalPlayer = null;
+            Changed?.Invoke();
+        }
+        private void OnApplicationFocus(bool focused)
+        {
+            ApplicationFocused = focused;
+            if (!focused && Phase == SessionPhase.InGame) SetPanel(true);
+            else RefreshInput();
         }
 
         private void Update()
@@ -170,6 +216,7 @@ namespace TwoBirds
         {
             Phase = phase;
             Status = message;
+            RefreshInput();
             Debug.Log($"Session {SessionId}: {Mode} {phase}. {message}");
             Changed?.Invoke();
         }
