@@ -1,4 +1,0 @@
-1280: fixture completions=1; exceptions=0
-1920: fixture completions=1; exceptions=0
-2560: fixture completions=1; exceptions=0
-default: fixture completions=0; exceptions=0
