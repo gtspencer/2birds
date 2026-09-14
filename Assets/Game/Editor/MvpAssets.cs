@@ -101,8 +101,6 @@ namespace TwoBirds.Editor
             Set(network, "_predictionType", 1);
             Set(network, "_enableStateForwarding", true);
             go.AddComponent<PlayerNetworkState>();
-            Set(go.AddComponent<PlayerInventory>(), "catalog", Asset<ItemCatalog>(Root + "Settings/ItemCatalog.asset"));
-            go.AddComponent<PlayerHealth>();
             Set(go.AddComponent<PlayerMotor>(), "settings", settings);
             var graphics = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             graphics.name = "Graphics";
@@ -202,9 +200,7 @@ namespace TwoBirds.Editor
                 points.GetArrayElementAtIndex(i).objectReferenceValue = marker;
             }
             data.ApplyModifiedPropertiesWithoutUndo();
-            var overlay = Document("Session overlay", panel, "Session").gameObject;
-            overlay.AddComponent<SessionOverlay>();
-            overlay.AddComponent<InventoryHudPresenter>();
+            Document("Session overlay", panel, "Session").gameObject.AddComponent<SessionOverlay>();
             EditorSceneManager.SaveScene(scene, "Assets/Scenes/Game.unity");
         }
 

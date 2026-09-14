@@ -1,6 +1,0 @@
-{
-    "name": "TwoBirds.Inventory.Tests",
-    "references": ["TwoBirds.Runtime", "FishNet.Runtime"],
-    "includePlatforms": ["Editor"],
-    "optionalUnityReferences": ["TestAssemblies"]
-}

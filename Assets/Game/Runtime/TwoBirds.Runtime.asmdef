@@ -1,4 +1,0 @@
-{
-    "name": "TwoBirds.Runtime",
-    "references": ["FishNet.Runtime", "GameKit.Dependencies", "Unity.InputSystem", "Unity.RenderPipelines.Core.Runtime", "Unity.RenderPipelines.Universal.Runtime"]
-}

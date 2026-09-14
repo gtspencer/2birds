@@ -1,36 +1,12 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="Shared.uss" />
-    <Style src="Inventory.uss" />
     <ui:VisualElement class="overlay" picking-mode="Ignore">
         <ui:VisualElement class="hud">
             <ui:Label name="session-info" />
             <ui:Label name="share-endpoint" />
             <ui:Button name="copy" text="Copy Address" />
-            <ui:Label text="WASD / Mouse / Space    Esc: session    Tab / I: inventory    1-8: select" class="hint" />
+            <ui:Label text="WASD · move    Mouse · look    Space · jump    Esc · session" class="hint" />
         </ui:VisualElement>
-        <ui:VisualElement name="inventory-hud" class="inventory-hud" picking-mode="Ignore" style="display: none;">
-            <ui:VisualElement class="inventory-health" picking-mode="Ignore">
-                <ui:Label name="health-text" text="Health" picking-mode="Ignore" />
-                <ui:VisualElement name="health-bar" class="inventory-health-track" picking-mode="Ignore">
-                    <ui:VisualElement name="health-fill" class="inventory-health-fill" picking-mode="Ignore" />
-                </ui:VisualElement>
-            </ui:VisualElement>
-        </ui:VisualElement>
-        <ui:VisualElement name="hotbar" class="inventory-hotbar" style="display: none;" />
-        <ui:VisualElement name="inventory-panel" class="inventory-panel" style="display: none;">
-            <ui:VisualElement class="inventory-header">
-                <ui:Label text="Inventory" class="title" />
-                <ui:Button name="inventory-close" text="Close" />
-            </ui:VisualElement>
-            <ui:Label text="Hotbar" class="hint" />
-            <ui:VisualElement name="inventory-row-0" class="inventory-row" />
-            <ui:Label text="Storage" class="hint" />
-            <ui:VisualElement name="inventory-row-1" class="inventory-row" />
-            <ui:VisualElement name="inventory-row-2" class="inventory-row" />
-            <ui:Label text="Drag to move; drag outside to drop. Tab / I to close." class="hint" />
-        </ui:VisualElement>
-        <ui:Label name="inventory-tooltip" class="inventory-tooltip" picking-mode="Ignore" style="display: none;" />
-        <ui:Label name="inventory-feedback" class="inventory-feedback" picking-mode="Ignore" style="display: none;" />
         <ui:VisualElement name="session-panel" class="card pause" style="display: none;">
             <ui:Label text="Session" class="title" />
             <ui:Label name="status" class="status" />
