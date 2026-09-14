@@ -8,6 +8,7 @@ namespace TwoBirds
     {
         private SessionController session;
         private GamePlayerSpawner spawner;
+        private HudController hud;
         private VisualElement root;
         private InputAction pause;
         private void OnEnable()
@@ -15,6 +16,7 @@ namespace TwoBirds
             session = SessionController.Instance;
             if (session == null) return;
             spawner = FindAnyObjectByType<GamePlayerSpawner>();
+            hud = FindAnyObjectByType<HudController>();
             root = GetComponent<UIDocument>().rootVisualElement;
             root.Q<Button>("resume").clicked += Resume;
             root.Q<Button>("leave").clicked += Leave;
@@ -26,6 +28,8 @@ namespace TwoBirds
         }
         private void Pause(InputAction.CallbackContext context)
         {
+            if (hud == null) hud = FindAnyObjectByType<HudController>();
+            if (hud != null && hud.InventoryOpen) { hud.CloseInventory(); return; }
             if (session.Phase == SessionPhase.InGame) session.SetPanel(!session.PanelOpen);
             else session.Leave();
         }

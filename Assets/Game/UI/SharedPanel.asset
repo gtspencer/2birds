@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
   m_Name: SharedPanel
   m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.PanelSettings
-  themeUss: {fileID: -4733365628477956816, guid: 2813d45c3a4fd4f41a21e0329d077685, type: 3}
+  themeUss: {fileID: -4733365628477956816, guid: d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6, type: 3}
   m_DisableNoThemeWarning: 0
   m_TargetTexture: {fileID: 0}
   m_RenderMode: 0

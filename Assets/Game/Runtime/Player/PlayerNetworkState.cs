@@ -7,13 +7,14 @@ namespace TwoBirds
     {
         public byte SpawnSlot;
         public uint Revision;
+        public float Health;
     }
 
-    // Only persistent fields consumed by this MVP belong here. Movement state is ticked in PlayerMotor.
     public sealed class PlayerNetworkState : NetworkBehaviour
     {
         private readonly SyncVar<PublicPlayerState> state = new();
         public PublicPlayerState Snapshot => state.Value;
-        internal void Initialize(byte slot) => state.Value = new PublicPlayerState { SpawnSlot = slot, Revision = 1 };
+        public float Health => state.Value.Health;
+        internal void Initialize(byte slot) => state.Value = new PublicPlayerState { SpawnSlot = slot, Revision = 1, Health = 100f };
     }
 }

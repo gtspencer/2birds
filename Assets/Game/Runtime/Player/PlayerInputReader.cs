@@ -18,6 +18,7 @@ namespace TwoBirds
 #endif
         public float Yaw { get; private set; }
         public float Pitch { get; private set; }
+        public bool InventoryOpen { get; set; }
 
         public override void OnStartClient()
         {
@@ -45,7 +46,7 @@ namespace TwoBirds
 
         private void ReadInput()
         {
-            if (!gameplay || !IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
+            if (!gameplay || InventoryOpen || !IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
             jumpPending |= jump.WasPressedThisFrame();
             Vector2 delta = look.ReadValue<Vector2>();
@@ -59,7 +60,7 @@ namespace TwoBirds
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (AutomatedInput != null) return AutomatedInput();
 #endif
-            if (!gameplay) return default;
+            if (!gameplay || InventoryOpen) return default;
             Vector3 direction = Quaternion.Euler(0f, Yaw, 0f) * new Vector3(movement.x, 0f, movement.y);
             var result = new MoveInput(new Vector2(direction.x, direction.z), Yaw, jumpPending);
             jumpPending = false;

@@ -1,0 +1,20 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="Hud.uss" />
+    <ui:VisualElement class="hud-root" picking-mode="Ignore">
+        <ui:VisualElement name="crosshair" class="crosshair" picking-mode="Ignore" />
+        <ui:VisualElement class="health-container" picking-mode="Ignore">
+            <ui:VisualElement class="health-bar-bg">
+                <ui:VisualElement name="health-fill" class="health-fill" />
+            </ui:VisualElement>
+            <ui:Label name="health-text" class="health-text" text="100" />
+        </ui:VisualElement>
+        <ui:VisualElement name="equipped-preview" class="equipped-preview" style="display:none;">
+            <ui:Label name="equipped-label" class="equipped-label" />
+        </ui:VisualElement>
+        <ui:VisualElement name="hotbar" class="hotbar" picking-mode="Ignore" />
+        <ui:VisualElement name="inventory-panel" class="inventory-panel" style="display:none;">
+            <ui:Label text="Inventory" class="inventory-title" />
+            <ui:VisualElement name="inventory-grid" class="inventory-grid" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
