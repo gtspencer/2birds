@@ -7,9 +7,9 @@ namespace TwoBirds
     {
         [Min(0)] public float WalkSpeed = 5f;
         [Min(0)] public float GroundAcceleration = 25f;
-        [Min(0)] public float Braking = 12f;
+        [Min(0)] public float Braking = 25f;
         [Min(0)] public float AirAcceleration = 4f;
-        [Min(0)] public float JumpSpeed = 6f;
+        [Min(0)] public float JumpSpeed = 4f;
         public float FallBoundary = -15f;
         public LayerMask GroundLayers = 1 << 7;
         [Min(1)] public float ConnectTimeout = 10f;

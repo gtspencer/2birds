@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.GameSettings
   WalkSpeed: 5
   GroundAcceleration: 25
-  Braking: 12
+  Braking: 25
   AirAcceleration: 4
-  JumpSpeed: 6
+  JumpSpeed: 4
   FallBoundary: -15
   GroundLayers:
     serializedVersion: 2
