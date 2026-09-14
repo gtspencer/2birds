@@ -4,46 +4,46 @@ using UnityEngine.InputSystem;
 
 namespace TwoBirds
 {
+    [DefaultExecutionOrder(100)]
     public sealed class PlayerInteraction : NetworkBehaviour
     {
         [SerializeField] private float pickupRange = 3f;
 
         private PlayerInputReader inputReader;
-        private InputAction interact;
-
-        private Camera mainCamera;
+        public IInteractable Target { get; private set; }
+        public Collider TargetCollider { get; private set; }
+        public InputAction Action { get; private set; }
+        public Camera ViewCamera { get; private set; }
 
         private void Awake()
         {
             inputReader = GetComponent<PlayerInputReader>();
-            mainCamera = Camera.main;
         }
 
-        public override void OnStartClient()
+        private void LateUpdate()
         {
-            if (!IsOwner) return;
-            interact = InputSystem.actions.FindAction("Player/Interact");
+            ClearTarget();
+            var session = SessionController.Instance;
+            if (!IsOwner || inputReader == null || !inputReader.GameplayActive || session == null ||
+                session.Phase != SessionPhase.InGame || session.PanelOpen) return;
+            if (ViewCamera == null) ViewCamera = Camera.main;
+            if (ViewCamera == null) return;
+            if (!Physics.Raycast(ViewCamera.transform.position, ViewCamera.transform.forward, out var hit, pickupRange)) return;
+
+            var target = hit.collider.GetComponentInParent<IInteractable>();
+            if (target == null || !target.CanInteract) return;
+            var action = InputSystem.actions.FindAction(target.InputActionPath);
+            if (action == null || !action.enabled) return;
+            Target = target;
+            TargetCollider = hit.collider;
+            Action = action;
+            if (!action.WasPressedThisFrame()) return;
+            target.Interact();
+            if (TargetCollider == null || !TargetCollider.gameObject.activeInHierarchy || !target.CanInteract)
+                ClearTarget();
         }
 
-        private void Update()
-        {
-            if (!IsOwner || interact == null) return;
-            if (inputReader != null && inputReader.InventoryOpen) return;
-            if (!interact.WasPerformedThisFrame()) return;
-            TryPickup();
-        }
-
-        private void TryPickup()
-        {
-            if (!Physics.Raycast(mainCamera.transform.position, mainCamera.transform.forward, out var hit, pickupRange))
-                return;
-
-            var pickup = hit.collider.GetComponent<BakedPickup>();
-            if (pickup == null || !pickup.gameObject.activeSelf) return;
-            if (PickupRegistry.Instance == null) return;
-
-            pickup.gameObject.SetActive(false);
-            PickupRegistry.Instance.CmdCollectPickup(pickup.BakedId, pickup.ItemId);
-        }
+        private void ClearTarget() { Target = null; TargetCollider = null; Action = null; }
+        public override void OnStopClient() => ClearTarget();
     }
 }

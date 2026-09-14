@@ -1,5 +1,40 @@
 .hud-root { flex-grow: 1; }
 
+.interaction-tooltip {
+    display: none;
+    position: absolute;
+    flex-direction: row;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background-color: rgba(20, 28, 36, 0.92);
+    color: rgb(231, 237, 241);
+    font-size: 16px;
+}
+
+.interaction-glyph {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    margin: 0 6px;
+}
+
+.interaction-keycap {
+    min-width: 28px;
+    min-height: 28px;
+    margin: 0 6px;
+    padding: 2px 6px;
+    border-width: 1px;
+    border-color: rgb(179, 195, 205);
+    border-radius: 4px;
+    -unity-text-align: middle-center;
+}
+
+.interaction-action {
+    flex-shrink: 1;
+    white-space: normal;
+}
+
 .crosshair {
     position: absolute;
     left: 50%;

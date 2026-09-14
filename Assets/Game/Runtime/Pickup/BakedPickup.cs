@@ -2,11 +2,23 @@ using UnityEngine;
 
 namespace TwoBirds
 {
-    public sealed class BakedPickup : MonoBehaviour
+    public sealed class BakedPickup : MonoBehaviour, IInteractable
     {
         [HideInInspector] public uint BakedId;
         public byte ItemId = 1;
         public ItemDefinition Item;
+
+        public string ActionText => "Pick up";
+        public string InputActionPath => "Player/Interact";
+        public bool CanInteract => isActiveAndEnabled && PickupRegistry.Instance != null &&
+                                   !PickupRegistry.Instance.IsCollected(BakedId);
+
+        public void Interact()
+        {
+            if (!CanInteract) return;
+            gameObject.SetActive(false);
+            PickupRegistry.Instance.CmdCollectPickup(BakedId, ItemId);
+        }
 
         private void Awake()
         {

@@ -5,6 +5,7 @@ using Cursor = UnityEngine.Cursor;
 
 namespace TwoBirds
 {
+    [DefaultExecutionOrder(200)]
     public sealed class HudController : MonoBehaviour
     {
         [SerializeField] private ItemRegistry itemRegistry;
@@ -25,6 +26,9 @@ namespace TwoBirds
         private bool inventoryOpen;
         private int dragFromSlot = -1;
         private VisualElement dragGhost;
+        private InteractionTooltip interactionTooltip;
+        private PlayerInteraction interaction;
+        private PlayerInputReader inputReader;
 
         public bool InventoryOpen => inventoryOpen;
 
@@ -39,6 +43,7 @@ namespace TwoBirds
             equippedPreview = root.Q("equipped-preview");
             equippedLabel = root.Q<Label>("equipped-label");
             crosshair = root.Q("crosshair");
+            interactionTooltip = new InteractionTooltip(root);
             BuildHotbar();
             BuildInventoryGrid();
         }
@@ -161,6 +166,8 @@ namespace TwoBirds
             if (inventory != null) inventory.InventoryChanged -= Refresh;
             inventory = inv;
             playerState = state;
+            interaction = inv != null ? inv.GetComponent<PlayerInteraction>() : null;
+            inputReader = inv != null ? inv.GetComponent<PlayerInputReader>() : null;
             if (inventory != null) inventory.InventoryChanged += Refresh;
             Refresh();
         }
@@ -212,6 +219,18 @@ namespace TwoBirds
                 ? (sbyte)(direction > 0 ? 0 : PlayerInventory.HotbarSize - 1)
                 : (sbyte)((current + direction + PlayerInventory.HotbarSize) % PlayerInventory.HotbarSize);
             inventory.CmdSelectSlot(next);
+        }
+
+        private void LateUpdate()
+        {
+            var session = SessionController.Instance;
+            if (session == null || session.Phase != SessionPhase.InGame || session.PanelOpen ||
+                inputReader == null || !inputReader.GameplayActive)
+            {
+                interactionTooltip.Hide();
+                return;
+            }
+            interactionTooltip.Update(interaction, inputReader.ActiveDevice);
         }
 
         private void ToggleInventory()
@@ -307,6 +326,7 @@ namespace TwoBirds
 
         private void OnDisable()
         {
+            interactionTooltip?.Dispose();
             if (inventory != null) inventory.InventoryChanged -= Refresh;
         }
     }

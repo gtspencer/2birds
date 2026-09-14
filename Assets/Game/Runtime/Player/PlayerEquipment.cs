@@ -13,10 +13,12 @@ namespace TwoBirds
         private GameObject viewmodel;
         private Transform viewmodelSlot;
         private byte displayedItemId;
+        private int pickupLayer;
 
         private void Awake()
         {
             inventory = GetComponent<PlayerInventory>();
+            pickupLayer = LayerMask.NameToLayer("Pickup/Generic");
         }
 
         public override void OnStartClient()
@@ -54,6 +56,7 @@ namespace TwoBirds
             if (equipSlot != null)
             {
                 currentModel = Instantiate(def.WorldPrefab, equipSlot);
+                SetHeldLayer(currentModel, def);
                 currentModel.transform.localPosition = Vector3.zero;
                 currentModel.transform.localRotation = Quaternion.identity;
                 if (IsOwner)
@@ -64,9 +67,17 @@ namespace TwoBirds
             if (IsOwner && viewmodelSlot != null)
             {
                 viewmodel = Instantiate(def.WorldPrefab, viewmodelSlot);
+                SetHeldLayer(viewmodel, def);
                 viewmodel.transform.localPosition = Vector3.zero;
                 viewmodel.transform.localRotation = Quaternion.identity;
             }
+        }
+
+        private void SetHeldLayer(GameObject model, ItemDefinition def)
+        {
+            if (def.UsePrefabLayerWhenHeld) return;
+            foreach (var child in model.GetComponentsInChildren<Transform>(true))
+                child.gameObject.layer = pickupLayer;
         }
 
         public override void OnStopClient()

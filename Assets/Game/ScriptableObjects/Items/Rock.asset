@@ -15,5 +15,6 @@ MonoBehaviour:
   ItemName: Rock
   Icon: {fileID: 0}
   WorldPrefab: {fileID: 8150238569119305756, guid: 5055e9367871a7047957e4abc34fbb85, type: 3}
+  UsePrefabLayerWhenHeld: 1
   Stackable: 1
   MaxStack: 10

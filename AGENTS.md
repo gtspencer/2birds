@@ -5,6 +5,8 @@
 - As much as you can, do not edit the game scene; if an prefab needs to be created, a component added to a gameobject, or asset needs to be created, let the user know immediately.
 - **This is not a work log.** Do not add status, session findings, what is or is not verified,
 or a narrative of what changed and why.
+- Do not attempt to validate yourself unless the user explicitly asks for it.  At the end of your message, describe visual validation the user must make.
+- Cache values/references on start when possible.  Do not repeatedly set a reference in the update loop (for example, when finding the main camera)
 
 ### Networking prioritization
 Prioritize simulation, visualization, and consistency across clients.  Trust clients and what they report (don't worry about game security/cheating).  Propose and implement solutions that prioritize responsiveness on each client, even if it means the gameplay is not server authoritative.  Keep network messages as small as possible, while maintaining consistency across clients.

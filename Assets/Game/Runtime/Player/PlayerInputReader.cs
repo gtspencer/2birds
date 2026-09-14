@@ -19,6 +19,8 @@ namespace TwoBirds
         public float Yaw { get; private set; }
         public float Pitch { get; private set; }
         public bool InventoryOpen { get; set; }
+        public bool GameplayActive => gameplay && !InventoryOpen;
+        public InputDevice ActiveDevice { get; private set; }
 
         public override void OnStartClient()
         {
@@ -29,6 +31,8 @@ namespace TwoBirds
             move = actions.FindAction("Move");
             look = actions.FindAction("Look");
             jump = actions.FindAction("Jump");
+            ActiveDevice = Keyboard.current;
+            InputSystem.onEvent += TrackDevice;
             InputSystem.onAfterUpdate += ReadInput;
             SetGameplay(true);
             SessionController.Instance.PlayerReady(GetComponent<PlayerMotor>());
@@ -46,6 +50,7 @@ namespace TwoBirds
 
         private void ReadInput()
         {
+            if (ActiveDevice != null && !ActiveDevice.added) ActiveDevice = Keyboard.current;
             if (!gameplay || InventoryOpen || !IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
             jumpPending |= jump.WasPressedThisFrame();
@@ -53,6 +58,24 @@ namespace TwoBirds
             float sensitivity = look.activeControl?.device is Gamepad ? 150f * Time.unscaledDeltaTime : 0.12f;
             Yaw = Mathf.Repeat(Yaw + delta.x * sensitivity, 360f);
             Pitch = Mathf.Clamp(Pitch - delta.y * sensitivity, -89f, 89f);
+        }
+
+        private void TrackDevice(InputEventPtr evt, InputDevice device)
+        {
+            if (!GameplayActive || !IsOwner || (evt.type != StateEvent.Type && evt.type != DeltaStateEvent.Type)) return;
+            if (device is not Keyboard && device is not Mouse && device is not Gamepad) return;
+            foreach (var control in evt.EnumerateChangedControls(device, 0.25f))
+            {
+                if (device is Mouse mouse && control != mouse.leftButton && control != mouse.rightButton &&
+                    control != mouse.middleButton && control != mouse.forwardButton && control != mouse.backButton)
+                {
+                    bool moved = mouse.delta.ReadValueFromEvent(evt, out var delta) && delta.sqrMagnitude >= 4f;
+                    bool scrolled = mouse.scroll.ReadValueFromEvent(evt, out var scroll) && scroll.sqrMagnitude >= 1f;
+                    if (!moved && !scrolled) continue;
+                }
+                ActiveDevice = device;
+                break;
+            }
         }
 
         public MoveInput Consume()
@@ -80,6 +103,7 @@ namespace TwoBirds
         private void Release()
         {
             InputSystem.onAfterUpdate -= ReadInput;
+            InputSystem.onEvent -= TrackDevice;
             if (actions != null) SetGameplay(false);
             actions = null;
         }

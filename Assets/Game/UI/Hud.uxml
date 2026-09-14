@@ -2,6 +2,11 @@
     <Style src="Hud.uss" />
     <ui:VisualElement class="hud-root" picking-mode="Ignore">
         <ui:VisualElement name="crosshair" class="crosshair" picking-mode="Ignore" />
+        <ui:VisualElement name="interaction-tooltip" class="interaction-tooltip" picking-mode="Ignore">
+            <ui:Image name="interaction-glyph" class="interaction-glyph" picking-mode="Ignore" />
+            <ui:Label name="interaction-keycap" class="interaction-keycap" picking-mode="Ignore" />
+            <ui:Label name="interaction-action" class="interaction-action" picking-mode="Ignore" />
+        </ui:VisualElement>
         <ui:VisualElement class="health-container" picking-mode="Ignore">
             <ui:VisualElement class="health-bar-bg">
                 <ui:VisualElement name="health-fill" class="health-fill" />
