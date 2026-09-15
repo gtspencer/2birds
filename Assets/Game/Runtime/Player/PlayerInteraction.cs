@@ -10,6 +10,8 @@ namespace TwoBirds
         [SerializeField] private float pickupRange = 3f;
 
         private PlayerInputReader inputReader;
+        private PlayerPresentation presentation;
+        private int queryMask;
         public IInteractable Target { get; private set; }
         public Collider TargetCollider { get; private set; }
         public InputAction Action { get; private set; }
@@ -18,6 +20,13 @@ namespace TwoBirds
         private void Awake()
         {
             inputReader = GetComponent<PlayerInputReader>();
+            presentation = GetComponent<PlayerPresentation>();
+            queryMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemHeld", "PlayerItemHitbox", "Player");
+        }
+
+        public override void OnStartClient()
+        {
+            if (IsOwner) ViewCamera = presentation.ViewCamera;
         }
 
         private void LateUpdate()
@@ -26,9 +35,9 @@ namespace TwoBirds
             var session = SessionController.Instance;
             if (!IsOwner || inputReader == null || !inputReader.GameplayActive || session == null ||
                 session.Phase != SessionPhase.InGame || session.PanelOpen) return;
-            if (ViewCamera == null) ViewCamera = Camera.main;
             if (ViewCamera == null) return;
-            if (!Physics.Raycast(ViewCamera.transform.position, ViewCamera.transform.forward, out var hit, pickupRange)) return;
+            if (!Physics.Raycast(ViewCamera.transform.position, ViewCamera.transform.forward, out var hit, pickupRange,
+                queryMask, QueryTriggerInteraction.Ignore)) return;
 
             var target = hit.collider.GetComponentInParent<IInteractable>();
             if (target == null || !target.CanInteract) return;

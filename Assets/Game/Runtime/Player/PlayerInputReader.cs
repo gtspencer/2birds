@@ -9,7 +9,8 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump;
+        private InputAction move, look, jump, drop, throwItem;
+        private PlayerInventory inventory;
         private Vector2 movement;
         private bool jumpPending;
         private bool gameplay;
@@ -31,6 +32,9 @@ namespace TwoBirds
             move = actions.FindAction("Move");
             look = actions.FindAction("Look");
             jump = actions.FindAction("Jump");
+            drop = actions.FindAction("Drop");
+            throwItem = actions.FindAction("Throw");
+            inventory = GetComponent<PlayerInventory>();
             ActiveDevice = Keyboard.current;
             InputSystem.onEvent += TrackDevice;
             InputSystem.onAfterUpdate += ReadInput;
@@ -58,6 +62,8 @@ namespace TwoBirds
             float sensitivity = look.activeControl?.device is Gamepad ? 150f * Time.unscaledDeltaTime : 0.12f;
             Yaw = Mathf.Repeat(Yaw + delta.x * sensitivity, 360f);
             Pitch = Mathf.Clamp(Pitch - delta.y * sensitivity, -89f, 89f);
+            if (drop.WasPressedThisFrame()) inventory.DropSelected();
+            if (throwItem.WasPressedThisFrame()) inventory.ThrowSelected();
         }
 
         private void TrackDevice(InputEventPtr evt, InputDevice device)

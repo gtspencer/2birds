@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FishNet.Object;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
@@ -29,9 +30,11 @@ namespace TwoBirds
         public byte JumpCooldown;
         public uint ResetRevision;
         public uint ServerTick;
+        public uint LastHitId;
+        public byte KnockbackTicks;
         private uint tick;
-        public MotorState(PredictionRigidbody body, Vector3 impulse, MovementMode mode, byte cooldown, uint reset, uint serverTick)
-        { Body = body; Position = body.Rigidbody.position; PendingImpulse = impulse; Mode = mode; JumpCooldown = cooldown; ResetRevision = reset; ServerTick = serverTick; tick = 0; }
+        public MotorState(PredictionRigidbody body, Vector3 impulse, MovementMode mode, byte cooldown, uint reset, uint serverTick, uint lastHitId, byte knockbackTicks)
+        { Body = body; Position = body.Rigidbody.position; PendingImpulse = impulse; Mode = mode; JumpCooldown = cooldown; ResetRevision = reset; ServerTick = serverTick; LastHitId = lastHitId; KnockbackTicks = knockbackTicks; tick = 0; }
         public uint GetTick() => tick;
         public void SetTick(uint value) => tick = value;
         public void Dispose() { }
@@ -47,6 +50,11 @@ namespace TwoBirds
         private Vector3 pendingImpulse;
         private byte jumpCooldown;
         private uint resetRevision;
+        private readonly List<ItemHit> hits = new();
+        private uint nextHitId;
+        private uint lastHitId;
+        private uint movementTick;
+        private byte knockbackTicks;
         public Rigidbody Body { get; private set; }
         public MovementMode Mode { get; private set; } = MovementMode.Airborne;
         public bool Grounded => Mode == MovementMode.Walking;
@@ -64,11 +72,27 @@ namespace TwoBirds
 
         internal void SetSpawnPoint(Vector3 point) => spawnPoint = point;
 
-        // Server-only effects are queued at a tick boundary. Their pending state and resulting body
-        // are reconciled together, so replay cannot lose or duplicate an impulse.
         internal void QueueImpulse(Vector3 impulse)
         {
-            if (IsServerInitialized && Finite(impulse.x) && Finite(impulse.y) && Finite(impulse.z)) pendingImpulse += impulse;
+            QueueItemHit(0, impulse);
+        }
+
+        internal void QueueItemHit(uint source, Vector3 impulse)
+        {
+            if (!IsServerInitialized || PredictionManager.IsReconciling || !WorldItemRegistry.Finite(impulse)) return;
+            var hit = new ItemHit { Id = ++nextHitId, Source = source, ServerTick = TimeManager.Tick,
+                PlayerTick = movementTick + 1, Impulse = impulse };
+            hits.Add(hit);
+            ObserversHit(hit);
+        }
+
+        [ObserversRpc]
+        private void ObserversHit(ItemHit hit)
+        {
+            if (IsServerInitialized || hit.Id <= lastHitId) return;
+            foreach (var existing in hits)
+                if (existing.Id == hit.Id) return;
+            hits.Add(hit);
         }
 
         internal void SetExternalControl(bool external)
@@ -83,11 +107,21 @@ namespace TwoBirds
             CreateReconcile();
         }
 
-        public override void CreateReconcile() => ReconcileState(new MotorState(predictedBody, pendingImpulse, Mode, jumpCooldown, resetRevision, IsServerInitialized ? TimeManager.Tick : 0));
+        public override void CreateReconcile() => ReconcileState(new MotorState(predictedBody, pendingImpulse, Mode, jumpCooldown, resetRevision, IsServerInitialized ? TimeManager.Tick : 0, lastHitId, knockbackTicks));
 
         [Replicate]
         private void ReplicateMove(MoveInput data, ReplicateState state = ReplicateState.Invalid, Channel channel = Channel.Unreliable)
         {
+            movementTick = data.GetTick();
+            if (knockbackTicks > 0) knockbackTicks--;
+            foreach (var hit in hits)
+            {
+                if (hit.Id <= lastHitId || hit.PlayerTick > movementTick) continue;
+                pendingImpulse += hit.Impulse;
+                lastHitId = hit.Id;
+                knockbackTicks = 12;
+            }
+            if (IsServerInitialized) RemoveAppliedHits();
             if (!Finite(data.Direction.x) || !Finite(data.Direction.y) || !Finite(data.Facing)) data = default;
             // Missing inputs apply no new intent. Physics retains momentum; jump edges are never extrapolated.
             if (!state.ContainsCreated()) { data.Direction = default; data.Jump = false; }
@@ -101,6 +135,7 @@ namespace TwoBirds
                 Vector3 target = new Vector3(direction.x, 0f, direction.y) * settings.WalkSpeed;
                 Vector3 horizontal = new Vector3(Body.linearVelocity.x, 0f, Body.linearVelocity.z);
                 float acceleration = grounded ? (direction.sqrMagnitude > 0f ? settings.GroundAcceleration : settings.Braking) : settings.AirAcceleration;
+                if (knockbackTicks > 0) acceleration = 0f;
                 Vector3 change = Vector3.ClampMagnitude(target - horizontal, acceleration * (float)TimeManager.TickDelta);
                 predictedBody.AddForce(change, ForceMode.VelocityChange);
                 if (state.ContainsCreated()) predictedBody.MoveRotation(Quaternion.Euler(0f, Mathf.Repeat(data.Facing, 360f), 0f));
@@ -124,6 +159,7 @@ namespace TwoBirds
                 Body.rotation = Quaternion.identity;
                 jumpCooldown = 0;
                 pendingImpulse = default;
+                knockbackTicks = 0;
                 Mode = MovementMode.Airborne;
                 resetRevision++;
             }
@@ -139,7 +175,16 @@ namespace TwoBirds
             Mode = data.Mode;
             jumpCooldown = data.JumpCooldown;
             resetRevision = data.ResetRevision;
+            lastHitId = data.LastHitId;
+            knockbackTicks = data.KnockbackTicks;
+            if (data.ServerTick != 0) RemoveAppliedHits();
             predictedBody.Reconcile(data.Body);
+        }
+
+        private void RemoveAppliedHits()
+        {
+            for (int i = hits.Count - 1; i >= 0; i--)
+                if (hits[i].Id <= lastHitId) hits.RemoveAt(i);
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

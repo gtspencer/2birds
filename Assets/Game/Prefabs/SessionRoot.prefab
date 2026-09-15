@@ -20,6 +20,7 @@ GameObject:
   - component: {fileID: 1521103681485856539}
   - component: {fileID: 4570614726009044673}
   - component: {fileID: 8774293012789587237}
+  - component: {fileID: 9052649437900679749}
   m_Layer: 0
   m_Name: SessionRoot
   m_TagString: Untagged
@@ -244,3 +245,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.SessionController
   settings: {fileID: 11400000, guid: e799dd0d6b6d59745bf66e23092e9f6a, type: 2}
+--- !u!114 &9052649437900679749
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5004959182579645944}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5bef4dc7742d5fc4ba9514b29aaa90b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.WorldItemRegistry
+  itemRegistry: {fileID: 11400000, guid: f1a2b3c4d5e6f7080912345678abcdef, type: 2}
+  settings: {fileID: 11400000, guid: e799dd0d6b6d59745bf66e23092e9f6a, type: 2}
+  snapshotRate: 20
+  correctionThreshold: 0.05
+  correctionDuration: 0.075
+  interpolationDelay: 0.1
+  releaseGrace: 0.3
+  minimumHitImpulse: 0.5
+  worldBounds:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 1000, y: 1000, z: 1000}

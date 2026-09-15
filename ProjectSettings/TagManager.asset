@@ -13,9 +13,9 @@ TagManager:
   - UI
   - Player
   - Ground
-  - Pickup/Generic
-  - Pickup/Rock
-  - 
+  - ItemHeld
+  - ItemWorld
+  - PlayerItemHitbox
   - 
   - 
   - 

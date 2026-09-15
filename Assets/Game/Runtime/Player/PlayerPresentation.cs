@@ -35,6 +35,7 @@ namespace TwoBirds
         private Renderer[] bodyRenderers;
         private bool[] bodyRendererStates;
         private uint resetRevision;
+        public Camera ViewCamera => localCamera;
         public PlayerSnapshot Snapshot => new(motor, state.Snapshot);
         public float GraphicsOffset => Vector3.Distance(graphics.position, transform.position);
 

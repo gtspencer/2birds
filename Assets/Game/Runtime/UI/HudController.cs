@@ -97,7 +97,7 @@ namespace TwoBirds
         private void OnHotbarClick(int slot)
         {
             if (inventory != null && inventory.IsOwner)
-                inventory.CmdSelectSlot((sbyte)slot);
+                inventory.SelectSlot((sbyte)slot);
         }
 
         private void OnSlotPointerDown(PointerDownEvent evt)
@@ -128,9 +128,9 @@ namespace TwoBirds
 
             int target = FindSlotAt(evt.position);
             if (target >= 0 && target != dragFromSlot)
-                inventory.CmdSwapSlots(dragFromSlot, target);
+                inventory.SwapSlots(dragFromSlot, target);
             else if (target < 0 && !inventoryPanel.worldBound.Contains(evt.position))
-                inventory.CmdDropSlot(dragFromSlot);
+                inventory.DropSlot(dragFromSlot);
 
             dragFromSlot = -1;
         }
@@ -198,11 +198,9 @@ namespace TwoBirds
             {
                 if (keyboard != null)
                 {
-                    if (keyboard.qKey.wasPressedThisFrame)
-                        inventory.CmdDropSelected();
                     for (int i = 0; i < PlayerInventory.HotbarSize; i++)
                         if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
-                        { inventory.CmdSelectSlot((sbyte)i); break; }
+                        { inventory.SelectSlot((sbyte)i); break; }
                 }
                 if (gamepad != null)
                 {
@@ -218,7 +216,7 @@ namespace TwoBirds
             sbyte next = current < 0
                 ? (sbyte)(direction > 0 ? 0 : PlayerInventory.HotbarSize - 1)
                 : (sbyte)((current + direction + PlayerInventory.HotbarSize) % PlayerInventory.HotbarSize);
-            inventory.CmdSelectSlot(next);
+            inventory.SelectSlot(next);
         }
 
         private void LateUpdate()
