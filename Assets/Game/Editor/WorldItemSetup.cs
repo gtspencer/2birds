@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using FishNet.Component.Prediction;
 using UnityEditor;
 using UnityEngine;
@@ -42,10 +43,10 @@ namespace TwoBirds.Editor
             }
             foreach (var definition in definitions.Items)
                 ConfigureItem(definition);
+            ConfigureInput();
             if (sessionAsset.GetComponent<WorldItemRegistry>() != null) return;
             ConfigureLayers();
             ConfigurePlayer();
-            ConfigureInput();
 
             var session = PrefabUtility.LoadPrefabContents(SessionPath);
             try
@@ -166,15 +167,32 @@ namespace TwoBirds.Editor
 
         private static void ConfigureInput()
         {
-            var actions = InputActionAsset.FromJson(File.ReadAllText(InputPath));
+            string previous = File.ReadAllText(InputPath);
+            var actions = InputActionAsset.FromJson(previous);
             var player = actions.FindActionMap("Player");
-            if (player.FindAction("Throw") == null)
+            var use = player.FindAction("Use");
+            var legacyThrow = player.FindAction("Throw");
+            if (use == null)
             {
-                var throwItem = player.AddAction("Throw", InputActionType.Button);
-                throwItem.AddBinding("<Mouse>/leftButton", groups: "Keyboard&Mouse");
-                throwItem.AddBinding("<Gamepad>/rightTrigger", groups: "Gamepad");
-                player.FindAction("Drop").AddBinding("<Gamepad>/dpad/down", groups: "Gamepad");
-                File.WriteAllText(InputPath, actions.ToJson());
+                if (legacyThrow != null)
+                {
+                    legacyThrow.Rename("Use");
+                    use = legacyThrow;
+                }
+                else use = player.AddAction("Use", InputActionType.Button);
+            }
+            else if (legacyThrow != null) legacyThrow.RemoveAction();
+            if (!use.bindings.Any(binding => binding.path == "<Mouse>/leftButton"))
+                use.AddBinding("<Mouse>/leftButton", groups: "Keyboard&Mouse");
+            if (!use.bindings.Any(binding => binding.path == "<Gamepad>/rightTrigger"))
+                use.AddBinding("<Gamepad>/rightTrigger", groups: "Gamepad");
+            var drop = player.FindAction("Drop");
+            if (!drop.bindings.Any(binding => binding.path == "<Gamepad>/dpad/down"))
+                drop.AddBinding("<Gamepad>/dpad/down", groups: "Gamepad");
+            string updated = actions.ToJson();
+            if (updated != previous)
+            {
+                File.WriteAllText(InputPath, updated);
                 AssetDatabase.ImportAsset(InputPath);
             }
             Object.DestroyImmediate(actions);

@@ -7,7 +7,7 @@ namespace TwoBirds
 {
     internal sealed class InteractionTooltip : IDisposable
     {
-        private readonly VisualElement root, tooltip;
+        private readonly VisualElement root, tooltip, chargeTrack;
         private readonly Image glyph;
         private readonly Label keycap, verb;
         private readonly SteamInputGlyphs glyphs = new();
@@ -19,6 +19,7 @@ namespace TwoBirds
         {
             this.root = root;
             tooltip = root.Q("interaction-tooltip");
+            chargeTrack = root.Q("charge-track");
             glyph = root.Q<Image>("interaction-glyph");
             keycap = root.Q<Label>("interaction-keycap");
             verb = root.Q<Label>("interaction-action");
@@ -86,9 +87,16 @@ namespace TwoBirds
             tooltip.style.maxWidth = Mathf.Max(0, area.width - 16);
             float x = max.x + 12;
             if (x + size.x > area.xMax - 8) x = min.x - size.x - 12;
-            tooltip.style.left = Mathf.Clamp(x, area.xMin + 8, Mathf.Max(area.xMin + 8, area.xMax - size.x - 8));
-            tooltip.style.top = Mathf.Clamp((min.y + max.y - size.y) * 0.5f, area.yMin + 8,
+            x = Mathf.Clamp(x, area.xMin + 8, Mathf.Max(area.xMin + 8, area.xMax - size.x - 8));
+            float y = Mathf.Clamp((min.y + max.y - size.y) * 0.5f, area.yMin + 8,
                 Mathf.Max(area.yMin + 8, area.yMax - size.y - 8));
+            if (chargeTrack != null && chargeTrack.style.display.value == DisplayStyle.Flex)
+            {
+                var chargeBounds = new Rect(area.center.x - 34, area.center.y + 10, 68, 13);
+                if (new Rect(x, y, size.x, size.y).Overlaps(chargeBounds)) y = chargeBounds.yMax + 8;
+            }
+            tooltip.style.left = x;
+            tooltip.style.top = y;
         }
 
         public void Hide() => tooltip.style.display = DisplayStyle.None;

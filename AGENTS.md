@@ -8,6 +8,7 @@ or a narrative of what changed and why.
 - Do not attempt to validate yourself unless the user explicitly asks for it.  At the end of your message, describe visual validation the user must make.
 - Cache values/references on start when possible.  Do not repeatedly set a reference in the update loop (for example, when finding the main camera)
 - Do not overly rely on existing systems; if a plan or ask conflicts with an existing system, or renders the existing system unnecessary, throw away the existing system in favor of the more appropriate way to accomplish the task.
+- Do not create one off tools for migrations.  Apply the atomic migrations yourself, or ask the user to make them, but do not create editor tools for one time migrations unless explicitly asked.
 
 ### Networking prioritization
 Prioritize simulation, visualization, and consistency across clients.  Trust clients and what they report (don't worry about game security/cheating).  Propose and implement solutions that prioritize responsiveness on each client, even if it means the gameplay is not server authoritative.  Keep network messages as small as possible, while maintaining consistency across clients.

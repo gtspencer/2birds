@@ -99,11 +99,26 @@ namespace TwoBirds
             Submit(request);
         }
 
-        public void DropSelected() => ReleaseSlot(SelectedSlot, false, false);
-        public void ThrowSelected() => ReleaseSlot(SelectedSlot, true, false);
-        public void DropSlot(int index) => ReleaseSlot(index, false, true);
+        public void DropSelected() => DropSlot(SelectedSlot, false);
+        public void DropSlot(int index) => DropSlot(index, true);
 
-        private void ReleaseSlot(int index, bool throwing, bool wholeStack)
+        private void DropSlot(int index, bool wholeStack)
+        {
+            if (!IsOwner) return;
+            Equipment.CancelUse();
+            var stack = GetSlot(index);
+            if (!stack.IsEmpty) ReleaseSlot(index, registry.GetDefinition(stack.ItemId).DropSpeed, wholeStack);
+        }
+
+        public void ReleaseEquipped(uint id, float launchSpeed)
+        {
+            if (!IsOwner) return;
+            var equipped = GetEquipped();
+            if (equipped.IsEmpty || equipped.WorldIds[0] != id) return;
+            ReleaseSlot(SelectedSlot, launchSpeed, false);
+        }
+
+        private void ReleaseSlot(int index, float launchSpeed, bool wholeStack)
         {
             if (!IsOwner) return;
             var stack = GetSlot(index);
@@ -129,7 +144,7 @@ namespace TwoBirds
                     releasePosition = position + offset.normalized * Mathf.Max(0f, wall.distance - 0.01f);
                 releases[i] = new ItemMotion { Id = ids[i], Position = releasePosition,
                     Rotation = aim * definition.WorldPrefab.transform.localRotation,
-                    Velocity = forward * (throwing ? definition.ThrowSpeed : definition.DropSpeed) + motor.Body.linearVelocity * definition.VelocityInheritance,
+                    Velocity = forward * launchSpeed + motor.Body.linearVelocity * definition.VelocityInheritance,
                     AngularVelocity = aim * definition.InitialSpin };
             }
             Submit(new InventoryRequest { Kind = InventoryOperation.Release, From = index, DefinitionId = stack.ItemId,

@@ -13,11 +13,13 @@ MonoBehaviour:
   m_Name: Rock
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.ItemDefinition
   ItemName: Rock
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 1f49d4caef33b20458b8f1ace1aafc2f, type: 3}
   WorldPrefab: {fileID: 8150238569119305756, guid: 5055e9367871a7047957e4abc34fbb85, type: 3}
   Stackable: 1
   MaxStack: 10
-  ThrowSpeed: 14
+  MinThrowSpeed: 3
+  MaxThrowSpeed: 14
+  ThrowChargeTime: 1
   DropSpeed: 1.5
   VelocityInheritance: 1
   Mass: 1

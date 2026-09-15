@@ -2,6 +2,7 @@ using FishNet.Connection;
 using FishNet.Object;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
 
 namespace TwoBirds
@@ -9,17 +10,28 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump, drop, throwItem;
+        private InputAction move, look, jump, drop, use;
         private PlayerInventory inventory;
+        private PlayerEquipment equipment;
         private Vector2 movement;
         private bool jumpPending;
         private bool gameplay;
+        private bool inventoryOpen;
+        private bool useBlocked;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         internal System.Func<MoveInput> AutomatedInput;
 #endif
         public float Yaw { get; private set; }
         public float Pitch { get; private set; }
-        public bool InventoryOpen { get; set; }
+        public bool InventoryOpen
+        {
+            get => inventoryOpen;
+            set
+            {
+                if (value) CancelUse();
+                inventoryOpen = value;
+            }
+        }
         public bool GameplayActive => gameplay && !InventoryOpen;
         public InputDevice ActiveDevice { get; private set; }
 
@@ -33,8 +45,9 @@ namespace TwoBirds
             look = actions.FindAction("Look");
             jump = actions.FindAction("Jump");
             drop = actions.FindAction("Drop");
-            throwItem = actions.FindAction("Throw");
+            use = actions.FindAction("Use");
             inventory = GetComponent<PlayerInventory>();
+            equipment = GetComponent<PlayerEquipment>();
             ActiveDevice = Keyboard.current;
             InputSystem.onEvent += TrackDevice;
             InputSystem.onAfterUpdate += ReadInput;
@@ -44,6 +57,8 @@ namespace TwoBirds
 
         public void SetGameplay(bool value)
         {
+            if (!value || !IsOwner) CancelUse();
+            else if (UseButtonHeld()) useBlocked = true;
             gameplay = value && IsOwner;
             Clear();
             if (actions == null) return;
@@ -55,15 +70,39 @@ namespace TwoBirds
         private void ReadInput()
         {
             if (ActiveDevice != null && !ActiveDevice.added) ActiveDevice = Keyboard.current;
-            if (!gameplay || InventoryOpen || !IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
+            if (!IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
+            bool blocked = useBlocked;
+            if (useBlocked && !UseButtonHeld()) useBlocked = false;
+            if (!GameplayActive) return;
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
             jumpPending |= jump.WasPressedThisFrame();
             Vector2 delta = look.ReadValue<Vector2>();
             float sensitivity = look.activeControl?.device is Gamepad ? 150f * Time.unscaledDeltaTime : 0.12f;
             Yaw = Mathf.Repeat(Yaw + delta.x * sensitivity, 360f);
             Pitch = Mathf.Clamp(Pitch - delta.y * sensitivity, -89f, 89f);
-            if (drop.WasPressedThisFrame()) inventory.DropSelected();
-            if (throwItem.WasPressedThisFrame()) inventory.ThrowSelected();
+            if (drop.WasPressedThisFrame())
+            {
+                CancelUse();
+                inventory.DropSelected();
+                return;
+            }
+            if (blocked) return;
+            if (use.WasPressedThisFrame()) equipment.BeginUse();
+            if (use.WasReleasedThisFrame()) equipment.EndUse();
+        }
+
+        private bool UseButtonHeld()
+        {
+            if (use == null) return false;
+            foreach (var control in use.controls)
+                if (control is ButtonControl button && button.isPressed) return true;
+            return false;
+        }
+
+        private void CancelUse()
+        {
+            useBlocked = UseButtonHeld();
+            equipment?.CancelUse();
         }
 
         private void TrackDevice(InputEventPtr evt, InputDevice device)
@@ -99,6 +138,7 @@ namespace TwoBirds
         private void Clear() { movement = default; jumpPending = false; }
         private void OnApplicationFocus(bool focus)
         {
+            if (!focus) CancelUse();
             if (!focus && IsOwner && SessionController.Instance != null) SessionController.Instance.SetPanel(true);
         }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
@@ -108,10 +148,12 @@ namespace TwoBirds
         public override void OnStopClient() => Release();
         private void Release()
         {
+            CancelUse();
             InputSystem.onAfterUpdate -= ReadInput;
             InputSystem.onEvent -= TrackDevice;
             if (actions != null) SetGameplay(false);
             actions = null;
+            use = null;
         }
     }
 }

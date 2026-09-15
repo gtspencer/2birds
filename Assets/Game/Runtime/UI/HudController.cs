@@ -12,6 +12,7 @@ namespace TwoBirds
 
         private PlayerInventory inventory;
         private PlayerNetworkState playerState;
+        private PlayerEquipment equipment;
         private VisualElement root;
         private VisualElement hotbar;
         private VisualElement inventoryPanel;
@@ -21,6 +22,8 @@ namespace TwoBirds
         private VisualElement equippedPreview;
         private Label equippedLabel;
         private VisualElement crosshair;
+        private VisualElement chargeTrack;
+        private VisualElement chargeFill;
         private VisualElement[] hotbarSlots;
         private VisualElement[] inventorySlots;
         private bool inventoryOpen;
@@ -43,6 +46,9 @@ namespace TwoBirds
             equippedPreview = root.Q("equipped-preview");
             equippedLabel = root.Q<Label>("equipped-label");
             crosshair = root.Q("crosshair");
+            chargeTrack = root.Q("charge-track");
+            chargeFill = root.Q("charge-fill");
+            HideCharge();
             interactionTooltip = new InteractionTooltip(root);
             BuildHotbar();
             BuildInventoryGrid();
@@ -163,9 +169,11 @@ namespace TwoBirds
 
         private void Bind(PlayerInventory inv, PlayerNetworkState state)
         {
+            HideCharge();
             if (inventory != null) inventory.InventoryChanged -= Refresh;
             inventory = inv;
             playerState = state;
+            equipment = inv != null ? inv.Equipment : null;
             interaction = inv != null ? inv.GetComponent<PlayerInteraction>() : null;
             inputReader = inv != null ? inv.GetComponent<PlayerInputReader>() : null;
             if (inventory != null) inventory.InventoryChanged += Refresh;
@@ -174,13 +182,15 @@ namespace TwoBirds
 
         private void Update()
         {
-            if (inventory == null)
+            var player = SessionController.Instance?.LocalPlayer;
+            if (player == null)
             {
-                var player = SessionController.Instance?.LocalPlayer;
-                if (player != null)
-                    Bind(player.GetComponent<PlayerInventory>(), player.GetComponent<PlayerNetworkState>());
+                if (inventory != null) Bind(null, null);
+                HideCharge();
                 return;
             }
+            if (inventory == null || inventory.gameObject != player.gameObject)
+                Bind(player.GetComponent<PlayerInventory>(), player.GetComponent<PlayerNetworkState>());
             if (!inventory.IsOwner) return;
 
             var session = SessionController.Instance;
@@ -223,12 +233,26 @@ namespace TwoBirds
         {
             var session = SessionController.Instance;
             if (session == null || session.Phase != SessionPhase.InGame || session.PanelOpen ||
+                session.LocalPlayer == null || inventory == null || !inventory.IsOwner ||
                 inputReader == null || !inputReader.GameplayActive)
             {
+                HideCharge();
                 interactionTooltip.Hide();
                 return;
             }
+            if (equipment != null && equipment.IsCharging)
+            {
+                chargeTrack.style.display = DisplayStyle.Flex;
+                chargeFill.style.width = Length.Percent(equipment.Charge01 * 100f);
+            }
+            else HideCharge();
             interactionTooltip.Update(interaction, inputReader.ActiveDevice);
+        }
+
+        private void HideCharge()
+        {
+            if (chargeTrack != null) chargeTrack.style.display = DisplayStyle.None;
+            if (chargeFill != null) chargeFill.style.width = Length.Percent(0f);
         }
 
         private void ToggleInventory()
@@ -238,12 +262,12 @@ namespace TwoBirds
 
         private void OpenInventory()
         {
+            HideCharge();
+            if (inputReader != null) inputReader.InventoryOpen = true;
             inventoryOpen = true;
             inventoryPanel.style.display = DisplayStyle.Flex;
             if (crosshair != null) crosshair.style.display = DisplayStyle.None;
             Refresh();
-            var ir = SessionController.Instance?.LocalPlayer?.GetComponent<PlayerInputReader>();
-            if (ir != null) ir.InventoryOpen = true;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
@@ -254,8 +278,7 @@ namespace TwoBirds
             inventoryOpen = false;
             inventoryPanel.style.display = DisplayStyle.None;
             if (crosshair != null) crosshair.style.display = DisplayStyle.Flex;
-            var ir = SessionController.Instance?.LocalPlayer?.GetComponent<PlayerInputReader>();
-            if (ir != null) ir.InventoryOpen = false;
+            if (inputReader != null) inputReader.InventoryOpen = false;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
@@ -324,8 +347,9 @@ namespace TwoBirds
 
         private void OnDisable()
         {
+            HideCharge();
             interactionTooltip?.Dispose();
-            if (inventory != null) inventory.InventoryChanged -= Refresh;
+            Bind(null, null);
         }
     }
 }

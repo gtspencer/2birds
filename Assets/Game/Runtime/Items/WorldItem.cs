@@ -24,11 +24,15 @@ namespace TwoBirds
         private Vector3 prefabScale;
         private bool optimisticPickup;
         private int playerHitboxMask;
+        private ItemUseBehaviour useBehaviour;
+        private PlayerEquipment useUser;
 
         public Rigidbody Body { get; private set; }
         public ItemDefinition Definition { get; private set; }
         public ItemRecord Record { get; private set; }
         public bool Predicted { get; private set; }
+        public bool IsCharging => useBehaviour != null && useBehaviour.IsCharging;
+        public float Charge01 => useBehaviour != null ? useBehaviour.Charge01 : 0f;
         public string ActionText => "Pick up";
         public string InputActionPath => "Player/Interact";
         public bool CanInteract => registry != null && Record.State == WorldItemState.World &&
@@ -37,6 +41,7 @@ namespace TwoBirds
         private void Awake()
         {
             Body = GetComponent<Rigidbody>();
+            useBehaviour = GetComponent<ItemUseBehaviour>();
             playerHitboxMask = LayerMask.GetMask("PlayerItemHitbox");
             colliders = GetComponentsInChildren<Collider>(true);
             renderers = GetComponentsInChildren<Renderer>(true);
@@ -48,8 +53,38 @@ namespace TwoBirds
 
         public void Interact() => registry.LocalInventory?.Collect(this);
 
+        public void BeginUse(PlayerEquipment user)
+        {
+            if (useBehaviour == null || !useBehaviour.isActiveAndEnabled) return;
+            useUser = user;
+            useBehaviour.BeginUse(user);
+        }
+
+        public void EndUse()
+        {
+            if (useUser == null) return;
+            useUser = null;
+            useBehaviour.EndUse();
+        }
+
+        public void CancelUse()
+        {
+            if (useUser == null) return;
+            useUser = null;
+            useBehaviour.CancelUse();
+        }
+
+        internal void InterruptUse()
+        {
+            if (useUser != null) useUser.CancelUse();
+            CancelUse();
+        }
+
+        private void OnDisable() => InterruptUse();
+
         internal void Initialize(WorldItemRegistry owner, ItemDefinition definition, ItemRecord record, bool predicted)
         {
+            InterruptUse();
             registry = owner;
             Definition = definition;
             ResetPresentation();
@@ -133,6 +168,7 @@ namespace TwoBirds
 
         internal void SetRecord(ItemRecord record)
         {
+            if (record.State == WorldItemState.Removed) InterruptUse();
             Record = record;
             int excludedLayers = record.Sleeping
                 ? Body.excludeLayers.value | playerHitboxMask
@@ -337,6 +373,7 @@ namespace TwoBirds
 
         internal void ReturnToPool()
         {
+            InterruptUse();
             StopBody();
             ResetPresentation();
             Record = default;

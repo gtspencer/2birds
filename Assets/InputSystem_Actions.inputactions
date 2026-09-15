@@ -117,7 +117,7 @@
                     "priority": 0
                 },
                 {
-                    "name": "Throw",
+                    "name": "Use",
                     "type": "Button",
                     "id": "d77c2d4e-46e2-494a-b96d-7850ace8efd7",
                     "expectedControlType": "",
@@ -553,7 +553,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "Throw",
+                    "action": "Use",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -564,7 +564,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
-                    "action": "Throw",
+                    "action": "Use",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
