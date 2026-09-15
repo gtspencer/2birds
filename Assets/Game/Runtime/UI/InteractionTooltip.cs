@@ -10,25 +10,27 @@ namespace TwoBirds
         private readonly VisualElement root, tooltip, chargeTrack;
         private readonly Image glyph;
         private readonly Label keycap, verb;
-        private readonly SteamInputGlyphs glyphs = new();
+        private readonly SteamInputGlyphs glyphs;
         private InputAction displayedAction;
         private InputControl displayedControl;
+        private string displayedName;
         private bool bindingDirty = true;
 
-        public InteractionTooltip(VisualElement root)
+        public InteractionTooltip(VisualElement root, SteamInputGlyphs glyphs)
         {
             this.root = root;
+            this.glyphs = glyphs;
             tooltip = root.Q("interaction-tooltip");
             chargeTrack = root.Q("charge-track");
             glyph = root.Q<Image>("interaction-glyph");
             keycap = root.Q<Label>("interaction-keycap");
             verb = root.Q<Label>("interaction-action");
             InputSystem.onActionChange += OnActionChange;
+            InputSystem.onDeviceChange += OnDeviceChange;
         }
 
         public void Update(PlayerInteraction interaction, InputDevice device)
         {
-            glyphs.Update();
             if (interaction == null || !interaction.IsOwner || interaction.TargetCollider == null ||
                 !interaction.TargetCollider.gameObject.activeInHierarchy || !interaction.Target.CanInteract)
             {
@@ -38,17 +40,19 @@ namespace TwoBirds
             var action = interaction.Action;
             var control = FindControl(action, device);
             if (control == null) { Hide(); return; }
-            if (bindingDirty || displayedAction != action || displayedControl != control)
+            var texture = glyphs.Get(control, out var name);
+            if (bindingDirty || displayedAction != action || displayedControl != control || displayedName != name)
             {
                 displayedAction = action;
                 displayedControl = control;
+                displayedName = name;
                 bindingDirty = false;
-                keycap.text = string.IsNullOrEmpty(control.shortDisplayName) ? control.displayName : control.shortDisplayName;
+                keycap.text = !string.IsNullOrEmpty(name) ? name :
+                    string.IsNullOrEmpty(control.shortDisplayName) ? control.displayName : control.shortDisplayName;
             }
-            var texture = glyphs.Get(control);
             glyph.image = texture;
-            glyph.style.display = texture != null ? DisplayStyle.Flex : DisplayStyle.None;
-            keycap.style.display = texture == null ? DisplayStyle.Flex : DisplayStyle.None;
+            glyph.style.display = texture ? DisplayStyle.Flex : DisplayStyle.None;
+            keycap.style.display = texture ? DisplayStyle.None : DisplayStyle.Flex;
             verb.text = interaction.Target.ActionText;
             tooltip.style.display = DisplayStyle.Flex;
             var anchor = interaction.Target.TooltipAnchor;
@@ -135,11 +139,16 @@ namespace TwoBirds
             if (change == InputActionChange.BoundControlsChanged) bindingDirty = true;
         }
 
+        private void OnDeviceChange(InputDevice device, InputDeviceChange change)
+        {
+            if (change == InputDeviceChange.ConfigurationChanged) bindingDirty = true;
+        }
+
         public void Dispose()
         {
             InputSystem.onActionChange -= OnActionChange;
+            InputSystem.onDeviceChange -= OnDeviceChange;
             Hide();
-            glyphs.Dispose();
         }
     }
 }

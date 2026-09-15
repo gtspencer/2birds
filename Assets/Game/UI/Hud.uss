@@ -199,3 +199,45 @@
     align-items: center;
     justify-content: center;
 }
+
+.controls-hint {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    padding: 8px 12px;
+    background-color: rgba(20, 28, 36, 0.75);
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: rgba(92, 113, 125, 0.5);
+}
+
+.controls-row {
+    flex-direction: row;
+    align-items: center;
+    margin: 2px 0;
+}
+
+.controls-keycap {
+    min-width: 32px;
+    padding: 2px 6px;
+    margin-right: 8px;
+    border-width: 1px;
+    border-color: rgb(179, 195, 205);
+    border-radius: 4px;
+    color: rgb(231, 237, 241);
+    font-size: 12px;
+    -unity-text-align: middle-center;
+    flex-shrink: 0;
+}
+
+.controls-glyph {
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.controls-label {
+    color: rgb(179, 195, 205);
+    font-size: 13px;
+}

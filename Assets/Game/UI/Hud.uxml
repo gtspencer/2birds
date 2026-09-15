@@ -24,5 +24,6 @@
             <ui:Label text="Inventory" class="inventory-title" />
             <ui:VisualElement name="inventory-grid" class="inventory-grid" />
         </ui:VisualElement>
+        <ui:VisualElement name="controls-hint" class="controls-hint" picking-mode="Ignore" style="display:none;" />
     </ui:VisualElement>
 </ui:UXML>

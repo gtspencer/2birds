@@ -29,9 +29,13 @@ namespace TwoBirds
         private bool inventoryOpen;
         private int dragFromSlot = -1;
         private VisualElement dragGhost;
+        private SteamInputGlyphs glyphs;
         private InteractionTooltip interactionTooltip;
+        private ControlsHintPanel controlsHint;
         private PlayerInteraction interaction;
         private PlayerInputReader inputReader;
+        private PlayerSeating seating;
+        private ControlHint[] cartDriverHints;
 
         public bool InventoryOpen => inventoryOpen;
 
@@ -49,7 +53,9 @@ namespace TwoBirds
             chargeTrack = root.Q("charge-track");
             chargeFill = root.Q("charge-fill");
             HideCharge();
-            interactionTooltip = new InteractionTooltip(root);
+            glyphs = new SteamInputGlyphs();
+            interactionTooltip = new InteractionTooltip(root, glyphs);
+            controlsHint = new ControlsHintPanel(root, glyphs);
             BuildHotbar();
             BuildInventoryGrid();
         }
@@ -176,6 +182,7 @@ namespace TwoBirds
             equipment = inv != null ? inv.Equipment : null;
             interaction = inv != null ? inv.GetComponent<PlayerInteraction>() : null;
             inputReader = inv != null ? inv.GetComponent<PlayerInputReader>() : null;
+            seating = inv != null ? inv.GetComponent<PlayerSeating>() : null;
             if (inventory != null) inventory.InventoryChanged += Refresh;
             Refresh();
         }
@@ -231,6 +238,7 @@ namespace TwoBirds
 
         private void LateUpdate()
         {
+            glyphs.Update();
             var session = SessionController.Instance;
             if (session == null || session.Phase != SessionPhase.InGame || session.PanelOpen ||
                 session.LocalPlayer == null || inventory == null || !inventory.IsOwner ||
@@ -238,6 +246,7 @@ namespace TwoBirds
             {
                 HideCharge();
                 interactionTooltip.Hide();
+                controlsHint.Hide();
                 return;
             }
             if (equipment != null && equipment.IsCharging)
@@ -247,6 +256,27 @@ namespace TwoBirds
             }
             else HideCharge();
             interactionTooltip.Update(interaction, inputReader.ActiveDevice);
+            if (seating && seating.IsDriver && !seating.TransitionPending)
+            {
+                EnsureCartHints();
+                controlsHint.Show(cartDriverHints, inputReader.ActiveDevice);
+            }
+            else controlsHint.Hide();
+        }
+
+        private void EnsureCartHints()
+        {
+            if (cartDriverHints != null) return;
+            var map = InputSystem.actions?.FindActionMap("Player");
+            if (map == null) return;
+            cartDriverHints = new[]
+            {
+                new ControlHint { Action = map.FindAction("Move"), Label = "Drive / Steer" },
+                new ControlHint { Action = map.FindAction("Jump"), Label = "Handbrake" },
+                new ControlHint { Action = map.FindAction("Lights"), Label = "Lights" },
+                new ControlHint { Action = map.FindAction("Horn"), Label = "Horn" },
+                new ControlHint { Action = map.FindAction("ExitVehicle"), Label = "Exit" },
+            };
         }
 
         private void HideCharge()
@@ -349,6 +379,8 @@ namespace TwoBirds
         {
             HideCharge();
             interactionTooltip?.Dispose();
+            controlsHint?.Dispose();
+            glyphs?.Dispose();
             Bind(null, null);
         }
     }

@@ -12,7 +12,7 @@ namespace TwoBirds
 {
     internal sealed class SteamInputGlyphs : IDisposable
     {
-        private readonly Dictionary<EInputActionOrigin, Texture2D> textures = new();
+        private readonly Dictionary<EInputActionOrigin, (Texture2D Texture, string Name)> glyphs = new();
         private readonly InputHandle_t[] handles = new InputHandle_t[Constants.STEAM_INPUT_MAX_COUNT];
         private bool attempted, steamReady, inputReady;
 
@@ -21,11 +21,11 @@ namespace TwoBirds
             if (steamReady) SteamAPI.RunCallbacks();
         }
 
-        public Texture2D Get(InputControl control)
+        private EInputActionOrigin ResolveOrigin(InputControl control)
         {
-            if (control?.device is not Gamepad gamepad) return null;
+            if (control?.device is not Gamepad gamepad) return EInputActionOrigin.k_EInputActionOrigin_None;
             var button = XboxOrigin(control);
-            if (button == EXboxOrigin.k_EXboxOrigin_Count) return null;
+            if (button == EXboxOrigin.k_EXboxOrigin_Count) return EInputActionOrigin.k_EInputActionOrigin_None;
             if (!attempted)
             {
                 attempted = true;
@@ -39,7 +39,7 @@ namespace TwoBirds
                     inputReady = false;
                 }
             }
-            if (!inputReady) return null;
+            if (!inputReady) return EInputActionOrigin.k_EInputActionOrigin_None;
 
             // The Xbox origin enums share the same button ordering.
             var origin = EInputActionOrigin.k_EInputActionOrigin_XBoxOne_A + (int)button;
@@ -56,8 +56,21 @@ namespace TwoBirds
             else if (type != ESteamInputType.k_ESteamInputType_XBoxOneController)
                 origin = SteamInput.TranslateActionOrigin(type, origin);
 
+            return origin;
+        }
+
+        public Texture2D Get(InputControl control, out string name)
+        {
+            name = null;
+            var origin = ResolveOrigin(control);
             if (origin == EInputActionOrigin.k_EInputActionOrigin_None) return null;
-            if (textures.TryGetValue(origin, out var texture)) return texture;
+            if (glyphs.TryGetValue(origin, out var cached))
+            {
+                name = cached.Name;
+                return cached.Texture;
+            }
+            name = SteamInput.GetStringForActionOrigin(origin);
+            Texture2D texture = null;
             var path = SteamInput.GetGlyphPNGForActionOrigin(origin, ESteamInputGlyphSize.k_ESteamInputGlyphSize_Medium, 0);
             try
             {
@@ -73,10 +86,10 @@ namespace TwoBirds
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
-                if (texture != null) UnityEngine.Object.Destroy(texture);
+                if (texture) UnityEngine.Object.Destroy(texture);
                 texture = null;
             }
-            textures[origin] = texture;
+            glyphs[origin] = (texture, name);
             return texture;
         }
 
@@ -93,6 +106,8 @@ namespace TwoBirds
                 "rightShoulder" => EXboxOrigin.k_EXboxOrigin_RightBumper,
                 "leftTrigger" => EXboxOrigin.k_EXboxOrigin_LeftTrigger_Pull,
                 "rightTrigger" => EXboxOrigin.k_EXboxOrigin_RightTrigger_Pull,
+                "leftStick" => EXboxOrigin.k_EXboxOrigin_LeftStick_Move,
+                "rightStick" => EXboxOrigin.k_EXboxOrigin_RightStick_Move,
                 "leftStickPress" => EXboxOrigin.k_EXboxOrigin_LeftStick_Click,
                 "rightStickPress" => EXboxOrigin.k_EXboxOrigin_RightStick_Click,
                 "start" => EXboxOrigin.k_EXboxOrigin_Menu,
@@ -107,9 +122,9 @@ namespace TwoBirds
 
         public void Dispose()
         {
-            foreach (var texture in textures.Values)
-                if (texture != null) UnityEngine.Object.Destroy(texture);
-            textures.Clear();
+            foreach (var glyph in glyphs.Values)
+                if (glyph.Texture) UnityEngine.Object.Destroy(glyph.Texture);
+            glyphs.Clear();
             if (inputReady) SteamInput.Shutdown();
             if (steamReady) SteamAPI.Shutdown();
             steamReady = inputReady = false;
