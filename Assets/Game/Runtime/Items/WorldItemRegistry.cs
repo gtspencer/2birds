@@ -181,7 +181,7 @@ namespace TwoBirds
 
         private void ReceiveMotion(ItemMotionBatch message, Channel channel)
         {
-            if (IsHost || !worldReady || epoch != 0 && message.Epoch != epoch) return;
+            if (IsHost || !worldReady || epoch == 0 || message.Epoch != epoch) return;
             foreach (var motion in message.Items) ApplyMotion(motion);
         }
 

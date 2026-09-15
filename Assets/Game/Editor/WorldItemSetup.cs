@@ -15,11 +15,17 @@ namespace TwoBirds.Editor
 
         static WorldItemSetup()
         {
-            EditorApplication.delayCall += Install;
+            EditorApplication.delayCall += InstallIfNeeded;
             EditorApplication.playModeStateChanged += state =>
             {
-                if (state == PlayModeStateChange.EnteredEditMode) Install();
+                if (state == PlayModeStateChange.EnteredEditMode) InstallIfNeeded();
             };
+        }
+
+        private static void InstallIfNeeded()
+        {
+            var sessionAsset = AssetDatabase.LoadAssetAtPath<GameObject>(SessionPath);
+            if (sessionAsset != null && sessionAsset.GetComponent<WorldItemRegistry>() == null) Install();
         }
 
         [MenuItem("Two Birds/Set Up World Item Physics")]
@@ -27,11 +33,17 @@ namespace TwoBirds.Editor
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) return;
             var sessionAsset = AssetDatabase.LoadAssetAtPath<GameObject>(SessionPath);
-            if (sessionAsset == null || sessionAsset.GetComponent<WorldItemRegistry>() != null) return;
+            if (sessionAsset == null) return;
             var definitions = AssetDatabase.LoadAssetAtPath<ItemRegistry>("Assets/Game/ScriptableObjects/ItemRegistry.asset");
-            ConfigureLayers();
+            if (definitions == null)
+            {
+                Debug.LogError("World item setup requires Assets/Game/ScriptableObjects/ItemRegistry.asset.");
+                return;
+            }
             foreach (var definition in definitions.Items)
                 ConfigureItem(definition);
+            if (sessionAsset.GetComponent<WorldItemRegistry>() != null) return;
+            ConfigureLayers();
             ConfigurePlayer();
             ConfigureInput();
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FishNet.Component.Prediction;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -32,9 +33,33 @@ namespace TwoBirds.Editor
         {
             log.Clear();
 
+            int errors = 0;
             var registry = FindItemRegistry();
             if (registry == null)
-                log.Add(("No ItemRegistry asset found — ItemIds will not be resolved.", MessageType.Warning));
+            {
+                log.Add(("No ItemRegistry asset found — ItemIds will not be resolved.", MessageType.Error));
+                errors++;
+            }
+            else
+            {
+                for (int i = 0; i < registry.Items.Length; i++)
+                {
+                    var definition = registry.Items[i];
+                    if (definition == null)
+                    {
+                        log.Add(($"ItemRegistry ID {i + 1}: no ItemDefinition assigned.", MessageType.Error));
+                        errors++;
+                        continue;
+                    }
+                    if (definition.WorldPrefab == null)
+                    {
+                        log.Add(($"ItemDefinition '{definition.name}': no WorldPrefab assigned.", MessageType.Error));
+                        errors++;
+                        continue;
+                    }
+                    errors += ValidateWorldItem(definition.WorldPrefab, $"ItemDefinition '{definition.name}' prefab");
+                }
+            }
 
             var pickups = Object.FindObjectsByType<BakedPickup>(FindObjectsSortMode.None);
             if (pickups.Length == 0)
@@ -75,7 +100,6 @@ namespace TwoBirds.Editor
                 EditorUtility.SetDirty(p);
             }
 
-            int errors = 0;
             foreach (var p in pickups)
             {
                 if (p.Item != null && registry != null)
@@ -89,18 +113,7 @@ namespace TwoBirds.Editor
                 }
 
                 string path = HierarchyPath(p.transform);
-
-                if (p.GetComponentInChildren<Collider>() == null)
-                {
-                    log.Add(($"'{path}': no Collider — raycasts will not detect this pickup.", MessageType.Error));
-                    errors++;
-                }
-
-                if (p.GetComponentInChildren<MeshRenderer>() == null
-                    && p.GetComponentInChildren<SkinnedMeshRenderer>() == null)
-                {
-                    log.Add(($"'{path}': no Renderer — pickup will be invisible.", MessageType.Warning));
-                }
+                errors += ValidateWorldItem(p.gameObject, path);
 
                 if (p.Item == null)
                 {
@@ -109,6 +122,11 @@ namespace TwoBirds.Editor
                 else if (registry != null && registry.GetId(p.Item) == 0)
                 {
                     log.Add(($"'{path}': ItemDefinition '{p.Item.name}' not found in ItemRegistry.", MessageType.Error));
+                    errors++;
+                }
+                if (registry != null && registry.Get(p.ItemId) == null)
+                {
+                    log.Add(($"'{path}': ItemId {p.ItemId} does not resolve to an ItemDefinition.", MessageType.Error));
                     errors++;
                 }
             }
@@ -121,6 +139,41 @@ namespace TwoBirds.Editor
                 errors > 0 ? MessageType.Warning : MessageType.Info));
 
             Repaint();
+        }
+
+        private int ValidateWorldItem(GameObject root, string path)
+        {
+            int errors = 0;
+            if (root.GetComponent<Rigidbody>() == null)
+            {
+                log.Add(($"'{path}': no Rigidbody on the root.", MessageType.Error));
+                errors++;
+            }
+            if (root.GetComponent<OfflineRigidbody>() == null)
+            {
+                log.Add(($"'{path}': no OfflineRigidbody on the root.", MessageType.Error));
+                errors++;
+            }
+            var item = root.GetComponent<WorldItem>();
+            if (item == null)
+            {
+                log.Add(($"'{path}': no WorldItem on the root.", MessageType.Error));
+                errors++;
+            }
+            else if (new SerializedObject(item).FindProperty("visualRoot").objectReferenceValue == null)
+            {
+                log.Add(($"'{path}': WorldItem has no VisualRoot reference.", MessageType.Error));
+                errors++;
+            }
+            if (root.GetComponentInChildren<Collider>(true) == null)
+            {
+                log.Add(($"'{path}': no Collider — raycasts will not detect this pickup.", MessageType.Error));
+                errors++;
+            }
+            if (root.GetComponentInChildren<MeshRenderer>(true) == null
+                && root.GetComponentInChildren<SkinnedMeshRenderer>(true) == null)
+                log.Add(($"'{path}': no Renderer — pickup will be invisible.", MessageType.Warning));
+            return errors;
         }
 
         private static string HierarchyPath(Transform t)

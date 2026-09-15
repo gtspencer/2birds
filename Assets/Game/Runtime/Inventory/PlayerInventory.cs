@@ -80,7 +80,7 @@ namespace TwoBirds
         public void SelectSlot(sbyte slot)
         {
             if (slot < -1 || slot >= HotbarSize) return;
-            Submit(new InventoryRequest { Kind = InventoryOperation.Select, From = slot });
+            Submit(new InventoryRequest { Kind = InventoryOperation.Select, From = viewSelection == slot ? -1 : slot });
         }
 
         public void SwapSlots(int from, int to)
@@ -173,7 +173,7 @@ namespace TwoBirds
             {
                 case InventoryOperation.Select:
                     if (request.From < -1 || request.From >= HotbarSize) return false;
-                    serverSelection = serverSelection == request.From ? (sbyte)-1 : (sbyte)request.From;
+                    serverSelection = (sbyte)request.From;
                     return true;
                 case InventoryOperation.Swap:
                     if (request.From < 0 || request.From >= SlotCount || request.To < 0 || request.To >= SlotCount) return false;
@@ -249,7 +249,7 @@ namespace TwoBirds
                 switch (request.Kind)
                 {
                     case InventoryOperation.Select:
-                        viewSelection = viewSelection == request.From ? (sbyte)-1 : (sbyte)request.From;
+                        viewSelection = (sbyte)request.From;
                         break;
                     case InventoryOperation.Swap:
                         (viewSlots[request.From], viewSlots[request.To]) = (viewSlots[request.To], viewSlots[request.From]);
