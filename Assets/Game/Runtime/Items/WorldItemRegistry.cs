@@ -342,7 +342,16 @@ namespace TwoBirds
                     cleanup.Add(id);
                     continue;
                 }
-                if (!item.Body.IsSleeping()) activePhysicsItems.Add(id);
+                if (!item.Body.IsSleeping())
+                {
+                    if (activePhysicsItems.Add(id))
+                    {
+                        var record = records[id];
+                        record.Sleeping = false;
+                        records[id] = record;
+                        item.SetRecord(record);
+                    }
+                }
                 else if (activePhysicsItems.Remove(id))
                 {
                     var record = records[id];

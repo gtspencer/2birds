@@ -23,6 +23,7 @@ namespace TwoBirds
         private float correctionRemaining;
         private Vector3 prefabScale;
         private bool optimisticPickup;
+        private int playerHitboxMask;
 
         public Rigidbody Body { get; private set; }
         public ItemDefinition Definition { get; private set; }
@@ -36,6 +37,7 @@ namespace TwoBirds
         private void Awake()
         {
             Body = GetComponent<Rigidbody>();
+            playerHitboxMask = LayerMask.GetMask("PlayerItemHitbox");
             colliders = GetComponentsInChildren<Collider>(true);
             renderers = GetComponentsInChildren<Renderer>(true);
             parts = GetComponentsInChildren<Transform>(true);
@@ -68,7 +70,7 @@ namespace TwoBirds
         internal void ApplyRecord(ItemRecord record)
         {
             bool wasPredicted = Predicted;
-            Record = record;
+            SetRecord(record);
             optimisticPickup = false;
             ClearIgnore();
             if (record.State == WorldItemState.Held)
@@ -129,7 +131,16 @@ namespace TwoBirds
             SetVisible(false);
         }
 
-        internal void SetRecord(ItemRecord record) => Record = record;
+        internal void SetRecord(ItemRecord record)
+        {
+            Record = record;
+            int excludedLayers = record.Sleeping
+                ? Body.excludeLayers.value | playerHitboxMask
+                : Body.excludeLayers.value & ~playerHitboxMask;
+            if (Body.excludeLayers.value == excludedLayers) return;
+            Body.excludeLayers = excludedLayers;
+            if (record.Sleeping && !Body.isKinematic) Body.Sleep();
+        }
         internal void Launch(ItemMotion motion) => CorrectBody(motion, false);
 
         internal void PresentHeld(PlayerInventory holder, bool equipped)
@@ -170,7 +181,7 @@ namespace TwoBirds
             var record = Record;
             record.Motion = motion;
             record.Sleeping = false;
-            Record = record;
+            SetRecord(record);
             if (optimisticPickup) return;
             if (!Predicted)
             {

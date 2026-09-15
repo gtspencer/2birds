@@ -15,6 +15,17 @@ MonoBehaviour:
   ItemName: Rock
   Icon: {fileID: 0}
   WorldPrefab: {fileID: 8150238569119305756, guid: 5055e9367871a7047957e4abc34fbb85, type: 3}
-  UsePrefabLayerWhenHeld: 1
   Stackable: 1
   MaxStack: 10
+  ThrowSpeed: 14
+  DropSpeed: 1.5
+  VelocityInheritance: 1
+  Mass: 1
+  LinearDamping: 0.05
+  AngularDamping: 3.5
+  InitialSpin: {x: 3, y: 1, z: 2}
+  PhysicsMaterial: {fileID: 0}
+  CollisionDetection: 2
+  MaxSpeed: 50
+  OverrideSleepThreshold: 1
+  SleepThreshold: 0.5

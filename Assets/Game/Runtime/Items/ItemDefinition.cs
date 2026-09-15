@@ -21,24 +21,41 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/Item Definition")]
     public sealed class ItemDefinition : ScriptableObject
     {
+        [Tooltip("Display name shown in the inventory HUD and drag ghost.")]
         public string ItemName = "";
+        [Tooltip("Sprite shown in inventory slots (set via the Icon Capture Window).")]
         public Sprite Icon;
+        [Tooltip("The 3D object spawned when this item exists in the world. Swapping it changes the model and colliders.")]
         public GameObject WorldPrefab;
+        [Tooltip("When true, pickups merge into an existing slot of the same type before using an empty one.")]
         public bool Stackable;
+        [Tooltip("Max items per inventory slot. Only matters when Stackable is true.")]
         [Min(1)] public int MaxStack = 1;
 
         [Header("Physics")]
+        [Tooltip("Launch speed (m/s) when the player throws the item. Higher = flies faster/farther.")]
         [Min(0f)] public float ThrowSpeed = 14f;
+        [Tooltip("Launch speed (m/s) when the player drops (not throws) the item.")]
         [Min(0f)] public float DropSpeed = 1.5f;
+        [Tooltip("How much of the player's velocity transfers to the item on release. 0 = none, 1 = full.")]
         [Min(0f)] public float VelocityInheritance = 1f;
+        [Tooltip("Rigidbody mass. Affects how much force other objects exert on this item and vice versa.")]
         [Min(0.01f)] public float Mass = 1f;
+        [Tooltip("Rigidbody linear drag. Higher = item slows down faster in the air and on the ground.")]
         [Min(0f)] public float LinearDamping = 0.05f;
+        [Tooltip("Rigidbody angular drag. Higher = item stops spinning sooner after release.")]
         [Min(0f)] public float AngularDamping = 0.1f;
+        [Tooltip("Angular velocity (rad/s per axis) applied on release. Controls the tumble on throw/drop.")]
         public Vector3 InitialSpin = new(3f, 1f, 2f);
+        [Tooltip("Applied to every collider on the world item. Controls bounciness and friction.")]
         public PhysicsMaterial PhysicsMaterial;
+        [Tooltip("ContinuousDynamic prevents fast items tunneling through walls; Discrete is cheaper but can miss.")]
         public CollisionDetectionMode CollisionDetection = CollisionDetectionMode.ContinuousDynamic;
+        [Tooltip("Caps the item's max linear velocity. Prevents runaway speeds from applied forces.")]
         [Min(0f)] public float MaxSpeed = 50f;
+        [Tooltip("When true, uses the per-item SleepThreshold instead of the global Physics.sleepThreshold.")]
         public bool OverrideSleepThreshold;
+        [Tooltip("Energy below which the rigidbody sleeps (only when OverrideSleepThreshold is on). Lower = simulates longer before resting.")]
         [Min(0f)] public float SleepThreshold = 0.005f;
     }
 }
