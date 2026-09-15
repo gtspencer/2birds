@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 74d444022b690d3469145407fb580e0a
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 148729
+  packageName: Low Poly Golf Cart
+  packageVersion: 1.0
+  assetPath: Assets/GolfCart/Materials/Glass.mat
+  uploadId: 316505

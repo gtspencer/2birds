@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f701369c77541e74593d6f39dc9cff0f
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 148729
+  packageName: Low Poly Golf Cart
+  packageVersion: 1.0
+  assetPath: Assets/GolfCart/Materials/Chrome.mat
+  uploadId: 316505

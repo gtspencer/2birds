@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: bb45f14b9a6ca5f43a85ebec24072732
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 148729
+  packageName: Low Poly Golf Cart
+  packageVersion: 1.0
+  assetPath: Assets/GolfCart/Materials/LightRed.mat
+  uploadId: 316505

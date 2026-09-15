@@ -30,6 +30,7 @@ namespace TwoBirds
             float speed = Mathf.Lerp(item.Definition.MinThrowSpeed, item.Definition.MaxThrowSpeed, Charge01);
             CancelUse();
             equipment.ReleaseItem(id, speed);
+            item.StartPickupCooldown();
         }
 
         public override void CancelUse()

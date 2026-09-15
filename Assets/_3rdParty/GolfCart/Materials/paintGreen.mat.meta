@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: a5a77e68ad4843b4eae84283ad5319d4
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 148729
+  packageName: Low Poly Golf Cart
+  packageVersion: 1.0
+  assetPath: Assets/GolfCart/Materials/paintGreen.mat
+  uploadId: 316505

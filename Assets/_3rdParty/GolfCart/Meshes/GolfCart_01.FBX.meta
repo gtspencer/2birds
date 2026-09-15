@@ -1,0 +1,192 @@
+fileFormatVersion: 2
+guid: cb368ab7462db394eb6abf153d9dd446
+ModelImporter:
+  serializedVersion: 22
+  fileIDToRecycleName:
+    100000: acceleratorPedal
+    100002: axle_b
+    100004: axle_f
+    100006: brakePedal
+    100008: //RootNode
+    100010: headLights
+    100012: lights
+    100014: seat_b
+    100016: seat_f
+    100018: steering
+    100020: steeringWheel
+    100022: storageTray
+    100024: tailLights
+    100026: wheel_b_l
+    100028: wheel_b_r
+    100030: wheel_f_l
+    100032: wheel_f_r
+    100034: windshield
+    400000: acceleratorPedal
+    400002: axle_b
+    400004: axle_f
+    400006: brakePedal
+    400008: //RootNode
+    400010: headLights
+    400012: lights
+    400014: seat_b
+    400016: seat_f
+    400018: steering
+    400020: steeringWheel
+    400022: storageTray
+    400024: tailLights
+    400026: wheel_b_l
+    400028: wheel_b_r
+    400030: wheel_f_l
+    400032: wheel_f_r
+    400034: windshield
+    2100000: paintYellow
+    2100002: paintBlack
+    2100004: Metal
+    2100006: paintWhite
+    2100008: Black
+    2100010: lightsWhite
+    2100012: lightsRed
+    2100014: Chrome
+    2100016: Windows
+    2300000: acceleratorPedal
+    2300002: axle_b
+    2300004: axle_f
+    2300006: brakePedal
+    2300008: //RootNode
+    2300010: headLights
+    2300012: lights
+    2300014: seat_b
+    2300016: seat_f
+    2300018: steering
+    2300020: steeringWheel
+    2300022: storageTray
+    2300024: tailLights
+    2300026: wheel_b_l
+    2300028: wheel_b_r
+    2300030: wheel_f_l
+    2300032: wheel_f_r
+    2300034: windshield
+    3300000: acceleratorPedal
+    3300002: axle_b
+    3300004: axle_f
+    3300006: brakePedal
+    3300008: //RootNode
+    3300010: headLights
+    3300012: lights
+    3300014: seat_b
+    3300016: seat_f
+    3300018: steering
+    3300020: steeringWheel
+    3300022: storageTray
+    3300024: tailLights
+    3300026: wheel_b_l
+    3300028: wheel_b_r
+    3300030: wheel_f_l
+    3300032: wheel_f_r
+    3300034: windshield
+    4300000: GolfCart_01
+    4300002: acceleratorPedal
+    4300004: axle_b
+    4300006: axle_f
+    4300008: brakePedal
+    4300010: lights
+    4300012: headLights
+    4300014: tailLights
+    4300016: seat_b
+    4300018: seat_f
+    4300020: steering
+    4300022: steeringWheel
+    4300024: storageTray
+    4300026: wheel_b_l
+    4300028: wheel_b_r
+    4300030: wheel_f_l
+    4300032: wheel_f_r
+    4300034: windshield
+  externalObjects: {}
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 1
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    preserveHierarchy: 0
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    serializedVersion: 2
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    rootMotionBoneRotation: {x: 0, y: 0, z: 0, w: 1}
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 0
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 148729
+  packageName: Low Poly Golf Cart
+  packageVersion: 1.0
+  assetPath: Assets/GolfCart/Meshes/GolfCart_01.FBX
+  uploadId: 316505

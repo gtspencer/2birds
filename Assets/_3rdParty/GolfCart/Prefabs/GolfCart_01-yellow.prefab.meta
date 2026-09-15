@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 212fd2fd72871824589632f05d3297f1
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 148729
+  packageName: Low Poly Golf Cart
+  packageVersion: 1.0
+  assetPath: Assets/GolfCart/Prefabs/GolfCart_01-yellow.prefab
+  uploadId: 316505

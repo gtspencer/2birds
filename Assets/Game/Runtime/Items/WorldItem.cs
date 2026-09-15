@@ -23,6 +23,7 @@ namespace TwoBirds
         private float correctionRemaining;
         private Vector3 prefabScale;
         private bool optimisticPickup;
+        private float interactableAfter;
         private int playerHitboxMask;
         private ItemUseBehaviour useBehaviour;
         private PlayerEquipment useUser;
@@ -36,7 +37,8 @@ namespace TwoBirds
         public string ActionText => "Pick up";
         public string InputActionPath => "Player/Interact";
         public bool CanInteract => registry != null && Record.State == WorldItemState.World &&
-                                   !optimisticPickup && Record.Motion.Id != 0;
+                                   !optimisticPickup && Record.Motion.Id != 0 &&
+                                   Time.time >= interactableAfter;
 
         private void Awake()
         {
@@ -52,6 +54,13 @@ namespace TwoBirds
         }
 
         public void Interact() => registry.LocalInventory?.Collect(this);
+
+        internal void StartPickupCooldown()
+        {
+            if (Record.State != WorldItemState.World || registry.LocalInventory == null ||
+                Record.Releaser != registry.LocalInventory.ObjectId) return;
+            interactableAfter = Time.time + 1f;
+        }
 
         public void BeginUse(PlayerEquipment user)
         {
