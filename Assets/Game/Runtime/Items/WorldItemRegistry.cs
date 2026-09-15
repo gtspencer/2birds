@@ -9,6 +9,7 @@ using UnityEngine.SceneManagement;
 
 namespace TwoBirds
 {
+    [DefaultExecutionOrder(200)]
     public sealed class WorldItemRegistry : MonoBehaviour
     {
         private const int BatchSize = 8;
@@ -20,7 +21,6 @@ namespace TwoBirds
         [SerializeField, Min(0.01f)] private float correctionDuration = 0.075f;
         [SerializeField, Min(0f)] private float interpolationDelay = 0.1f;
         [SerializeField, Min(0f)] private float releaseGrace = 0.3f;
-        [SerializeField, Min(0f)] private float minimumHitImpulse = 0.5f;
         [SerializeField] private Bounds worldBounds = new(Vector3.zero, Vector3.one * 2000f);
         private readonly Dictionary<uint, WorldItem> items = new();
         private readonly Dictionary<uint, ItemRecord> records = new();
@@ -71,6 +71,7 @@ namespace TwoBirds
             network.ClientManager.RegisterBroadcast<ItemMotionBatch>(ReceiveMotion);
             network.ServerManager.OnRemoteConnectionState += ConnectionChanged;
             network.TimeManager.OnPrePhysicsSimulation += BeforePhysics;
+            network.TimeManager.OnPostPhysicsSimulation += AfterPhysics;
             network.TimeManager.OnPostTick += AfterTick;
         }
 
@@ -212,6 +213,7 @@ namespace TwoBirds
         {
             players[player.ObjectId] = player;
             if (player.IsOwner) LocalInventory = player;
+            else if (LocalInventory == player) LocalInventory = null;
             RefreshHolders();
         }
 
@@ -323,6 +325,28 @@ namespace TwoBirds
         {
             if (!worldReady || Replaying) return;
             foreach (var player in players.Values) player.Hitbox.FollowMotor();
+            foreach (var item in items.Values)
+                if (item != null && item.Definition != null && item.gameObject.activeSelf) item.BeforePhysics();
+        }
+
+        private void AfterPhysics(float delta)
+        {
+            if (!worldReady || Replaying || IsHost) return;
+            foreach (var item in items.Values)
+                if (item != null && item.Definition != null && item.gameObject.activeSelf) item.AfterPhysics(delta);
+        }
+
+        private void LateUpdate()
+        {
+            if (!worldReady || Replaying) return;
+            PlayerItemHitbox victim = LocalInventory != null && LocalInventory.IsOwner ? LocalInventory.Hitbox : null;
+            if (victim != null) victim.SamplePresentation();
+            foreach (var item in items.Values)
+            {
+                if (item == null || item.Definition == null || !item.gameObject.activeSelf) continue;
+                item.Present();
+                if (!IsHost) item.SamplePlayerContact(victim);
+            }
         }
 
         private void AfterTick()
@@ -371,12 +395,6 @@ namespace TwoBirds
                 if (motionBatch.Count == BatchSize) FlushMotion();
             }
             FlushMotion();
-        }
-
-        internal void HitPlayer(WorldItem source, PlayerItemHitbox player, Vector3 impulse)
-        {
-            if (impulse.sqrMagnitude < minimumHitImpulse * minimumHitImpulse) return;
-            player.Motor.QueueItemHit(source.Record.Motion.Id, impulse);
         }
 
         private void Publish(ItemRecord record)
@@ -463,6 +481,7 @@ namespace TwoBirds
             network.ClientManager.UnregisterBroadcast<ItemMotionBatch>(ReceiveMotion);
             network.ServerManager.OnRemoteConnectionState -= ConnectionChanged;
             network.TimeManager.OnPrePhysicsSimulation -= BeforePhysics;
+            network.TimeManager.OnPostPhysicsSimulation -= AfterPhysics;
             network.TimeManager.OnPostTick -= AfterTick;
             EndWorld();
             if (Instance == this) Instance = null;

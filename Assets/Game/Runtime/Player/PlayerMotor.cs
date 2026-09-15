@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
@@ -8,6 +9,26 @@ using UnityEngine;
 namespace TwoBirds
 {
     public enum MovementMode : byte { Walking, Airborne, External }
+
+    public struct WorldImpactRequest
+    {
+        public uint Generation;
+        public uint RequestId;
+        public uint OwnerTick;
+        public Vector3 VelocityChange;
+        public uint RecoveryTicks;
+    }
+
+    public struct WorldImpact
+    {
+        public uint Generation;
+        public uint Sequence;
+        public uint RequestId;
+        public uint OwnerTick;
+        public uint ServerTick;
+        public Vector3 VelocityChange;
+        public uint RecoveryTicks;
+    }
 
     public struct MoveInput : IReplicateData
     {
@@ -25,16 +46,23 @@ namespace TwoBirds
     {
         public PredictionRigidbody Body;
         public Vector3 Position;
-        public Vector3 PendingImpulse;
+        public Vector3 PendingVelocityChange;
         public MovementMode Mode;
         public byte JumpCooldown;
         public uint ResetRevision;
+        public uint ImpactGeneration;
         public uint ServerTick;
-        public uint LastHitId;
-        public byte KnockbackTicks;
+        public uint LastImpactSequence;
+        public uint LastOwnerRequestId;
+        public uint RecoveryTicks;
         private uint tick;
-        public MotorState(PredictionRigidbody body, Vector3 impulse, MovementMode mode, byte cooldown, uint reset, uint serverTick, uint lastHitId, byte knockbackTicks)
-        { Body = body; Position = body.Rigidbody.position; PendingImpulse = impulse; Mode = mode; JumpCooldown = cooldown; ResetRevision = reset; ServerTick = serverTick; LastHitId = lastHitId; KnockbackTicks = knockbackTicks; tick = 0; }
+        public MotorState(PredictionRigidbody body, Vector3 velocityChange, MovementMode mode, byte cooldown,
+            uint reset, uint generation, uint serverTick, uint sequence, uint requestId, uint recoveryTicks)
+        {
+            Body = body; Position = body.Rigidbody.position; PendingVelocityChange = velocityChange;
+            Mode = mode; JumpCooldown = cooldown; ResetRevision = reset; ImpactGeneration = generation; ServerTick = serverTick;
+            LastImpactSequence = sequence; LastOwnerRequestId = requestId; RecoveryTicks = recoveryTicks; tick = 0;
+        }
         public uint GetTick() => tick;
         public void SetTick(uint value) => tick = value;
         public void Dispose() { }
@@ -43,56 +71,242 @@ namespace TwoBirds
     [RequireComponent(typeof(Rigidbody), typeof(PlayerInputReader))]
     public sealed class PlayerMotor : TickNetworkBehaviour
     {
+        private sealed class ImpactEntry
+        {
+            public WorldImpact Impact;
+            public uint AcknowledgedAt;
+        }
+
         [SerializeField] private GameSettings settings;
         private readonly PredictionRigidbody predictedBody = new();
+        private readonly List<ImpactEntry> impacts = new();
         private PlayerInputReader input;
         private Vector3 spawnPoint;
-        private Vector3 pendingImpulse;
+        private Vector3 pendingVelocityChange;
         private byte jumpCooldown;
         private uint resetRevision;
-        private readonly List<ItemHit> hits = new();
-        private uint nextHitId;
-        private uint lastHitId;
+        private uint impactGeneration;
+        private int generationOwner = -1;
+        private uint nextRequestId;
+        private uint receivedRequestId;
+        private uint lastRequestedTick;
+        private uint nextImpactSequence;
+        private uint lastImpactSequence;
+        private uint lastOwnerRequestId;
         private uint movementTick;
-        private byte knockbackTicks;
+        private uint lastApplicationOwnerTick;
+        private uint recoveryTicks;
+        private uint historyTicks;
+        private bool generationReady;
+        private bool rejectReplay;
         public Rigidbody Body { get; private set; }
         public MovementMode Mode { get; private set; } = MovementMode.Airborne;
         public bool Grounded => Mode == MovementMode.Walking;
         public uint ResetRevision => resetRevision;
+        internal uint ImpactGeneration => impactGeneration;
         public event System.Action<uint, uint, Vector3> Reconciled;
         public event System.Action<uint, Vector3> Simulated;
+        internal event System.Action BeforeOwnerMove;
+        internal event System.Action<Vector3> PresentationCorrected;
+        private PlayerPresentation presentation;
+        private Vector3 graphicsBeforeReconcile;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private readonly Queue<string> impactTrace = new();
+        private uint traceTicksRemaining;
+        private float nextTraceDump;
+        public event System.Action<string> ImpactTraced;
+#endif
 
         private void Awake()
         {
             Body = GetComponent<Rigidbody>();
             predictedBody.Initialize(Body);
             input = GetComponent<PlayerInputReader>();
+            presentation = GetComponent<PlayerPresentation>();
             spawnPoint = transform.position;
         }
 
-        internal void SetSpawnPoint(Vector3 point) => spawnPoint = point;
-
-        internal void QueueImpulse(Vector3 impulse)
+        public override void OnStartNetwork()
         {
-            QueueItemHit(0, impulse);
+            // FishNet retains up to five seconds of replicate history.
+            historyTicks = (uint)TimeManager.TickRate * 5 + 1;
+            PredictionManager.OnPreReplicateReplay += BeforeReplay;
+            PredictionManager.OnPreReconcile += BeforeReconcile;
+            PredictionManager.OnPostReplicateReplay += AfterReplay;
+            PredictionManager.OnPostReconcile += AfterReconcile;
         }
 
-        internal void QueueItemHit(uint source, Vector3 impulse)
+        public override void OnStartServer() => BeginGeneration(impactGeneration + 1);
+        public override void OnSpawnServer(NetworkConnection connection) => TargetGeneration(connection, impactGeneration, OwnerId);
+        public override void OnOwnershipServer(NetworkConnection previousOwner)
         {
-            if (!IsServerInitialized || PredictionManager.IsReconciling || !WorldItemRegistry.Finite(impulse)) return;
-            var hit = new ItemHit { Id = ++nextHitId, Source = source, ServerTick = TimeManager.Tick,
-                PlayerTick = movementTick + 1, Impulse = impulse };
-            hits.Add(hit);
-            ObserversHit(hit);
+            movementTick = IsOwner ? TimeManager.LocalTick - 1 : 0;
+            BeginGeneration(impactGeneration + 1);
+            ObserversGeneration(impactGeneration, OwnerId);
+        }
+
+        public override void OnOwnershipClient(NetworkConnection previousOwner)
+        {
+            if (IsServerInitialized) return;
+            if (IsOwner) movementTick = TimeManager.LocalTick - 1;
+            generationReady = generationOwner == OwnerId;
+            if (!generationReady) ClearImpacts();
+        }
+
+        public override void OnStopNetwork()
+        {
+            PredictionManager.OnPreReplicateReplay -= BeforeReplay;
+            PredictionManager.OnPreReconcile -= BeforeReconcile;
+            PredictionManager.OnPostReplicateReplay -= AfterReplay;
+            PredictionManager.OnPostReconcile -= AfterReconcile;
+            AfterReplay(0, 0);
+            rejectReplay = false;
+            ClearImpacts();
+            impactGeneration = resetRevision = movementTick = 0;
+            generationOwner = -1;
+            generationReady = false;
+        }
+
+        private void BeforeReplay(uint clientTick, uint serverTick)
+        {
+            if (rejectReplay) NetworkObject.RigidbodyPauser.Pause();
+        }
+
+        private void AfterReplay(uint clientTick, uint serverTick)
+        {
+            if (rejectReplay) NetworkObject.RigidbodyPauser.Unpause();
+            TraceImpactState("replay-state");
+        }
+
+        private void BeforeReconcile(uint clientTick, uint serverTick)
+        {
+            graphicsBeforeReconcile = presentation.Graphics.position;
+        }
+
+        private void AfterReconcile(uint clientTick, uint serverTick)
+        {
+            AfterReplay(clientTick, serverTick);
+            PresentationCorrected?.Invoke(presentation.Graphics.position - graphicsBeforeReconcile);
+            rejectReplay = false;
+        }
+
+        [TargetRpc]
+        private void TargetGeneration(NetworkConnection connection, uint generation, int owner) => ReceiveGeneration(generation, owner);
+
+        [ObserversRpc]
+        private void ObserversGeneration(uint generation, int owner) => ReceiveGeneration(generation, owner);
+
+        private void ReceiveGeneration(uint generation, int owner)
+        {
+            if (IsServerInitialized || generation < impactGeneration) return;
+            if (generation != impactGeneration) BeginGeneration(generation);
+            generationOwner = owner;
+            generationReady = owner == OwnerId;
+        }
+
+        private void BeginGeneration(uint generation)
+        {
+            ClearImpacts();
+            impactGeneration = generation;
+            generationOwner = OwnerId;
+            generationReady = true;
+            TraceImpact($"generation={generation}");
+        }
+
+        private void ClearImpacts()
+        {
+            impacts.Clear();
+            pendingVelocityChange = default;
+            recoveryTicks = 0;
+            nextRequestId = receivedRequestId = lastRequestedTick = 0;
+            nextImpactSequence = lastImpactSequence = lastOwnerRequestId = 0;
+            lastApplicationOwnerTick = 0;
+        }
+
+        internal void SetSpawnPoint(Vector3 point) => spawnPoint = point;
+        internal void QueueImpulse(Vector3 impulse) => QueueWorldImpact(impulse / Body.mass, 0.2f);
+
+        public void QueueWorldImpact(Vector3 velocityChange, float recoverySeconds)
+        {
+            if (!IsServerInitialized || PredictionManager.IsReconciling || !ValidImpact(velocityChange, recoverySeconds)) return;
+            impacts.Add(new ImpactEntry { Impact = new WorldImpact
+            {
+                Generation = impactGeneration,
+                ServerTick = TimeManager.Tick, VelocityChange = velocityChange,
+                RecoveryTicks = RecoveryDuration(recoverySeconds)
+            } });
+        }
+
+        public uint SubmitWorldImpact(Vector3 velocityChange, float recoverySeconds)
+        {
+            if (!IsOwner || !generationReady || PredictionManager.IsReconciling || !ValidImpact(velocityChange, recoverySeconds)) return 0;
+            var request = new WorldImpactRequest
+            {
+                Generation = impactGeneration, RequestId = ++nextRequestId, OwnerTick = movementTick + 1,
+                VelocityChange = velocityChange, RecoveryTicks = RecoveryDuration(recoverySeconds)
+            };
+            TraceImpact($"request id={request.RequestId} intended={request.OwnerTick} delta={velocityChange:F6}");
+            if (IsServerInitialized) AcceptImpact(request);
+            else
+            {
+                impacts.Add(new ImpactEntry { Impact = FromRequest(request) });
+                ServerImpact(request);
+            }
+            return request.RequestId;
+        }
+
+        private uint RecoveryDuration(float seconds) => (uint)Mathf.CeilToInt(seconds / (float)TimeManager.TickDelta);
+        private static bool ValidImpact(Vector3 change, float seconds) =>
+            Finite(change.x) && Finite(change.y) && Finite(change.z) && change.sqrMagnitude > 0f && Finite(seconds) && seconds >= 0f;
+
+        private static WorldImpact FromRequest(WorldImpactRequest request) => new()
+        {
+            Generation = request.Generation, RequestId = request.RequestId, OwnerTick = request.OwnerTick,
+            VelocityChange = request.VelocityChange, RecoveryTicks = request.RecoveryTicks
+        };
+
+        [ServerRpc]
+        private void ServerImpact(WorldImpactRequest request) => AcceptImpact(request);
+
+        private void AcceptImpact(WorldImpactRequest request)
+        {
+            if (request.Generation != impactGeneration || request.RequestId <= receivedRequestId) return;
+            if (!Finite(request.VelocityChange.x) || !Finite(request.VelocityChange.y) || !Finite(request.VelocityChange.z)) return;
+            receivedRequestId = request.RequestId;
+            var impact = FromRequest(request);
+            impact.OwnerTick = System.Math.Max(request.OwnerTick, System.Math.Max(lastRequestedTick, movementTick + 1));
+            lastRequestedTick = impact.OwnerTick;
+            impact.ServerTick = TimeManager.Tick;
+            impacts.Add(new ImpactEntry { Impact = impact });
+            TraceImpact($"accept id={request.RequestId} intended={request.OwnerTick} scheduled={impact.OwnerTick} delta={impact.VelocityChange:F6}");
         }
 
         [ObserversRpc]
-        private void ObserversHit(ItemHit hit)
+        private void ObserversImpact(WorldImpact impact)
         {
-            if (IsServerInitialized || hit.Id <= lastHitId) return;
-            foreach (var existing in hits)
-                if (existing.Id == hit.Id) return;
-            hits.Add(hit);
+            if (IsServerInitialized || impact.Generation < impactGeneration) return;
+            if (impact.Generation != impactGeneration) BeginGeneration(impact.Generation);
+            TraceImpact($"confirm id={impact.RequestId} sequence={impact.Sequence} ownerTick={impact.OwnerTick} serverTick={impact.ServerTick} delta={impact.VelocityChange:F6}");
+            foreach (var entry in impacts)
+            {
+                if (entry.Impact.Sequence == impact.Sequence ||
+                    impact.RequestId != 0 && entry.Impact.RequestId == impact.RequestId)
+                {
+                    entry.Impact = impact;
+                    impacts.Sort(CompareImpacts);
+                    return;
+                }
+            }
+            impacts.Add(new ImpactEntry { Impact = impact });
+            impacts.Sort(CompareImpacts);
+        }
+
+        private static int CompareImpacts(ImpactEntry a, ImpactEntry b)
+        {
+            if (a.Impact.Sequence == 0 && b.Impact.Sequence == 0) return a.Impact.RequestId.CompareTo(b.Impact.RequestId);
+            if (a.Impact.Sequence == 0) return 1;
+            if (b.Impact.Sequence == 0) return -1;
+            return a.Impact.Sequence.CompareTo(b.Impact.Sequence);
         }
 
         internal void SetExternalControl(bool external)
@@ -100,30 +314,82 @@ namespace TwoBirds
             if (IsServerInitialized) Mode = external ? MovementMode.External : MovementMode.Airborne;
         }
 
-        protected override void TimeManager_OnTick() => ReplicateMove(IsOwner ? input.Consume() : default);
+        protected override void TimeManager_OnTick()
+        {
+            if (IsOwner) BeforeOwnerMove?.Invoke();
+            ReplicateMove(IsOwner ? input.Consume() : default);
+        }
         protected override void TimeManager_OnPostTick()
         {
             Simulated?.Invoke(TimeManager.LocalTick, Body.position);
+            TraceImpactState("physics-state");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (traceTicksRemaining > 0) traceTicksRemaining--;
+#endif
             CreateReconcile();
         }
 
-        public override void CreateReconcile() => ReconcileState(new MotorState(predictedBody, pendingImpulse, Mode, jumpCooldown, resetRevision, IsServerInitialized ? TimeManager.Tick : 0, lastHitId, knockbackTicks));
+        public override void CreateReconcile() => ReconcileState(new MotorState(predictedBody, pendingVelocityChange, Mode,
+            jumpCooldown, resetRevision, impactGeneration, IsServerInitialized ? TimeManager.Tick : 0, lastImpactSequence, lastOwnerRequestId, recoveryTicks));
+
+        private void ApplyImpacts()
+        {
+            if (recoveryTicks > 0) recoveryTicks--;
+            uint ownerBarrier = 0;
+            foreach (var entry in impacts)
+            {
+                var impact = entry.Impact;
+                if (impact.Generation != impactGeneration) continue;
+                if (IsOwner && impact.RequestId != 0) ownerBarrier = System.Math.Max(ownerBarrier, impact.OwnerTick);
+                if (IsServerInitialized)
+                {
+                    if (impact.Sequence != 0 || impact.ServerTick > TimeManager.Tick ||
+                        impact.OwnerTick > movementTick || movementTick < lastApplicationOwnerTick) continue;
+                    impact.Sequence = ++nextImpactSequence;
+                    impact.OwnerTick = movementTick;
+                    impact.ServerTick = TimeManager.Tick;
+                    lastApplicationOwnerTick = movementTick;
+                    entry.Impact = impact;
+                    ObserversImpact(impact);
+                }
+                else
+                {
+                    uint applicationTick = IsOwner ? impact.OwnerTick : impact.ServerTick;
+                    if (IsOwner && impact.Sequence == 0) applicationTick = System.Math.Max(applicationTick, ownerBarrier);
+                    if (applicationTick > movementTick) continue;
+                    if (impact.Sequence != 0 && impact.Sequence <= lastImpactSequence) continue;
+                    if (impact.Sequence == 0 && (!IsOwner || impact.RequestId <= lastOwnerRequestId)) continue;
+                }
+                bool predictedAlready = impact.RequestId != 0 && impact.RequestId <= lastOwnerRequestId;
+                TraceImpact($"apply id={impact.RequestId} sequence={impact.Sequence} ownerTick={impact.OwnerTick} serverTick={impact.ServerTick} alreadyInState={predictedAlready} delta={impact.VelocityChange:F6} pendingBefore={pendingVelocityChange:F6}");
+                if (!predictedAlready)
+                {
+                    Vector3 combined = pendingVelocityChange + impact.VelocityChange;
+                    if (Finite(combined.x) && Finite(combined.y) && Finite(combined.z))
+                    {
+                        pendingVelocityChange = combined;
+                        recoveryTicks = System.Math.Max(recoveryTicks, impact.RecoveryTicks);
+                    }
+                    else
+                    {
+                        TraceImpact($"invalid-sum id={impact.RequestId} sequence={impact.Sequence}");
+                        DumpImpactTrace();
+                    }
+                }
+                if (impact.Sequence != 0) lastImpactSequence = impact.Sequence;
+                if (impact.RequestId != 0) lastOwnerRequestId = System.Math.Max(lastOwnerRequestId, impact.RequestId);
+            }
+            if (IsServerInitialized) impacts.RemoveAll(entry => entry.Impact.Sequence != 0);
+        }
 
         [Replicate]
         private void ReplicateMove(MoveInput data, ReplicateState state = ReplicateState.Invalid, Channel channel = Channel.Unreliable)
         {
+            if (PredictionManager.IsReconciling && rejectReplay) return;
             movementTick = data.GetTick();
-            if (knockbackTicks > 0) knockbackTicks--;
-            foreach (var hit in hits)
-            {
-                if (hit.Id <= lastHitId || hit.PlayerTick > movementTick) continue;
-                pendingImpulse += hit.Impulse;
-                lastHitId = hit.Id;
-                knockbackTicks = 12;
-            }
-            if (IsServerInitialized) RemoveAppliedHits();
+            ApplyImpacts();
             if (!Finite(data.Direction.x) || !Finite(data.Direction.y) || !Finite(data.Facing)) data = default;
-            // Missing inputs apply no new intent. Physics retains momentum; jump edges are never extrapolated.
+            // Missing inputs apply no new intent; jump edges are never extrapolated.
             if (!state.ContainsCreated()) { data.Direction = default; data.Jump = false; }
             if (jumpCooldown > 0) jumpCooldown--;
             bool grounded = Physics.SphereCast(Body.position + Vector3.down * 0.45f, 0.45f, Vector3.down,
@@ -135,7 +401,7 @@ namespace TwoBirds
                 Vector3 target = new Vector3(direction.x, 0f, direction.y) * settings.WalkSpeed;
                 Vector3 horizontal = new Vector3(Body.linearVelocity.x, 0f, Body.linearVelocity.z);
                 float acceleration = grounded ? (direction.sqrMagnitude > 0f ? settings.GroundAcceleration : settings.Braking) : settings.AirAcceleration;
-                if (knockbackTicks > 0) acceleration = 0f;
+                if (recoveryTicks > 0) acceleration = 0f;
                 Vector3 change = Vector3.ClampMagnitude(target - horizontal, acceleration * (float)TimeManager.TickDelta);
                 predictedBody.AddForce(change, ForceMode.VelocityChange);
                 if (state.ContainsCreated()) predictedBody.MoveRotation(Quaternion.Euler(0f, Mathf.Repeat(data.Facing, 360f), 0f));
@@ -146,10 +412,11 @@ namespace TwoBirds
                     Mode = MovementMode.Airborne;
                 }
             }
-            if (pendingImpulse != Vector3.zero)
+            if (pendingVelocityChange.sqrMagnitude > 0f)
             {
-                predictedBody.AddForce(pendingImpulse, ForceMode.Impulse);
-                pendingImpulse = default;
+                TraceImpact($"force delta={pendingVelocityChange:F6} expectedVelocity={Body.linearVelocity + pendingVelocityChange:F6}");
+                predictedBody.AddForce(pendingVelocityChange, ForceMode.VelocityChange);
+                pendingVelocityChange = default;
             }
             if (IsServerInitialized && Body.position.y < settings.FallBoundary)
             {
@@ -158,10 +425,10 @@ namespace TwoBirds
                 Body.position = spawnPoint;
                 Body.rotation = Quaternion.identity;
                 jumpCooldown = 0;
-                pendingImpulse = default;
-                knockbackTicks = 0;
                 Mode = MovementMode.Airborne;
                 resetRevision++;
+                BeginGeneration(impactGeneration + 1);
+                ObserversGeneration(impactGeneration, OwnerId);
             }
             predictedBody.Simulate();
         }
@@ -169,24 +436,76 @@ namespace TwoBirds
         [Reconcile]
         private void ReconcileState(MotorState data, Channel channel = Channel.Unreliable)
         {
-            // Do not count FishNet's locally generated fallback states as authoritative measurements.
-            if (data.ServerTick != 0) Reconciled?.Invoke(data.GetTick(), data.ServerTick, data.Position);
-            pendingImpulse = data.PendingImpulse;
+            rejectReplay = data.ImpactGeneration < impactGeneration || data.ResetRevision < resetRevision;
+            TraceImpactState($"reconcile rejected={rejectReplay} stateGeneration={data.ImpactGeneration} stateTick={data.GetTick()} serverTick={data.ServerTick} sequence={data.LastImpactSequence} request={data.LastOwnerRequestId} position={data.Position:F6}");
+            if (rejectReplay) return;
+            if (data.ImpactGeneration != impactGeneration) BeginGeneration(data.ImpactGeneration);
+            if (data.ServerTick != 0)
+            {
+                Reconciled?.Invoke(data.GetTick(), data.ServerTick, data.Position);
+                PruneImpacts(data.LastImpactSequence, data.LastOwnerRequestId);
+            }
+            pendingVelocityChange = data.PendingVelocityChange;
+            resetRevision = data.ResetRevision;
             Mode = data.Mode;
             jumpCooldown = data.JumpCooldown;
-            resetRevision = data.ResetRevision;
-            lastHitId = data.LastHitId;
-            knockbackTicks = data.KnockbackTicks;
-            if (data.ServerTick != 0) RemoveAppliedHits();
+            lastImpactSequence = data.LastImpactSequence;
+            lastOwnerRequestId = data.LastOwnerRequestId;
+            recoveryTicks = data.RecoveryTicks;
             predictedBody.Reconcile(data.Body);
         }
 
-        private void RemoveAppliedHits()
+        private void PruneImpacts(uint sequence, uint requestId)
         {
-            for (int i = hits.Count - 1; i >= 0; i--)
-                if (hits[i].Id <= lastHitId) hits.RemoveAt(i);
+            uint now = TimeManager.LocalTick;
+            for (int i = impacts.Count - 1; i >= 0; i--)
+            {
+                var entry = impacts[i];
+                bool acknowledged = entry.Impact.Sequence != 0 ? entry.Impact.Sequence <= sequence : entry.Impact.RequestId <= requestId;
+                if (!acknowledged) continue;
+                if (entry.AcknowledgedAt == 0) entry.AcknowledgedAt = now;
+                if (now - entry.AcknowledgedAt > historyTicks) impacts.RemoveAt(i);
+            }
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        internal void TraceImpact(string detail)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            traceTicksRemaining = TimeManager.TickRate;
+            TraceImpactState(detail);
+#endif
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void TraceImpactState(string detail)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (traceTicksRemaining == 0) return;
+            string entry = $"time={Time.unscaledTime:F6} owner={OwnerId} local={IsOwner} server={IsServerInitialized} tick={TimeManager.LocalTick} movement={movementTick} replay={PredictionManager.IsReconciling} generation={impactGeneration} sequence={lastImpactSequence} request={lastOwnerRequestId} body={Body.position:F6} velocity={Body.linearVelocity:F6} graphics={presentation.Graphics.position:F6} {detail}";
+            if (impactTrace.Count == 256) impactTrace.Dequeue();
+            impactTrace.Enqueue(entry);
+            ImpactTraced?.Invoke(entry);
+            if (detail == "physics-state" && (!Finite(Body.linearVelocity.x) || !Finite(Body.linearVelocity.y) ||
+                !Finite(Body.linearVelocity.z) || Body.linearVelocity.sqrMagnitude > 10000f)) DumpImpactTrace();
+#endif
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        internal void DumpImpactTrace()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (Time.unscaledTime < nextTraceDump) return;
+            nextTraceDump = Time.unscaledTime + 1f;
+            Debug.LogWarning(string.Join("\n", impactTrace), this);
+#endif
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        [ContextMenu("Dump Impact Trace")]
+        private void DumpImpactTraceFromInspector() => Debug.Log(string.Join("\n", impactTrace), this);
+#endif
     }
 }

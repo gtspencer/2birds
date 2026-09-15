@@ -69,6 +69,8 @@ namespace TwoBirds
         public override void OnSpawnServer(NetworkConnection connection) =>
             TargetInventory(connection, serverRevision, lastOperation, serverSlots, serverSelection);
 
+        public override void OnOwnershipClient(NetworkConnection previousOwner) => registry.RegisterPlayer(this);
+
         public ItemStack GetSlot(int index)
         {
             if (index < 0 || index >= SlotCount) return default;

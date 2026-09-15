@@ -43,12 +43,4 @@ namespace TwoBirds
         public List<ItemMotion> Items;
     }
 
-    public struct ItemHit
-    {
-        public uint Id;
-        public uint Source;
-        public uint ServerTick;
-        public uint PlayerTick;
-        public Vector3 Impulse;
-    }
 }

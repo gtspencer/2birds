@@ -20,6 +20,8 @@ MonoBehaviour:
   MinThrowSpeed: 3
   MaxThrowSpeed: 14
   ThrowChargeTime: 1
+  MinimumImpactSpeed: 1
+  ImpulseMultiplier: 1
   DropSpeed: 1.5
   VelocityInheritance: 1
   Mass: 1

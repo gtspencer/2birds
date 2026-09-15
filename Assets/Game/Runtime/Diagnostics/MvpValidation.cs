@@ -143,6 +143,7 @@ namespace TwoBirds
         private FishNet.Managing.Timing.TimeManager timeManager;
         private FishNet.Managing.Predicting.PredictionManager predictionManager;
         private StreamWriter csv;
+        private StreamWriter impactLog;
         private Vector3 beforeReplay;
         private long tickStarted;
         private long replayStarted;
@@ -161,6 +162,8 @@ namespace TwoBirds
             timeManager = motor.TimeManager;
             predictionManager = motor.PredictionManager;
             csv = new StreamWriter(Path.Combine(directory, $"player-{motor.OwnerId}-session-{SessionController.Instance.SessionId}.csv"));
+            impactLog = new StreamWriter(Path.Combine(directory, $"impacts-{motor.OwnerId}-session-{SessionController.Instance.SessionId}.log")) { AutoFlush = true };
+            motor.ImpactTraced += WriteImpact;
             csv.WriteLine("kind,time,owner,isOwner,isServer,localTick,serverTick,stateTick,rttMs,stateAgeMs,errorM,postReplayM,graphicsOffsetM,replayCount,tickMs,replayMs,actualHz,x,y,z,resetRevision,authoritativeServerTick");
             motor.Simulated += PostTick;
             motor.Reconciled += Reconcile;
@@ -173,6 +176,7 @@ namespace TwoBirds
         }
 
         private void PreTick() => tickStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        private void WriteImpact(string entry) => impactLog.WriteLine(entry);
         private static double Milliseconds(long start) => (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000d / System.Diagnostics.Stopwatch.Frequency;
         private void PostTick(uint tick, Vector3 position)
         {
@@ -214,6 +218,7 @@ namespace TwoBirds
             {
                 motor.Simulated -= PostTick;
                 motor.Reconciled -= Reconcile;
+                motor.ImpactTraced -= WriteImpact;
             }
             if (timeManager != null) timeManager.OnPreTick -= PreTick;
             if (predictionManager != null)
@@ -223,6 +228,7 @@ namespace TwoBirds
                 predictionManager.OnPostReconcile -= AfterReplay;
             }
             csv?.Dispose();
+            impactLog?.Dispose();
         }
     }
 }

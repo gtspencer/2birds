@@ -41,6 +41,12 @@ namespace TwoBirds
         [Tooltip("Gameplay seconds to reach full throw speed. Full charge waits for release.")]
         [Min(0.01f)] public float ThrowChargeTime = 1f;
 
+        [Header("Player Impacts")]
+        [Tooltip("Minimum incoming contact speed (m/s) that shoves a player.")]
+        [Min(0f)] public float MinimumImpactSpeed = 1f;
+        [Tooltip("Scales the shove received by a player. Requires a non-trigger sphere collider. Zero disables shove and recovery.")]
+        [InspectorName("Impulse Multiplier"), Min(0f)] public float ImpulseMultiplier = 1f;
+
         [Header("Physics")]
         [Tooltip("Launch speed (m/s) when the player drops (not throws) the item.")]
         [Min(0f)] public float DropSpeed = 1.5f;
@@ -70,6 +76,8 @@ namespace TwoBirds
             MinThrowSpeed = Mathf.Max(0f, MinThrowSpeed);
             MaxThrowSpeed = Mathf.Max(MinThrowSpeed, MaxThrowSpeed);
             ThrowChargeTime = Mathf.Max(0.01f, ThrowChargeTime);
+            MinimumImpactSpeed = Mathf.Max(0f, MinimumImpactSpeed);
+            ImpulseMultiplier = Mathf.Max(0f, ImpulseMultiplier);
         }
     }
 }
