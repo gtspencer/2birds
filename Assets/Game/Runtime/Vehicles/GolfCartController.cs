@@ -7,15 +7,18 @@ namespace TwoBirds
     [RequireComponent(typeof(Rigidbody))]
     public sealed class GolfCartController : MonoBehaviour
     {
+        private const float ParkingSpeed = 0.25f, ParkingAngularSpeed = 0.5f;
         [SerializeField] private GolfCartSettings settings;
         [SerializeField] private Transform[] suspension;
         [SerializeField] private BoxCollider[] chassis;
         private readonly Collider[] overlaps = new Collider[64];
         private readonly List<Vector2> recoveryOffsets = new();
         private readonly float[] compression = new float[4];
+        private readonly RaycastHit[] wheelHits = new RaycastHit[4];
+        private readonly Vector3[] wheelOrigins = new Vector3[4];
         private GolfCartNetwork network;
         private Vector2 drive;
-        private bool handbrake;
+        private bool handbrake, driven, parkingBrake;
         private float rearGrip = 1f, steering, collisionSeverity, rolloverTime, settledTime, stuckTime, landingGrace, clearTime;
         private bool rolloverReported, previouslySupported;
         private Vector3 stuckOrigin, preVelocity, preAngularVelocity, preCenter;
@@ -51,9 +54,12 @@ namespace TwoBirds
 
         internal void SetInput(Vector2 value, bool brake) { drive = value; handbrake = brake; }
         internal void ClearInput() { drive = default; handbrake = false; }
-        internal void ResetMotion()
+        internal void ResetMotion(bool isDriven, bool parked)
         {
             ClearInput();
+            driven = isDriven;
+            parkingBrake = parked;
+            Body.linearDamping = driven ? settings.DrivenLinearDamping : settings.UnmannedLinearDamping;
             collisionSeverity = rolloverTime = settledTime = stuckTime = clearTime = 0f;
             landingGrace = settings.LandingGraceSeconds;
             rolloverReported = previouslySupported = false;
@@ -68,22 +74,45 @@ namespace TwoBirds
             Vector3 planar = Vector3.ProjectOnPlane(Body.rotation * Vector3.forward, Vector3.up);
             if (planar.sqrMagnitude > 0.01f) heading = Quaternion.LookRotation(planar).eulerAngles.y;
             Vector3 forward = Body.rotation * Vector3.forward;
+            Vector3 up = Body.rotation * Vector3.up;
             float speed = Vector3.Dot(Body.linearVelocity, forward);
             steering = drive.x * Mathf.Lerp(settings.SteeringAngle, settings.FastSteeringAngle,
                 Mathf.Abs(speed) / settings.MaximumSpeed);
-            rearGrip = handbrake ? settings.HandbrakeGrip : Mathf.MoveTowards(rearGrip, 1f, delta / settings.GripRecoverySeconds);
-            bool braking = drive.y * speed < 0f && Mathf.Abs(speed) > settings.ReverseDeadband;
             int supported = 0;
             for (int i = 0; i < 4; i++)
             {
-                Vector3 origin = Body.position + Body.rotation * suspension[i].localPosition;
-                Vector3 up = Body.rotation * Vector3.up;
+                wheelOrigins[i] = Body.position + Body.rotation * suspension[i].localPosition;
                 compression[i] = 0f;
-                if (!Physics.Raycast(origin, -up, out var hit, settings.SuspensionTravel + settings.WheelRadius,
+                if (!Physics.Raycast(wheelOrigins[i], -up, out wheelHits[i], settings.SuspensionTravel + settings.WheelRadius,
                     supportMask, QueryTriggerInteraction.Ignore)) continue;
                 supported++;
+                compression[i] = Mathf.Clamp01((settings.SuspensionTravel + settings.WheelRadius - wheelHits[i].distance) / settings.SuspensionTravel);
+            }
+            bool stable = supported >= 3;
+            bool canPark = stable && Vector3.Dot(up, Vector3.up) > 0.5f &&
+                Body.linearVelocity.sqrMagnitude < ParkingSpeed * ParkingSpeed &&
+                Body.angularVelocity.sqrMagnitude < ParkingAngularSpeed * ParkingAngularSpeed;
+            if (parkingBrake && driven && Mathf.Abs(drive.y) > 0.1f)
+            {
+                parkingBrake = false;
+                Body.WakeUp();
+            }
+            if (!driven && canPark) parkingBrake = true;
+            bool holding = parkingBrake && canPark;
+            if (holding)
+            {
+                Body.linearVelocity = Body.angularVelocity = Vector3.zero;
+                Body.Sleep();
+            }
+            else if (parkingBrake) Body.WakeUp();
+            rearGrip = parkingBrake ? 1f : handbrake ? settings.HandbrakeGrip : Mathf.MoveTowards(rearGrip, 1f, delta / settings.GripRecoverySeconds);
+            bool braking = drive.y * speed < 0f && Mathf.Abs(speed) > settings.ReverseDeadband;
+            for (int i = 0; i < 4 && !holding; i++)
+            {
+                var hit = wheelHits[i];
+                if (hit.collider == null) continue;
+                Vector3 origin = wheelOrigins[i];
                 float depth = settings.SuspensionTravel + settings.WheelRadius - hit.distance;
-                compression[i] = Mathf.Clamp01(depth / settings.SuspensionTravel);
                 Vector3 velocity = Body.GetPointVelocity(origin);
                 float load = Mathf.Clamp(depth * settings.Spring - Vector3.Dot(velocity, up) * settings.Damper, 0f, settings.MaximumLoad);
                 Body.AddForceAtPosition(up * load, origin);
@@ -92,18 +121,17 @@ namespace TwoBirds
                 Vector3 right = Vector3.Cross(hit.normal, wheelForward);
                 float along = Vector3.Dot(velocity, wheelForward);
                 float longitudinal = 0f;
-                if (braking) longitudinal = -Mathf.Sign(along) * Mathf.Min(settings.BrakeForce * Mathf.Abs(drive.y) / 4f,
+                if (parkingBrake || braking) longitudinal = -Mathf.Sign(along) * Mathf.Min(settings.BrakeForce * (parkingBrake ? 1f : Mathf.Abs(drive.y)) / 4f,
                     Mathf.Abs(along) * Body.mass / (4f * delta));
                 else if (Mathf.Abs(speed) < (drive.y < 0f ? settings.ReverseSpeed : settings.MaximumSpeed) || drive.y * speed < 0f)
                     longitudinal = drive.y * settings.DriveForce / 4f;
-                if (handbrake && i >= 2)
+                if (handbrake && !parkingBrake && i >= 2)
                     longitudinal -= Mathf.Sign(along) * Mathf.Min(settings.HandbrakeForce / 2f, Mathf.Abs(along) * Body.mass / (4f * delta));
                 float grip = settings.TireGrip * (i < 2 ? 1f : rearGrip);
                 float lateral = -Vector3.Dot(velocity, right) * Body.mass * settings.LateralResponse / 4f;
                 Vector3 tireForce = Vector3.ClampMagnitude(wheelForward * longitudinal + right * lateral, load * grip);
                 Body.AddForceAtPosition(tireForce, hit.point);
             }
-            bool stable = supported >= 3;
             if (stable && !previouslySupported) landingGrace = settings.LandingGraceSeconds;
             previouslySupported = stable;
             landingGrace = Mathf.Max(0f, landingGrace - delta);
@@ -156,7 +184,7 @@ namespace TwoBirds
         {
             Epoch = epoch, Tick = tick, Position = Body.position, Rotation = Body.rotation,
             Velocity = Body.linearVelocity, AngularVelocity = Body.angularVelocity,
-            Steering = (sbyte)Mathf.RoundToInt(steering / settings.SteeringAngle * 127f), Handbrake = handbrake,
+            Steering = (sbyte)Mathf.RoundToInt(steering / settings.SteeringAngle * 127f), Handbrake = handbrake, ParkingBrake = parkingBrake,
             FrontLeft = Pack(compression[0]), FrontRight = Pack(compression[1]), RearLeft = Pack(compression[2]), RearRight = Pack(compression[3])
         };
         private static byte Pack(float value) => (byte)Mathf.RoundToInt(value * 255f);

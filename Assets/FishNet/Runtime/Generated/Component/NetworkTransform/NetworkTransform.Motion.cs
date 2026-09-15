@@ -17,7 +17,7 @@ namespace FishNet.Component.Transforming
             public Vector3 AngularVelocity;
             public sbyte Steering;
             public byte FrontLeft, FrontRight, RearLeft, RearRight;
-            public bool Handbrake;
+            public bool Handbrake, ParkingBrake;
         }
 
         public bool EpochMotionEnabled { get; private set; }

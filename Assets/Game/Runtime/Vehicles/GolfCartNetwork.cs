@@ -231,14 +231,15 @@ namespace TwoBirds
             controller.AfterPhysics(delta);
             var frame = controller.Capture(epoch, TimeManager.LocalTick);
             bool resting = controller.Body.IsSleeping() || frame.Velocity.sqrMagnitude < 0.0001f && frame.AngularVelocity.sqrMagnitude < 0.0001f;
+            bool parkingChanged = frame.ParkingBrake != lastSent.ParkingBrake;
             bool changed = (frame.Position - lastSent.Position).sqrMagnitude > 0.000001f || Quaternion.Angle(frame.Rotation, lastSent.Rotation) > 0.05f ||
                 (frame.Velocity - lastSent.Velocity).sqrMagnitude > 0.0001f || (frame.AngularVelocity - lastSent.AngularVelocity).sqrMagnitude > 0.0001f ||
                 frame.Steering != lastSent.Steering || frame.Handbrake != lastSent.Handbrake ||
                 frame.FrontLeft != lastSent.FrontLeft || frame.FrontRight != lastSent.FrontRight || frame.RearLeft != lastSent.RearLeft || frame.RearRight != lastSent.RearRight;
-            if (resting && !sentRest || changed && TimeManager.LocalTick % 3 == 0)
+            if (parkingChanged || resting && !sentRest || changed && TimeManager.LocalTick % 3 == 0)
             {
                 if (resting) frame.Velocity = frame.AngularVelocity = Vector3.zero;
-                motion.PublishMotion(frame, resting);
+                motion.PublishMotion(frame, resting || parkingChanged);
                 lastSent = frame;
                 sentRest = resting;
             }
@@ -266,7 +267,7 @@ namespace TwoBirds
             simulator = owner;
             baseline = frame;
             motion.InstallMotionBaseline(baseline);
-            controller.ResetMotion();
+            controller.ResetMotion(owner >= 0, frame.ParkingBrake);
             eventSequence = lastIncident = stopToken = cancelledToken = 0;
             incidentPending = sentRest = false;
             startPending = true;
@@ -389,6 +390,8 @@ namespace TwoBirds
         internal void ReportIncident(CartRecovery recovery)
         {
             if (!Simulating || incidentPending) return;
+            if ((recovery == CartRecovery.None || recovery == Recovery) &&
+                Array.TrueForAll(occupants, entry => entry.Player < 0)) return;
             incidentPending = true;
             var velocities = new Vector3[4];
             for (int i = 0; i < 4; i++) velocities[i] = controller.PreImpactVelocity(transform.InverseTransformPoint(seats[i].Rider.position));

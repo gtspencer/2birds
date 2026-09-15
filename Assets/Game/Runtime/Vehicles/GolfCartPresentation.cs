@@ -58,11 +58,11 @@ namespace TwoBirds
         {
             if (!network.IsServerInitialized && !network.IsClientInitialized) return;
             var frame = network.DisplayMotion;
-            if (lastEpoch == frame.Epoch)
+            if (lastEpoch == frame.Epoch && !frame.ParkingBrake)
             {
                 float turn = Vector3.Dot(frame.Position - previousPosition, frame.Rotation * Vector3.forward) / settings.WheelRadius * Mathf.Rad2Deg;
-                spin += turn;
-                if (!frame.Handbrake) rearSpin += turn;
+                spin = (spin + turn) % 360f;
+                if (!frame.Handbrake) rearSpin = (rearSpin + turn) % 360f;
             }
             lastEpoch = frame.Epoch;
             previousPosition = frame.Position;

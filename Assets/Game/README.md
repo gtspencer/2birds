@@ -13,7 +13,13 @@ Controls: WASD / left stick to move, mouse / right stick to orbit, Space / gamep
 - `PlayerNetworkState` holds the small persistent public descriptor used by the MVP. `PlayerPresentation` exposes a read-only snapshot and follows the smoothed graphics with a local camera. One FishNet `NetworkTickSmoother` smooths the graphics; no NetworkTransform or Rigidbody interpolation also writes the root.
 - `GameSettings.asset` holds movement and timeout tuning. The prefabs hold networking, physics, and smoothing configuration.
 
-Game implementation lives under `Assets/Game`. Imported FishNet code is unchanged. The only scene NetworkObject has a stable explicit ID because FishNet's throttled editor validation can skip IDs during batch scene generation.
+Game implementation lives under `Assets/Game`. The only scene NetworkObject has a stable explicit ID because FishNet's throttled editor validation can skip IDs during batch scene generation.
+
+## FishNet cart motion extension
+
+The imported FishNet 4.7.3 runtime includes an opt-in cart extension in [NetworkTransform.Motion.cs](../FishNet/Runtime/Generated/Component/NetworkTransform/NetworkTransform.Motion.cs), with integration hooks in [NetworkTransform.cs](../FishNet/Runtime/Generated/Component/NetworkTransform/NetworkTransform.cs). It carries motion epochs, pose and velocity samples, and wheel/parking state through one motion stream. Transforms with epoch motion disabled retain the existing behavior.
+
+When upgrading or replacing FishNet, preserve or adapt both files: the partial declaration, `GoalData.Motion`, epoch guards, interpolation-goal hook, and reset hook are required. Keep both partial declarations in the `FishNet.Runtime` assembly because the extension accesses private internals. FishNet's normal IL post-processing modifies compiled assemblies; it does not regenerate these C# source files despite their `Generated` directory.
 
 ## Asset generation and checks
 
