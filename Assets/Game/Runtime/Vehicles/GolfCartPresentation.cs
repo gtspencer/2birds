@@ -14,17 +14,23 @@ namespace TwoBirds
         }
         [SerializeField] private Transform[] wheels;
         [SerializeField] private Transform steeringWheel;
+        [SerializeField] private Transform gasPedal;
+        [SerializeField] private Transform brakePedal;
+        [SerializeField] private Vector3 gasPedalAngle = new(15f, 0f, 0f);
+        [SerializeField] private Vector3 brakePedalAngle = new(15f, 0f, 0f);
+        [SerializeField] private float pedalSpeed = 8f;
         [SerializeField] private PaintSlot[] paintSlots;
         private readonly Quaternion[] restRotations = new Quaternion[4];
         private readonly Vector3[] restPositions = new Vector3[4];
         private readonly float[] wheelScale = new float[4];
         private MaterialPropertyBlock[] blocks;
-        private Quaternion steeringRest;
+        private Quaternion steeringRest, gasPedalRest, brakePedalRest;
         private GolfCartNetwork network;
         private GolfCartSettings settings;
         private uint lastEpoch;
         private Vector3 previousPosition;
         private float spin, rearSpin;
+        private float displaySteering, gasPedalT, brakePedalT, previousForwardSpeed;
         private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
 
         private void Awake()
@@ -38,6 +44,8 @@ namespace TwoBirds
                 wheelScale[i] = 1f / wheels[i].parent.lossyScale.y;
             }
             steeringRest = steeringWheel.localRotation;
+            if (gasPedal != null) gasPedalRest = gasPedal.localRotation;
+            if (brakePedal != null) brakePedalRest = brakePedal.localRotation;
             blocks = new MaterialPropertyBlock[paintSlots.Length];
             for (int i = 0; i < blocks.Length; i++) blocks[i] = new MaterialPropertyBlock();
             previousPosition = transform.position;
@@ -69,11 +77,44 @@ namespace TwoBirds
             float steer = frame.Steering / 127f * settings.SteeringAngle;
             for (int i = 0; i < 4; i++)
             {
-                byte packed = i == 0 ? frame.FrontLeft : i == 1 ? frame.FrontRight : i == 2 ? frame.RearLeft : frame.RearRight;
+                byte packed = i switch
+                {
+                    0 => frame.FrontLeft,
+                    1 => frame.FrontRight,
+                    2 => frame.RearLeft,
+                    _ => frame.RearRight
+                };
                 wheels[i].localPosition = restPositions[i] + Vector3.up * (packed / 255f - 0.35f) * settings.SuspensionTravel * wheelScale[i];
                 wheels[i].localRotation = Quaternion.Euler(0f, i < 2 ? steer : 0f, 0f) * restRotations[i] * Quaternion.Euler(i < 2 ? spin : rearSpin, 0f, 0f);
             }
-            steeringWheel.localRotation = steeringRest * Quaternion.Euler(0f, -steer * 4f, 0f);
+            displaySteering = Mathf.MoveTowards(displaySteering, steer, Time.deltaTime * 180f);
+            steeringWheel.localRotation = steeringRest * Quaternion.Euler(0f, displaySteering * 4f, 0f);
+
+            if (gasPedal || brakePedal != null)
+            {
+                float forwardSpeed = Vector3.Dot(frame.Velocity, frame.Rotation * Vector3.forward);
+                float gasTarget = 0f, brakeTarget = 0f;
+                var local = PlayerSeating.Local;
+                if (local && local.Cart == network && local.IsDriver && !local.TransitionPending)
+                {
+                    var move = local.Input.CartMove;
+                    bool braking = move.y * forwardSpeed < 0f && Mathf.Abs(forwardSpeed) > settings.ReverseDeadband;
+                    gasTarget = !braking && Mathf.Abs(move.y) > 0.1f ? 1f : 0f;
+                    brakeTarget = braking || local.Input.Handbrake ? 1f : 0f;
+                }
+                else if (!frame.ParkingBrake)
+                {
+                    float accel = Time.deltaTime > 0.001f ? (forwardSpeed - previousForwardSpeed) / Time.deltaTime : 0f;
+                    bool moving = Mathf.Abs(forwardSpeed) > 0.5f;
+                    gasTarget = moving && accel * Mathf.Sign(forwardSpeed) > -2f ? 1f : 0f;
+                    brakeTarget = frame.Handbrake || (moving && accel * Mathf.Sign(forwardSpeed) < -3f) ? 1f : 0f;
+                }
+                previousForwardSpeed = forwardSpeed;
+                gasPedalT = Mathf.MoveTowards(gasPedalT, gasTarget, Time.deltaTime * pedalSpeed);
+                brakePedalT = Mathf.MoveTowards(brakePedalT, brakeTarget, Time.deltaTime * pedalSpeed);
+                if (gasPedal) gasPedal.localRotation = gasPedalRest * Quaternion.Euler(gasPedalAngle * gasPedalT);
+                if (brakePedal) brakePedal.localRotation = brakePedalRest * Quaternion.Euler(brakePedalAngle * brakePedalT);
+            }
         }
     }
 }

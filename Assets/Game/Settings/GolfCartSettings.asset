@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: GolfCartSettings
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.GolfCartSettings
   Mass: 450
-  CenterOfMass: {x: 0, y: 0.45, z: 0.39}
+  CenterOfMass: {x: 0, y: 0.15, z: 0.39}
   DrivenLinearDamping: 0.02
   UnmannedLinearDamping: 0.5
   WheelRadius: 0.3
-  SuspensionTravel: 0.35
-  Spring: 9000
+  SuspensionTravel: 0.25
+  Spring: 11000
   Damper: 1300
   MaximumLoad: 9000
   DriveForce: 2400
@@ -29,8 +29,8 @@ MonoBehaviour:
   SteeringAngle: 32
   FastSteeringAngle: 12
   TireGrip: 1.3
-  LateralResponse: 8
-  HandbrakeGrip: 0.2
+  LateralResponse: 10
+  HandbrakeGrip: 0.5
   HandbrakeForce: 5000
   GripRecoverySeconds: 0.35
   MinimumHitSpeed: 1.5
