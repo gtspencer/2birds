@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FishNet.Component.Prediction;
 using UnityEngine;
 
 namespace TwoBirds
@@ -21,6 +22,7 @@ namespace TwoBirds
         private Renderer[] renderers;
         private Transform[] parts;
         private WorldItemRegistry registry;
+        private OfflineRigidbody offlineRigidbody;
         private Collider ignoredPlayer;
         private float ignoreUntil;
         private float sampleReceivedAt;
@@ -77,6 +79,7 @@ namespace TwoBirds
         private void Awake()
         {
             Body = GetComponent<Rigidbody>();
+            offlineRigidbody = GetComponent<OfflineRigidbody>();
             useBehaviour = GetComponent<ItemUseBehaviour>();
             playerHitboxMask = LayerMask.GetMask("PlayerItemHitbox");
             colliders = GetComponentsInChildren<Collider>(true);
@@ -167,6 +170,7 @@ namespace TwoBirds
 
             transform.SetParent(null, true);
             transform.localScale = prefabScale;
+            offlineRigidbody.SetPredictionManager(registry.PredictionManager);
             CacheImpactSphere();
             SetLayer(registry.WorldLayer);
             SetVisible(true);
@@ -427,6 +431,7 @@ namespace TwoBirds
 
         private void StopBody()
         {
+            offlineRigidbody.SetPredictionManager(null);
             if (!Body.isKinematic)
             {
                 Body.linearVelocity = Vector3.zero;

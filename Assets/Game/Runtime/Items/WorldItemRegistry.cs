@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using FishNet.Component.Prediction;
 using FishNet.Connection;
 using FishNet.Managing;
 using FishNet.Managing.Predicting;
@@ -40,6 +39,7 @@ namespace TwoBirds
         private Scene worldScene;
 
         public bool IsHost => network.IsServerStarted;
+        internal PredictionManager PredictionManager => predictionManager;
         public bool Replaying => predictionManager.IsReconciling;
         public uint LocalTick => network.TimeManager.LocalTick;
         public uint ServerTick => network.TimeManager.Tick;
@@ -424,7 +424,6 @@ namespace TwoBirds
             if (pools.TryGetValue(definition, out var pool) && pool.Count > 0) return pool.Pop();
             var item = Instantiate(itemRegistry.Get(definition).WorldPrefab).GetComponent<WorldItem>();
             SceneManager.MoveGameObjectToScene(item.gameObject, worldScene);
-            item.GetComponent<OfflineRigidbody>().SetPredictionManager(predictionManager);
             return item;
         }
 
