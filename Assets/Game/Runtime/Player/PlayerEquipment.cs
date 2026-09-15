@@ -53,7 +53,7 @@ namespace TwoBirds
 
         public void BeginUse()
         {
-            if (!IsOwner || activeItem != null) return;
+            if (!IsOwner || !inventory.CanEquip || activeItem != null) return;
             var equipped = inventory.GetEquipped();
             if (equipped.IsEmpty || !registry.TryGetItem(equipped.WorldIds[0], out var item) ||
                 item == null || !item.isActiveAndEnabled) return;
@@ -66,6 +66,7 @@ namespace TwoBirds
 
         public void EndUse()
         {
+            if (!inventory.CanEquip) { CancelUse(); return; }
             var item = ClearActiveUse();
             if (item != null) item.EndUse();
         }
@@ -94,7 +95,10 @@ namespace TwoBirds
                 CancelUse();
         }
 
-        public void ReleaseItem(uint id, float launchSpeed) => inventory.ReleaseEquipped(id, launchSpeed);
+        public void ReleaseItem(uint id, float launchSpeed)
+        {
+            if (inventory.CanEquip) inventory.ReleaseEquipped(id, launchSpeed);
+        }
 
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {

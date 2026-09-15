@@ -117,6 +117,16 @@
                     "priority": 0
                 },
                 {
+                    "name": "ExitVehicle",
+                    "type": "Button",
+                    "id": "53eab02e-fbd7-4699-9dd1-8d2115db2eb1",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false,
+                    "priority": 0
+                },
+                {
                     "name": "Use",
                     "type": "Button",
                     "id": "d77c2d4e-46e2-494a-b96d-7850ace8efd7",
@@ -128,6 +138,28 @@
                 }
             ],
             "bindings": [
+                {
+                    "name": "",
+                    "id": "465f9a7c-d0cc-43ea-bb5a-ee1f9cb35743",
+                    "path": "<Keyboard>/f",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "ExitVehicle",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "9c622164-4fe2-43c3-bca9-972d51ad5cc8",
+                    "path": "<Gamepad>/rightStickPress",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "ExitVehicle",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
                 {
                     "name": "",
                     "id": "978bfe49-cc26-4a3d-ab7b-7d7a29327403",

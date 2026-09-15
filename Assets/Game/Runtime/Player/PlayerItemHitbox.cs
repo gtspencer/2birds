@@ -24,6 +24,18 @@ namespace TwoBirds
         internal Vector3 PresentedCenter => graphics.TransformPoint(capsuleCenter);
         internal Vector3 PresentedVelocity { get; private set; }
         internal Vector3 PresentationCorrection { get; private set; }
+        internal bool Suspended { get; private set; }
+
+        internal void SetSuspended(bool value)
+        {
+            Suspended = value;
+            Collider.enabled = !value;
+            ClearBatch();
+            System.Array.Clear(motionTicks, 0, motionTicks.Length);
+            PresentationCorrection = IncomingVelocity = PresentedVelocity = default;
+            body.position = Motor.Body.position;
+            body.rotation = Motor.Body.rotation;
+        }
 
         private void Awake()
         {
@@ -58,7 +70,7 @@ namespace TwoBirds
         internal void QueueItemImpact(uint source, int releaser, uint release, string detector,
             Vector3 rockVelocity, Vector3 playerVelocity, Vector3 normal, Vector3 change)
         {
-            if (!Motor.IsOwner || Motor.PredictionManager.IsReconciling) return;
+            if (Suspended || !Motor.IsOwner || Motor.PredictionManager.IsReconciling) return;
             if (batchCount > 0 && batchGeneration != Motor.ImpactGeneration) ClearBatch();
             if (batchCount == 0) { batchGeneration = Motor.ImpactGeneration; batchId++; }
             Motor.TraceImpact($"contact batch={batchId} source={source} releaser={releaser} release={release} detector={detector} rockVelocity={rockVelocity:F6} playerVelocity={playerVelocity:F6} normal={normal:F6} delta={change:F6}");
@@ -76,6 +88,7 @@ namespace TwoBirds
 
         private void FlushItemImpacts()
         {
+            if (Suspended) { ClearBatch(); return; }
             if (batchCount == 0) return;
             if (batchGeneration != Motor.ImpactGeneration) { ClearBatch(); return; }
             double magnitude = System.Math.Sqrt(batchX * batchX + batchY * batchY + batchZ * batchZ);
@@ -95,6 +108,7 @@ namespace TwoBirds
 
         internal void FollowMotor()
         {
+            if (Suspended) return;
             IncomingVelocity = Motor.Body.linearVelocity;
             if (motionGeneration != Motor.ImpactGeneration)
             {

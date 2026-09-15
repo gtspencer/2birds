@@ -10,7 +10,10 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump, drop, use;
+        private InputAction move, look, jump, drop, use, exit, interact;
+        private PlayerSeating seating;
+        private bool exitBlocked, interactBlocked;
+        private int suppressedInteractionFrame = -1;
         private PlayerInventory inventory;
         private PlayerEquipment equipment;
         private Vector2 movement;
@@ -28,11 +31,15 @@ namespace TwoBirds
             get => inventoryOpen;
             set
             {
-                if (value) CancelUse();
+                if (value) ClearContext();
                 inventoryOpen = value;
             }
         }
         public bool GameplayActive => gameplay && !InventoryOpen;
+        public Vector2 CartMove => GameplayActive && !seating.TransitionPending ? movement : default;
+        public bool Handbrake => GameplayActive && !seating.TransitionPending && jump.IsPressed();
+        public bool InteractPressed => GameplayActive && !seating.TransitionPending && !interactBlocked &&
+            suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame();
         public InputDevice ActiveDevice { get; private set; }
 
         public override void OnStartClient()
@@ -46,6 +53,9 @@ namespace TwoBirds
             jump = actions.FindAction("Jump");
             drop = actions.FindAction("Drop");
             use = actions.FindAction("Use");
+            exit = actions.FindAction("ExitVehicle");
+            interact = actions.FindAction("Interact");
+            seating = GetComponent<PlayerSeating>();
             inventory = GetComponent<PlayerInventory>();
             equipment = GetComponent<PlayerEquipment>();
             ActiveDevice = Keyboard.current;
@@ -57,6 +67,7 @@ namespace TwoBirds
 
         public void SetGameplay(bool value)
         {
+            ClearContext();
             if (!value || !IsOwner) CancelUse();
             else if (UseButtonHeld()) useBlocked = true;
             gameplay = value && IsOwner;
@@ -69,17 +80,28 @@ namespace TwoBirds
 
         private void ReadInput()
         {
-            if (ActiveDevice != null && !ActiveDevice.added) ActiveDevice = Keyboard.current;
+            if (ActiveDevice != null && !ActiveDevice.added) { ClearContext(); ActiveDevice = Keyboard.current; }
             if (!IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
             bool blocked = useBlocked;
             if (useBlocked && !UseButtonHeld()) useBlocked = false;
+            bool blockExit = exitBlocked;
+            if (exitBlocked && !ButtonHeld(exit)) exitBlocked = false;
+            if (interactBlocked && !ButtonHeld(interact)) interactBlocked = false;
             if (!GameplayActive) return;
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
-            jumpPending |= jump.WasPressedThisFrame();
+            if (!seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
             Vector2 delta = look.ReadValue<Vector2>();
             float sensitivity = look.activeControl?.device is Gamepad ? 150f * Time.unscaledDeltaTime : 0.12f;
-            Yaw = Mathf.Repeat(Yaw + delta.x * sensitivity, 360f);
+            if (seating.Seated) seating.AddLook(delta.x * sensitivity);
+            else Yaw = Mathf.Repeat(Yaw + delta.x * sensitivity, 360f);
             Pitch = Mathf.Clamp(Pitch - delta.y * sensitivity, -89f, 89f);
+            if (!blockExit && exit.WasPressedThisFrame() && seating.Seated && !seating.TransitionPending)
+            {
+                suppressedInteractionFrame = Time.frameCount;
+                seating.RequestExit();
+                return;
+            }
+            if (seating.TransitionPending || seating.PlacementPending) return;
             if (drop.WasPressedThisFrame())
             {
                 CancelUse();
@@ -93,8 +115,13 @@ namespace TwoBirds
 
         private bool UseButtonHeld()
         {
-            if (use == null) return false;
-            foreach (var control in use.controls)
+            return ButtonHeld(use);
+        }
+
+        private static bool ButtonHeld(InputAction action)
+        {
+            if (action == null) return false;
+            foreach (var control in action.controls)
                 if (control is ButtonControl button && button.isPressed) return true;
             return false;
         }
@@ -128,7 +155,7 @@ namespace TwoBirds
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (AutomatedInput != null) return AutomatedInput();
 #endif
-            if (!gameplay || InventoryOpen) return default;
+            if (!gameplay || InventoryOpen || seating.Seated || seating.TransitionPending || seating.PlacementPending) return default;
             Vector3 direction = Quaternion.Euler(0f, Yaw, 0f) * new Vector3(movement.x, 0f, movement.y);
             var result = new MoveInput(new Vector2(direction.x, direction.z), Yaw, jumpPending);
             jumpPending = false;
@@ -136,9 +163,18 @@ namespace TwoBirds
         }
 
         private void Clear() { movement = default; jumpPending = false; }
+        internal void SetWorldYaw(float yaw) => Yaw = Mathf.Repeat(yaw, 360f);
+        internal void ClearContext()
+        {
+            Clear();
+            CancelUse();
+            exitBlocked = ButtonHeld(exit);
+            interactBlocked = ButtonHeld(interact);
+            suppressedInteractionFrame = Time.frameCount;
+        }
         private void OnApplicationFocus(bool focus)
         {
-            if (!focus) CancelUse();
+            if (!focus) ClearContext();
             if (!focus && IsOwner && SessionController.Instance != null) SessionController.Instance.SetPanel(true);
         }
         public override void OnOwnershipClient(NetworkConnection previousOwner)

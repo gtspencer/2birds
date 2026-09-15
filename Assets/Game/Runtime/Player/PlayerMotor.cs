@@ -35,8 +35,9 @@ namespace TwoBirds
         public Vector2 Direction;
         public float Facing;
         public bool Jump;
+        public uint SeatingRevision;
         private uint tick;
-        public MoveInput(Vector2 direction, float facing, bool jump) { Direction = direction; Facing = facing; Jump = jump; tick = 0; }
+        public MoveInput(Vector2 direction, float facing, bool jump) { Direction = direction; Facing = facing; Jump = jump; SeatingRevision = 0; tick = 0; }
         public uint GetTick() => tick;
         public void SetTick(uint value) => tick = value;
         public void Dispose() { }
@@ -55,13 +56,15 @@ namespace TwoBirds
         public uint LastImpactSequence;
         public uint LastOwnerRequestId;
         public uint RecoveryTicks;
+        public uint SeatingRevision;
         private uint tick;
         public MotorState(PredictionRigidbody body, Vector3 velocityChange, MovementMode mode, byte cooldown,
-            uint reset, uint generation, uint serverTick, uint sequence, uint requestId, uint recoveryTicks)
+            uint reset, uint generation, uint serverTick, uint sequence, uint requestId, uint recoveryTicks, uint seatingRevision)
         {
             Body = body; Position = body.Rigidbody.position; PendingVelocityChange = velocityChange;
             Mode = mode; JumpCooldown = cooldown; ResetRevision = reset; ImpactGeneration = generation; ServerTick = serverTick;
             LastImpactSequence = sequence; LastOwnerRequestId = requestId; RecoveryTicks = recoveryTicks; tick = 0;
+            SeatingRevision = seatingRevision;
         }
         public uint GetTick() => tick;
         public void SetTick(uint value) => tick = value;
@@ -99,6 +102,10 @@ namespace TwoBirds
         private uint historyTicks;
         private bool generationReady;
         private bool rejectReplay;
+        private CapsuleCollider capsule;
+        public bool Seated { get; private set; }
+        public uint SeatingRevision { get; private set; }
+        internal Vector3 SpawnPoint => spawnPoint;
         public Rigidbody Body { get; private set; }
         public MovementMode Mode { get; private set; } = MovementMode.Airborne;
         public bool Grounded => Mode == MovementMode.Walking;
@@ -120,6 +127,7 @@ namespace TwoBirds
         private void Awake()
         {
             Body = GetComponent<Rigidbody>();
+            capsule = GetComponent<CapsuleCollider>();
             predictedBody.Initialize(Body);
             input = GetComponent<PlayerInputReader>();
             presentation = GetComponent<PlayerPresentation>();
@@ -169,12 +177,13 @@ namespace TwoBirds
 
         private void BeforeReplay(uint clientTick, uint serverTick)
         {
-            if (rejectReplay) NetworkObject.RigidbodyPauser.Pause();
+            if (rejectReplay || Seated) NetworkObject.RigidbodyPauser.Pause();
         }
 
         private void AfterReplay(uint clientTick, uint serverTick)
         {
-            if (rejectReplay) NetworkObject.RigidbodyPauser.Unpause();
+            if (rejectReplay || Seated) NetworkObject.RigidbodyPauser.Unpause();
+            if (Seated) Body.isKinematic = true;
             TraceImpactState("replay-state");
         }
 
@@ -228,7 +237,7 @@ namespace TwoBirds
 
         public void QueueWorldImpact(Vector3 velocityChange, float recoverySeconds)
         {
-            if (!IsServerInitialized || PredictionManager.IsReconciling || !ValidImpact(velocityChange, recoverySeconds)) return;
+            if (Seated || !IsServerInitialized || PredictionManager.IsReconciling || !ValidImpact(velocityChange, recoverySeconds)) return;
             impacts.Add(new ImpactEntry { Impact = new WorldImpact
             {
                 Generation = impactGeneration,
@@ -239,7 +248,7 @@ namespace TwoBirds
 
         public uint SubmitWorldImpact(Vector3 velocityChange, float recoverySeconds)
         {
-            if (!IsOwner || !generationReady || PredictionManager.IsReconciling || !ValidImpact(velocityChange, recoverySeconds)) return 0;
+            if (Seated || !IsOwner || !generationReady || PredictionManager.IsReconciling || !ValidImpact(velocityChange, recoverySeconds)) return 0;
             var request = new WorldImpactRequest
             {
                 Generation = impactGeneration, RequestId = ++nextRequestId, OwnerTick = movementTick + 1,
@@ -270,7 +279,7 @@ namespace TwoBirds
 
         private void AcceptImpact(WorldImpactRequest request)
         {
-            if (request.Generation != impactGeneration || request.RequestId <= receivedRequestId) return;
+            if (Seated || request.Generation != impactGeneration || request.RequestId <= receivedRequestId) return;
             if (!Finite(request.VelocityChange.x) || !Finite(request.VelocityChange.y) || !Finite(request.VelocityChange.z)) return;
             receivedRequestId = request.RequestId;
             var impact = FromRequest(request);
@@ -284,7 +293,7 @@ namespace TwoBirds
         [ObserversRpc]
         private void ObserversImpact(WorldImpact impact)
         {
-            if (IsServerInitialized || impact.Generation < impactGeneration) return;
+            if (Seated || IsServerInitialized || impact.Generation != impactGeneration) return;
             if (impact.Generation != impactGeneration) BeginGeneration(impact.Generation);
             TraceImpact($"confirm id={impact.RequestId} sequence={impact.Sequence} ownerTick={impact.OwnerTick} serverTick={impact.ServerTick} delta={impact.VelocityChange:F6}");
             foreach (var entry in impacts)
@@ -309,6 +318,31 @@ namespace TwoBirds
             return a.Impact.Sequence.CompareTo(b.Impact.Sequence);
         }
 
+        internal void ApplySeating(bool seated, uint revision, uint generation, Vector3 position, Quaternion rotation, Vector3 velocity)
+        {
+            Seated = seated;
+            SeatingRevision = revision;
+            ClearReplicateCache();
+            predictedBody.ClearPendingForces();
+            if (!Body.isKinematic) predictedBody.ClearVelocities();
+            BeginGeneration(System.Math.Max(generation, impactGeneration));
+            jumpCooldown = 0;
+            rejectReplay = true;
+            Body.isKinematic = seated;
+            capsule.enabled = !seated;
+            Body.position = position;
+            Body.rotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
+            if (!seated)
+            {
+                Body.linearVelocity = velocity;
+                Body.angularVelocity = Vector3.zero;
+                recoveryTicks = RecoveryDuration(0.2f);
+            }
+            Mode = seated ? MovementMode.External : MovementMode.Airborne;
+            movementTick = IsOwner ? TimeManager.LocalTick - 1 : 0;
+        }
+
         internal void SetExternalControl(bool external)
         {
             if (IsServerInitialized) Mode = external ? MovementMode.External : MovementMode.Airborne;
@@ -317,10 +351,14 @@ namespace TwoBirds
         protected override void TimeManager_OnTick()
         {
             if (IsOwner) BeforeOwnerMove?.Invoke();
-            ReplicateMove(IsOwner ? input.Consume() : default);
+            if (Seated) return;
+            var data = IsOwner ? input.Consume() : default;
+            data.SeatingRevision = SeatingRevision;
+            ReplicateMove(data);
         }
         protected override void TimeManager_OnPostTick()
         {
+            if (Seated) return;
             Simulated?.Invoke(TimeManager.LocalTick, Body.position);
             TraceImpactState("physics-state");
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -329,8 +367,12 @@ namespace TwoBirds
             CreateReconcile();
         }
 
-        public override void CreateReconcile() => ReconcileState(new MotorState(predictedBody, pendingVelocityChange, Mode,
-            jumpCooldown, resetRevision, impactGeneration, IsServerInitialized ? TimeManager.Tick : 0, lastImpactSequence, lastOwnerRequestId, recoveryTicks));
+        public override void CreateReconcile()
+        {
+            if (Seated) return;
+            ReconcileState(new MotorState(predictedBody, pendingVelocityChange, Mode, jumpCooldown, resetRevision,
+                impactGeneration, IsServerInitialized ? TimeManager.Tick : 0, lastImpactSequence, lastOwnerRequestId, recoveryTicks, SeatingRevision));
+        }
 
         private void ApplyImpacts()
         {
@@ -385,6 +427,7 @@ namespace TwoBirds
         [Replicate]
         private void ReplicateMove(MoveInput data, ReplicateState state = ReplicateState.Invalid, Channel channel = Channel.Unreliable)
         {
+            if (Seated || data.SeatingRevision != SeatingRevision) return;
             if (PredictionManager.IsReconciling && rejectReplay) return;
             movementTick = data.GetTick();
             ApplyImpacts();
@@ -436,7 +479,7 @@ namespace TwoBirds
         [Reconcile]
         private void ReconcileState(MotorState data, Channel channel = Channel.Unreliable)
         {
-            rejectReplay = data.ImpactGeneration < impactGeneration || data.ResetRevision < resetRevision;
+            rejectReplay = Seated || data.SeatingRevision != SeatingRevision || data.ImpactGeneration < impactGeneration || data.ResetRevision < resetRevision;
             TraceImpactState($"reconcile rejected={rejectReplay} stateGeneration={data.ImpactGeneration} stateTick={data.GetTick()} serverTick={data.ServerTick} sequence={data.LastImpactSequence} request={data.LastOwnerRequestId} position={data.Position:F6}");
             if (rejectReplay) return;
             if (data.ImpactGeneration != impactGeneration) BeginGeneration(data.ImpactGeneration);

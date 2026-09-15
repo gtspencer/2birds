@@ -22,7 +22,7 @@ namespace FishNet.Component.Transforming
 {
     [DisallowMultipleComponent]
     [AddComponentMenu("FishNet/Component/NetworkTransform")]
-    public sealed class NetworkTransform : NetworkBehaviour
+    public sealed partial class NetworkTransform : NetworkBehaviour
     {
         #region Types.
         [Serializable]
@@ -152,6 +152,7 @@ namespace FishNet.Component.Transforming
 
         public class GoalData : IResettable
         {
+            public MotionFrame Motion;
             public uint ReceivedTick;
             public RateData Rates = new();
             public TransformData Transforms = new();
@@ -161,6 +162,7 @@ namespace FishNet.Component.Transforming
 
             public void ResetState()
             {
+                Motion = default;
                 ReceivedTick = 0;
                 Transforms.ResetState();
                 Rates.ResetState();
@@ -693,6 +695,7 @@ namespace FishNet.Component.Transforming
 
         public override void OnSpawnServer(NetworkConnection connection)
         {
+            if (EpochMotionEnabled) return;
             base.OnSpawnServer(connection);
             /* If not on the root then the initial properties may need to be synchronized
              * since the spawn message only sends root information. If initial
@@ -718,6 +721,7 @@ namespace FishNet.Component.Transforming
 
         public override void OnOwnershipServer(NetworkConnection prevOwner)
         {
+            if (EpochMotionEnabled) return;
             ConfigureComponents();
             _intervalsRemaining = 0;
             // Reset last tick since each client sends their own ticks.
@@ -728,6 +732,7 @@ namespace FishNet.Component.Transforming
 
         public override void OnOwnershipClient(NetworkConnection prevOwner)
         {
+            if (EpochMotionEnabled) return;
             ConfigureComponents();
             _intervalsRemaining = 0;
 
@@ -921,6 +926,7 @@ namespace FishNet.Component.Transforming
         /// </summary>
         private void TimeManager_OnPostTick()
         {
+            if (EpochMotionEnabled) return;
             using (_pm_OnPostTick.Auto())
             {
                 //If to force send via tick delay do so and reset force send tick.
@@ -2273,6 +2279,7 @@ namespace FishNet.Component.Transforming
         [TargetRpc(ValidateTarget = false)]
         private void TargetUpdateTransform(NetworkConnection conn, ArraySegment<byte> data, Channel channel)
         {
+            if (EpochMotionEnabled) return;
             #if DEVELOPMENT
             //If receiver is client host then do nothing, clientHost need not process.
             if (IsServerInitialized && conn.IsLocalClient)
@@ -2293,6 +2300,7 @@ namespace FishNet.Component.Transforming
         [ObserversRpc]
         private void ObserversUpdateClientAuthoritativeTransform(ArraySegment<byte> data, Channel channel)
         {
+            if (EpochMotionEnabled) return;
             if (!_clientAuthoritative && IsOwner && !_sendToOwner)
                 return;
             if (_clientAuthoritative && IsOwner)
@@ -2314,6 +2322,7 @@ namespace FishNet.Component.Transforming
         [ServerRpc]
         private void ServerUpdateTransform(ArraySegment<byte> data, Channel channel)
         {
+            if (EpochMotionEnabled) return;
             if (!_clientAuthoritative)
             {
                 Owner.Kick(KickReason.ExploitAttempt, LoggingType.Common, $"Connection Id {Owner.ClientId} has been kicked for trying to update this object without client authority.");
@@ -2442,6 +2451,7 @@ namespace FishNet.Component.Transforming
         /// </summary>
         private void SetCurrentGoalData(GoalData data)
         {
+            if (EpochMotionEnabled) BeginMotionGoal(data.Motion);
             if (_currentGoalData != null)
                 ResettableObjectCaches<GoalData>.Store(_currentGoalData);
 
@@ -2563,6 +2573,7 @@ namespace FishNet.Component.Transforming
         /// </summary>
         private void ResetState()
         {
+            ResetEpochMotion();
             _teleport = false;
             ChangeTickSubscription(false);
             /* Reset server and client side since this is called from

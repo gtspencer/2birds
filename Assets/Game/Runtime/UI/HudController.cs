@@ -102,7 +102,7 @@ namespace TwoBirds
 
         private void OnHotbarClick(int slot)
         {
-            if (inventory != null && inventory.IsOwner)
+            if (inventory != null && inventory.IsOwner && inventory.CanEquip)
                 inventory.SelectSlot((sbyte)slot);
         }
 
@@ -204,7 +204,7 @@ namespace TwoBirds
             if (gamepad != null && gamepad.selectButton.wasPressedThisFrame)
                 ToggleInventory();
 
-            if (!inventoryOpen)
+            if (!inventoryOpen && inventory.CanEquip)
             {
                 if (keyboard != null)
                 {

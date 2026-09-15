@@ -195,7 +195,7 @@ namespace TwoBirds
         internal void AttachHolder()
         {
             if (Record.State != WorldItemState.Held) return;
-            bool equipped = Record.Equipped && registry.TryGetPlayer(Record.Holder, out _);
+            bool equipped = Record.Equipped && registry.TryGetPlayer(Record.Holder, out var player) && player.CanEquip;
             SetVisible(equipped);
             if (!equipped)
             {
@@ -246,6 +246,7 @@ namespace TwoBirds
 
         internal void PresentHeld(PlayerInventory holder, bool equipped)
         {
+            equipped &= holder.CanEquip;
             if (Predicted) return;
             ResetContactState();
             ClearIgnore();
@@ -524,7 +525,7 @@ namespace TwoBirds
 
         internal void SamplePlayerContact(PlayerItemHitbox player)
         {
-            if (!ContactEligible || player == null || !player.Motor.IsOwner ||
+            if (!ContactEligible || player == null || player.Suspended || !player.Motor.IsOwner ||
                 !Body.isKinematic && Body.IsSleeping())
             {
                 ResetContactSamples();

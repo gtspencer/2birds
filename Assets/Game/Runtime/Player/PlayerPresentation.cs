@@ -24,6 +24,7 @@ namespace TwoBirds
         }
     }
 
+    [DefaultExecutionOrder(50)]
     public sealed class PlayerPresentation : NetworkBehaviour
     {
         [SerializeField] private Transform graphics;
@@ -35,7 +36,12 @@ namespace TwoBirds
         private Renderer[] bodyRenderers;
         private bool[] bodyRendererStates;
         private uint resetRevision;
+        private PlayerSeating seating;
+        private NetworkTickSmoother tickSmoother;
+        private bool seated;
         public Camera ViewCamera => localCamera;
+        public Pose AimPose => seating != null && seating.Seated ? seating.AimPose :
+            new Pose(graphics.position + Vector3.up * eyeHeight, Quaternion.Euler(input.Pitch, input.Yaw, 0f));
         internal Transform Graphics => graphics;
         public PlayerSnapshot Snapshot => new(motor, state.Snapshot);
         public float GraphicsOffset => Vector3.Distance(graphics.position, transform.position);
@@ -45,6 +51,8 @@ namespace TwoBirds
             motor = GetComponent<PlayerMotor>();
             input = GetComponent<PlayerInputReader>();
             state = GetComponent<PlayerNetworkState>();
+            seating = GetComponent<PlayerSeating>();
+            tickSmoother = graphics.GetComponent<NetworkTickSmoother>();
             bodyRenderers = graphics.GetComponentsInChildren<Renderer>(true);
             bodyRendererStates = new bool[bodyRenderers.Length];
             for (int i = 0; i < bodyRenderers.Length; i++)
@@ -66,11 +74,11 @@ namespace TwoBirds
 
         private void LateUpdate()
         {
-            if (motor.ResetRevision != resetRevision)
+            if (!seated && motor.ResetRevision != resetRevision)
             {
                 resetRevision = motor.ResetRevision;
                 // Restart only the presentation buffer. Authoritative reconcile discards the old fall state.
-                var smoother = graphics.GetComponent<NetworkTickSmoother>().SmootherController;
+                var smoother = tickSmoother.SmootherController;
                 smoother?.StopSmoother();
                 graphics.SetPositionAndRotation(transform.position, transform.rotation);
                 smoother?.StartSmoother();
@@ -81,8 +89,17 @@ namespace TwoBirds
         private void UpdateCamera()
         {
             if (localCamera == null) return;
-            localCamera.transform.SetPositionAndRotation(graphics.position + Vector3.up * eyeHeight,
-                Quaternion.Euler(input.Pitch, input.Yaw, 0f));
+            var aim = AimPose;
+            localCamera.transform.SetPositionAndRotation(aim.position, aim.rotation);
+        }
+
+        internal void SetSeated(bool value)
+        {
+            seated = value;
+            var smoother = tickSmoother.SmootherController;
+            smoother?.StopSmoother();
+            graphics.SetPositionAndRotation(transform.position, transform.rotation);
+            if (!value) smoother?.StartSmoother();
         }
 
         public override void OnStopClient() => ReleaseCamera();

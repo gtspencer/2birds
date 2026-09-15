@@ -324,7 +324,8 @@ namespace TwoBirds
         private void BeforePhysics(float delta)
         {
             if (!worldReady || Replaying) return;
-            foreach (var player in players.Values) player.Hitbox.FollowMotor();
+            foreach (var player in players.Values)
+                if (!player.Hitbox.Suspended) player.Hitbox.FollowMotor();
             foreach (var item in items.Values)
                 if (item != null && item.Definition != null && item.gameObject.activeSelf) item.BeforePhysics();
         }
