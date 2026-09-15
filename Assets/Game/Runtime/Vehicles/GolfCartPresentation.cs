@@ -16,6 +16,10 @@ namespace TwoBirds
         [SerializeField] private Transform steeringWheel;
         [SerializeField] private Transform gasPedal;
         [SerializeField] private Transform brakePedal;
+        [Header("Lights and Horn")]
+        [SerializeField] private GameObject[] headlights;
+        [SerializeField] private SfxSource hornSource;
+        [SerializeField] private SoundEffect hornSfx;
         [SerializeField] private Vector3 gasPedalAngle = new(15f, 0f, 0f);
         [SerializeField] private Vector3 brakePedalAngle = new(15f, 0f, 0f);
         [SerializeField] private float pedalSpeed = 8f;
@@ -49,6 +53,7 @@ namespace TwoBirds
             blocks = new MaterialPropertyBlock[paintSlots.Length];
             for (int i = 0; i < blocks.Length; i++) blocks[i] = new MaterialPropertyBlock();
             previousPosition = transform.position;
+            SetLights(false);
         }
 
         internal void SetColor(Color color)
@@ -60,6 +65,18 @@ namespace TwoBirds
                 blocks[i].SetColor(BaseColor, color);
                 slot.Renderer.SetPropertyBlock(blocks[i], slot.MaterialIndex);
             }
+        }
+
+        internal void SetLights(bool on)
+        {
+            if (headlights == null) return;
+            foreach (var light in headlights)
+                if (light != null) light.SetActive(on);
+        }
+
+        internal void PlayHorn()
+        {
+            if (hornSource != null) hornSource.Play(hornSfx);
         }
 
         private void LateUpdate()

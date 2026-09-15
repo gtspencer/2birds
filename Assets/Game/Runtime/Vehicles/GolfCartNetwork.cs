@@ -41,6 +41,8 @@ namespace TwoBirds
 
         internal static readonly Dictionary<int, GolfCartNetwork> Carts = new();
         [SerializeField] private Color bodyColor = new(0.08f, 0.35f, 0.85f);
+        private bool lightsOn;
+        private float hornCooldown;
         private GolfCartController controller;
         private GolfCartPresentation presentation;
         private NetworkTransform motion;
@@ -112,17 +114,19 @@ namespace TwoBirds
         }
 
         public override void OnSpawnServer(NetworkConnection connection) =>
-            TargetCurrent(connection, StateRevision, occupants, Recovery, motion.LatestMotion, simulator, bodyColor);
+            TargetCurrent(connection, StateRevision, occupants, Recovery, motion.LatestMotion, simulator, bodyColor, lightsOn);
 
         [TargetRpc]
         private void TargetCurrent(NetworkConnection connection, uint revision, CartOccupant[] current, CartRecovery recovery,
-            MotionFrame frame, int owner, Color color)
+            MotionFrame frame, int owner, Color color, bool lights)
         {
             if (IsServerInitialized) return;
             if (frame.Epoch >= epoch) InstallBaseline(frame, owner);
             ApplyState(revision, current, recovery, Array.Empty<SeatTransition>());
             bodyColor = color;
             presentation.SetColor(color);
+            lightsOn = lights;
+            presentation.SetLights(lights);
         }
 
         internal void Request(PlayerSeating player, uint request, uint playerRevision, uint cartRevision, int destination)
@@ -450,6 +454,46 @@ namespace TwoBirds
             }
             Broadcast(Array.Empty<SeatTransition>(), driverLeft);
         }
+
+        public bool LightsOn => lightsOn;
+
+        public void ToggleLights()
+        {
+            ApplyLightToggle();
+            if (!IsServerInitialized) ServerToggleLights();
+        }
+
+        private void ApplyLightToggle(NetworkConnection sender = null)
+        {
+            lightsOn = !lightsOn;
+            presentation.SetLights(lightsOn);
+            if (!IsServerInitialized) return;
+            foreach (var connection in Observers)
+                if (connection != sender && !connection.IsLocalClient) TargetToggleLights(connection);
+        }
+
+        [ServerRpc(RequireOwnership = false)]
+        private void ServerToggleLights(NetworkConnection sender = null) => ApplyLightToggle(sender);
+        [TargetRpc] private void TargetToggleLights(NetworkConnection connection) => ApplyLightToggle();
+
+        public void Honk()
+        {
+            if (hornCooldown > Time.unscaledTime) return;
+            hornCooldown = Time.unscaledTime + 0.3f;
+            PlayHorn();
+            if (!IsServerInitialized) ServerHonk();
+        }
+
+        private void PlayHorn(NetworkConnection sender = null)
+        {
+            presentation.PlayHorn();
+            if (!IsServerInitialized) return;
+            foreach (var connection in Observers)
+                if (connection != sender && !connection.IsLocalClient) TargetHonk(connection);
+        }
+
+        [ServerRpc(RequireOwnership = false)] private void ServerHonk(NetworkConnection sender = null) => PlayHorn(sender);
+        [TargetRpc] private void TargetHonk(NetworkConnection connection) => presentation.PlayHorn();
 
         public void SetBodyColor(Color color)
         {

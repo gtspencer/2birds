@@ -10,7 +10,7 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump, drop, use, exit, interact;
+        private InputAction move, look, jump, drop, use, exit, interact, lights, horn;
         private PlayerSeating seating;
         private bool exitBlocked, interactBlocked;
         private int suppressedInteractionFrame = -1;
@@ -55,6 +55,8 @@ namespace TwoBirds
             use = actions.FindAction("Use");
             exit = actions.FindAction("ExitVehicle");
             interact = actions.FindAction("Interact");
+            lights = actions.FindAction("Lights");
+            horn = actions.FindAction("Horn");
             seating = GetComponent<PlayerSeating>();
             inventory = GetComponent<PlayerInventory>();
             equipment = GetComponent<PlayerEquipment>();
@@ -102,6 +104,11 @@ namespace TwoBirds
                 return;
             }
             if (seating.TransitionPending || seating.PlacementPending) return;
+            if (seating.IsDriver)
+            {
+                if (lights.WasPressedThisFrame()) seating.Cart.ToggleLights();
+                if (horn.WasPressedThisFrame()) seating.Cart.Honk();
+            }
             if (drop.WasPressedThisFrame())
             {
                 CancelUse();

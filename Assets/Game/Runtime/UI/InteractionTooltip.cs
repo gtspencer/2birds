@@ -51,7 +51,11 @@ namespace TwoBirds
             keycap.style.display = texture == null ? DisplayStyle.Flex : DisplayStyle.None;
             verb.text = interaction.Target.ActionText;
             tooltip.style.display = DisplayStyle.Flex;
-            Position(interaction.ViewCamera, interaction.TargetCollider.bounds);
+            var anchor = interaction.Target.TooltipAnchor;
+            if (anchor != null)
+                PositionAtPoint(interaction.ViewCamera, anchor.position);
+            else
+                Position(interaction.ViewCamera, interaction.TargetCollider.bounds);
         }
 
         private static InputControl FindControl(InputAction action, InputDevice device)
@@ -89,6 +93,31 @@ namespace TwoBirds
             if (x + size.x > area.xMax - 8) x = min.x - size.x - 12;
             x = Mathf.Clamp(x, area.xMin + 8, Mathf.Max(area.xMin + 8, area.xMax - size.x - 8));
             float y = Mathf.Clamp((min.y + max.y - size.y) * 0.5f, area.yMin + 8,
+                Mathf.Max(area.yMin + 8, area.yMax - size.y - 8));
+            if (chargeTrack != null && chargeTrack.style.display.value == DisplayStyle.Flex)
+            {
+                var chargeBounds = new Rect(area.center.x - 34, area.center.y + 10, 68, 13);
+                if (new Rect(x, y, size.x, size.y).Overlaps(chargeBounds)) y = chargeBounds.yMax + 8;
+            }
+            tooltip.style.left = x;
+            tooltip.style.top = y;
+        }
+
+        private void PositionAtPoint(Camera camera, Vector3 worldPoint)
+        {
+            if (camera == null || root.panel == null) { Hide(); return; }
+            var screen = camera.WorldToScreenPoint(worldPoint);
+            if (screen.z < camera.nearClipPlane) { Hide(); return; }
+            var point = root.WorldToLocal(RuntimePanelUtils.ScreenToPanel(root.panel,
+                new Vector2(screen.x, Screen.height - screen.y)));
+            var size = tooltip.layout.size;
+            if (float.IsNaN(size.x) || size.x == 0) size = new Vector2(180, 44);
+            var area = root.contentRect;
+            tooltip.style.maxWidth = Mathf.Max(0, area.width - 16);
+            float x = point.x + 12;
+            if (x + size.x > area.xMax - 8) x = point.x - size.x - 12;
+            x = Mathf.Clamp(x, area.xMin + 8, Mathf.Max(area.xMin + 8, area.xMax - size.x - 8));
+            float y = Mathf.Clamp(point.y - size.y * 0.5f, area.yMin + 8,
                 Mathf.Max(area.yMin + 8, area.yMax - size.y - 8));
             if (chargeTrack != null && chargeTrack.style.display.value == DisplayStyle.Flex)
             {
