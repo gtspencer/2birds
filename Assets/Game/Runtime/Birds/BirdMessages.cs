@@ -16,23 +16,21 @@ namespace TwoBirds
         public BirdEventKind Kind;
         public BirdRecord Record;
         public Vector3 Position;
-        public uint Player, Kills;
     }
-    public struct BirdDigestEntry { public uint Life, Revision, Next, Effective; }
+    public struct BirdDigestEntry { public uint Life, Revision; }
     public struct BirdDigest : IBroadcast { public uint Epoch, Sequence; public List<BirdDigestEntry> Entries; }
     public struct BirdRecordRequest : IBroadcast { public uint Epoch, Life; }
     public struct BirdRecordReply : IBroadcast { public uint Epoch, Life; public bool Alive; public BirdRecord Record; }
     public enum BirdThreatKind : byte { Player, Rock, Cart, Horn }
     public struct BirdScareReport : IBroadcast
     {
-        public uint Epoch, Event, Source;
-        public BirdThreatKind Kind;
+        public uint Epoch;
         public Vector3 Position;
         public List<uint> Lives;
     }
     public struct BirdHit
     {
-        public uint Life, Revision, Contact, Tick;
+        public uint Life, Contact;
         public float Speed;
         public Vector3 Position;
     }
@@ -65,7 +63,7 @@ namespace TwoBirds
             if (route.Kind == BirdMotionKind.Surface)
             {
                 int count = route.Surface.Length; writer.WriteByte((byte)count);
-                for (int i = 0; i < count; i++) WritePoint(writer, route.Surface[i], route.A);
+                for (int i = 1; i < count; i++) WritePoint(writer, route.Surface[i], route.A);
                 return;
             }
             Vector3 origin = route.Kind == BirdMotionKind.Orbit ? Vector3.zero : route.A;
@@ -86,7 +84,8 @@ namespace TwoBirds
             {
                 int count = reader.ReadByte();
                 route.Surface = new Vector3[count];
-                for (int i = 0; i < count; i++) route.Surface[i] = ReadPoint(reader, route.A);
+                route.Surface[0] = route.A;
+                for (int i = 1; i < count; i++) route.Surface[i] = ReadPoint(reader, route.A);
                 route.D = route.Surface[count - 1];
                 return route;
             }
@@ -106,8 +105,7 @@ namespace TwoBirds
             writer.WriteUInt32(record.Life);
             if (message.Kind == BirdEventKind.Death)
             {
-                writer.WriteUInt16(record.Species); writer.WriteVector3(message.Position);
-                writer.WriteUInt32(message.Player); writer.WriteUInt32(message.Kills); return;
+                writer.WriteUInt16(record.Species); writer.WriteVector3(message.Position); return;
             }
             writer.WriteUInt32(record.Revision); writer.WriteUInt32(record.Route.Revision);
             writer.WriteUInt16(record.Occupied); writer.WriteUInt16(record.Reserved);
@@ -122,8 +120,7 @@ namespace TwoBirds
             message.Record.Life = reader.ReadUInt32();
             if (message.Kind == BirdEventKind.Death)
             {
-                message.Record.Species = reader.ReadUInt16(); message.Position = reader.ReadVector3();
-                message.Player = reader.ReadUInt32(); message.Kills = reader.ReadUInt32(); return message;
+                message.Record.Species = reader.ReadUInt16(); message.Position = reader.ReadVector3(); return message;
             }
             message.Record.Revision = reader.ReadUInt32(); message.Record.Route.Revision = reader.ReadUInt32();
             message.Record.Occupied = reader.ReadUInt16(); message.Record.Reserved = reader.ReadUInt16();
@@ -131,6 +128,34 @@ namespace TwoBirds
             message.Record.HasNext = reader.ReadBoolean();
             if (message.Record.HasNext) message.Record.Next = reader.ReadBirdRoute();
             return message;
+        }
+        public static void WriteBirdHitReport(this Writer writer, BirdHitReport report)
+        {
+            writer.WriteUInt32(report.Epoch); writer.WriteUInt32(report.Source); writer.WriteBoolean(report.Cart);
+            if (report.Cart) { writer.WriteUInt32(report.MotionEpoch); writer.WriteUInt32(report.SeatRevision); }
+            else { writer.WriteUInt32(report.Player); writer.WriteUInt32(report.Operation); }
+            writer.WriteUInt32((uint)report.Hits.Count);
+            foreach (var hit in report.Hits)
+            {
+                writer.WriteUInt32(hit.Life); writer.WriteUInt32(hit.Contact);
+                if (!report.Cart) writer.WriteSingle(hit.Speed);
+                writer.WriteVector3(hit.Position);
+            }
+        }
+        public static BirdHitReport ReadBirdHitReport(this Reader reader)
+        {
+            var report = new BirdHitReport { Epoch = reader.ReadUInt32(), Source = reader.ReadUInt32(), Cart = reader.ReadBoolean() };
+            if (report.Cart) { report.MotionEpoch = reader.ReadUInt32(); report.SeatRevision = reader.ReadUInt32(); }
+            else { report.Player = reader.ReadUInt32(); report.Operation = reader.ReadUInt32(); }
+            int count = (int)reader.ReadUInt32();
+            report.Hits = new List<BirdHit>(count);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = new BirdHit { Life = reader.ReadUInt32(), Contact = reader.ReadUInt32() };
+                if (!report.Cart) hit.Speed = reader.ReadSingle();
+                hit.Position = reader.ReadVector3(); report.Hits.Add(hit);
+            }
+            return report;
         }
         public static void WriteBirdRecord(this Writer writer, BirdRecord record)
         {

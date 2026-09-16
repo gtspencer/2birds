@@ -52,14 +52,6 @@ namespace TwoBirds
                 ledger.Complete(record.Motion.Id, record.BirdPlayer, record.Operation, Time.unscaledTime);
         }
         internal void ReleaseResolved(uint rock, uint operation, bool accepted) => hitReporter?.ReleaseResolved(rock, operation, accepted);
-        internal bool PrimaryRock(ItemRecord record)
-        {
-            var items = WorldItemRegistry.Instance;
-            if (Host && record.Releaser < 0 && record.Operation == 0) ledger.Accept(record.Motion.Id, 0, 0);
-            if (record.BirdPlayer != 0 && items.TryGetPlayer(record.Releaser, out var player) && player &&
-                PlayerToken(record.Releaser) == record.BirdPlayer && player.Owner.IsActive) return player.IsOwner;
-            return Host;
-        }
         internal bool IsRock(ItemDefinition definition)
         {
             if (!settings) return false;
@@ -105,24 +97,19 @@ namespace TwoBirds
         private void ReceiveScare(NetworkConnection connection, BirdScareReport report, Channel channel)
         {
             if (!active || report.Epoch != epoch) return;
-            double now = Now;
+            double now = SimulationTick;
+            AdvanceClaims(now);
             foreach (uint life in report.Lives)
             {
                 if (!records.TryGetValue(life, out var record) || record.Interrupt != BirdInterrupt.Calm) continue;
                 var bird = species[record.Species];
-                if (record.HasNext && now >= record.Next.StartTick)
-                {
-                    ReleaseClaim(record.Occupied, life); ReleaseClaim(record.Route.Perch, life);
-                    record.Occupied = 0; record.Route = record.Next; record.HasNext = false;
-                }
                 if (record.Reserved != record.Route.Perch) ReleaseClaim(record.Reserved, life, record.Revision);
                 record.Reserved = 0; record.HasNext = false;
                 record.Interrupt = BirdInterrupt.WaitingToFlee;
                 Alert(life);
                 record.FleeAt = (uint)Math.Ceiling(now + bird.ScareDelay / Delta);
                 waitingThreats[life] = report.Position;
-                if (BuildRoute(record, record.FleeAt, true, report.Position, out var route)) QueueRoute(ref record, route);
-                else record.Revision++;
+                record.Revision++;
                 records[life] = record;
                 decisions[life] = now;
                 Publish(BirdEventKind.Plan, record);
@@ -183,7 +170,7 @@ namespace TwoBirds
                         double due = Math.Max(Now, last) + UnityEngine.Random.Range(zone.ReplacementSeconds.x, zone.ReplacementSeconds.y) / Delta;
                         zoneReplacement[zone.Id] = due;
                         AddVacancy(zone, due);
-                        Publish(BirdEventKind.Death, record, hit.Position, player, kills);
+                        Publish(BirdEventKind.Death, record, hit.Position);
                         if (player != 0 && tokenPlayers.TryGetValue(player, out var recipient) && recipient && recipient.Owner.IsActive)
                         {
                             var reward = ledger.Credit(player, bird.Reward, bonus, kills); reward.Epoch = epoch;
@@ -198,14 +185,14 @@ namespace TwoBirds
                     }
                 }
                 var result = new BirdHitResult { Epoch = epoch, Life = hit.Life, Contact = hit.Contact, Dead = dead };
-                if (connection == null) hitReporter.Confirmed(hit.Life, dead);
+                if (connection == null) hitReporter.Confirmed(hit.Life, dead, hit.Contact);
                 else network.ServerManager.Broadcast(connection, result);
             }
         }
         private readonly List<uint> scareLives = new(1);
         private void ReceiveHitResult(BirdHitResult result, Channel channel)
         {
-            if (!Host && active && result.Epoch == epoch) hitReporter.Confirmed(result.Life, result.Dead);
+            if (!Host && active && result.Epoch == epoch) hitReporter.Confirmed(result.Life, result.Dead, result.Contact);
         }
         private void SendBalance(NetworkConnection connection)
         {

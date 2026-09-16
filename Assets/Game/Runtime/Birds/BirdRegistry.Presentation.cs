@@ -40,7 +40,7 @@ namespace TwoBirds
                 bool animate = distance < settings.AnimationDistance * settings.AnimationDistance && animated++ < settings.AnimatedLimit;
                 bool hear = distance < settings.AudioDistance * settings.AudioDistance && audible++ < settings.SoundLimit;
                 view.Present(pose, true, animate, hear);
-                if (!Host && !record.HasNext && record.Route.Kind != BirdMotionKind.Hold && record.Route.Kind != BirdMotionKind.Orbit &&
+                if (!Host && record.Interrupt == BirdInterrupt.Calm && !record.HasNext && record.Route.Kind != BirdMotionKind.Hold && record.Route.Kind != BirdMotionKind.Orbit &&
                     record.Route.OrbitRadius == 0f && now > record.Route.End(Delta) + settings.RetrySeconds / Delta) RequestExpired(record);
             }
             for (int i = bodies.Count - 1; i >= 0; i--)
@@ -64,10 +64,26 @@ namespace TwoBirds
             if (!deathEffects.Add(life)) return;
             effectHistory.Enqueue(life);
             while (effectHistory.Count > 1024) deathEffects.Remove(effectHistory.Dequeue());
+            var player = SessionController.Instance.LocalPlayer;
+            Vector3 origin = player ? player.transform.position : Vector3.zero;
+            float distance = (position - origin).sqrMagnitude;
+            if (distance >= settings.ViewDistance * settings.ViewDistance) { ReturnView(life); return; }
             var bird = species[speciesId];
             if (bird.BodyPrefab)
             {
-                while (bodies.Count >= settings.BodyLimit) ReturnBody(0);
+                if (bodies.Count >= settings.BodyLimit)
+                {
+                    int farthest = -1;
+                    float farthestDistance = distance;
+                    for (int i = 0; i < bodies.Count; i++)
+                    {
+                        float bodyDistance = (bodies[i].transform.position - origin).sqrMagnitude;
+                        if (bodyDistance <= farthestDistance) continue;
+                        farthest = i; farthestDistance = bodyDistance;
+                    }
+                    if (farthest < 0) { ReturnView(life); return; }
+                    ReturnBody(farthest);
+                }
                 BirdBody body;
                 if (bodyPools.TryGetValue(speciesId, out var pool) && pool.Count > 0) { body = pool.Pop(); pooledBodies--; }
                 else body = Instantiate(bird.BodyPrefab, transform);
@@ -90,17 +106,17 @@ namespace TwoBirds
         }
         internal bool WaterAt(Vector3 point, out float surface)
         {
-            foreach (var habitat in habitats.Values)
-                if (habitat.Kind == BirdHabitatKind.Water && point.y <= habitat.WaterHeight && habitat.Contains(point))
+            foreach (var habitat in waterHabitats)
+                if (point.y <= habitat.WaterHeight && habitat.Contains(point))
                 { surface = habitat.WaterHeight; return true; }
             surface = 0f; return false;
         }
         internal bool WaterCrossing(Vector3 from, Vector3 to, out float surface)
         {
             if (WaterAt(to, out surface)) return true;
-            foreach (var habitat in habitats.Values)
+            foreach (var habitat in waterHabitats)
             {
-                if (habitat.Kind != BirdHabitatKind.Water || from.y < habitat.WaterHeight || to.y > habitat.WaterHeight) continue;
+                if (from.y < habitat.WaterHeight || to.y > habitat.WaterHeight) continue;
                 float amount = Mathf.InverseLerp(from.y, to.y, habitat.WaterHeight);
                 Vector3 crossing = Vector3.Lerp(from, to, amount);
                 if (!habitat.Contains(crossing)) continue;

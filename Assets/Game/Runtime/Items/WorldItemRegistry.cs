@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 namespace TwoBirds
 {
     [DefaultExecutionOrder(200)]
-    public sealed class WorldItemRegistry : MonoBehaviour
+    public sealed partial class WorldItemRegistry : MonoBehaviour
     {
         private const int BatchSize = 8;
         public static WorldItemRegistry Instance { get; private set; }
@@ -27,7 +27,6 @@ namespace TwoBirds
         private readonly Dictionary<uint, uint> pendingReleases = new();
         private readonly Dictionary<int, PlayerInventory> players = new();
         private readonly Dictionary<byte, Stack<WorldItem>> pools = new();
-        private readonly HashSet<uint> activePhysicsItems = new();
         private readonly HashSet<NetworkConnection> observers = new();
         private readonly List<uint> cleanup = new();
         private readonly List<ItemMotion> motionBatch = new(BatchSize);
@@ -71,6 +70,7 @@ namespace TwoBirds
         {
             predictionManager = GetComponent<PredictionManager>();
             network.ServerManager.RegisterBroadcast<ItemBaselineRequest>(SendBaseline);
+            network.ServerManager.RegisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
             network.ClientManager.RegisterBroadcast<ItemBaselineStart>(BeginBaseline);
             network.ClientManager.RegisterBroadcast<ItemBaselineComplete>(CompleteBaseline);
             network.ClientManager.RegisterBroadcast<ItemLifecycleBatch>(ReceiveLifecycle);
@@ -102,13 +102,12 @@ namespace TwoBirds
                     Motion = new ItemMotion { Id = seed.BakedId, Revision = 1, Tick = ServerTick,
                         Position = seed.transform.position, Rotation = seed.transform.rotation },
                     DefinitionId = seed.ItemId, State = WorldItemState.World,
-                    Holder = -1, Releaser = -1
+                    Holder = -1, Releaser = -1, Simulator = -1
                 };
                 var item = seed.GetComponent<WorldItem>();
                 items.Add(record.Motion.Id, item);
                 records.Add(record.Motion.Id, record);
                 item.Initialize(this, itemRegistry.Get(record.DefinitionId), record, false);
-                activePhysicsItems.Add(record.Motion.Id);
             }
             SessionController.Instance.WorldReady(sessionId, epoch);
         }
@@ -138,7 +137,7 @@ namespace TwoBirds
             foreach (var saved in records.Values)
             {
                 var record = saved;
-                if (record.State == WorldItemState.World && items.TryGetValue(record.Motion.Id, out var item))
+                if (record.State == WorldItemState.World && items.TryGetValue(record.Motion.Id, out var item) && Simulates(record))
                 {
                     record.Motion = item.Capture(ServerTick);
                     record.Sleeping = item.Body.IsSleeping();
@@ -212,19 +211,20 @@ namespace TwoBirds
                 return;
             }
             if (record.State != WorldItemState.World || !Newer(motion, record.Motion)) return;
+            if (Simulates(record)) return;
             if (motion.RotationOmitted)
             {
                 motion.Rotation = record.Motion.Rotation;
                 motion.AngularVelocity = record.Motion.AngularVelocity;
             }
             record.Motion = motion;
-            record.Sleeping = false;
+            record.Sleeping = motion.Sleeping;
             records[motion.Id] = record;
             if (!pendingReleases.ContainsKey(motion.Id) && items.TryGetValue(motion.Id, out var item)) item.ReceiveMotion(motion);
         }
 
         private static bool Newer(ItemMotion next, ItemMotion previous) =>
-            next.Revision > previous.Revision || next.Revision == previous.Revision && next.Tick > previous.Tick;
+            next.Revision > previous.Revision || next.Revision == previous.Revision && next.Sequence > previous.Sequence;
 
         public bool TryGetItem(uint id, out WorldItem item) => items.TryGetValue(id, out item);
         public bool TryGetRecord(uint id, out ItemRecord record) => records.TryGetValue(id, out record);
@@ -258,6 +258,7 @@ namespace TwoBirds
         private void DropDepartingItems(NetworkConnection connection)
         {
             if (!worldReady || !IsHost || SessionController.Instance.Phase == SessionPhase.Stopping) return;
+            TakeOverMotion(connection.ClientId);
             foreach (var player in players.Values)
             {
                 if (!player || player.Owner != connection) continue;
@@ -281,6 +282,7 @@ namespace TwoBirds
                     record.Holder = -1;
                     record.Equipped = false;
                     record.Sleeping = false;
+                    record.Simulator = -1;
                     records[id] = record;
                     items[id].ApplyRecord(record);
                     Publish(record);
@@ -389,9 +391,9 @@ namespace TwoBirds
             record.Operation = 0;
             record.Releaser = -1;
             record.BirdPlayer = 0;
+            record.Simulator = -1;
             records[id] = record;
             items[id].ApplyRecord(record);
-            activePhysicsItems.Remove(id);
             Publish(record);
         }
 
@@ -419,6 +421,8 @@ namespace TwoBirds
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             pendingReleases[id] = operation;
+            record.Simulator = BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId))
+                ? player.Owner.ClientId : -1;
             items[id].Initialize(this, itemRegistry.Get(record.DefinitionId), record, true);
             items[id].Launch(motion);
         }
@@ -433,6 +437,9 @@ namespace TwoBirds
             motion.Id = id;
             motion.Tick = ServerTick;
             motion.Revision = record.Motion.Revision + 1;
+            motion.Sequence = 0;
+            motion.Path = 0;
+            motion.Sleeping = motion.Boundary = motion.Removed = false;
             record.Motion = motion;
             record.State = WorldItemState.World;
             record.Holder = -1;
@@ -442,10 +449,11 @@ namespace TwoBirds
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             record.BirdPlayer = BirdRegistry.Instance ? BirdRegistry.Instance.PlayerToken(releaser) : 0;
+            record.Simulator = BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId)) &&
+                players.TryGetValue(releaser, out var simulator) && simulator.Owner.IsActive ? simulator.Owner.ClientId : -1;
             records[id] = record;
             BirdRegistry.Instance?.AcceptRelease(record);
             items[id].ApplyRecord(record);
-            activePhysicsItems.Add(id);
             Publish(record);
         }
 
@@ -471,7 +479,9 @@ namespace TwoBirds
 
         private void BeforePhysics(float delta)
         {
-            if (!worldReady || Replaying) return;
+            if (!worldReady) return;
+            BirdRegistry.Instance?.PrepareRockPhysics(ServerTick);
+            if (Replaying) return;
             foreach (var player in players.Values)
                 if (!player.Hitbox.Suspended) player.Hitbox.FollowMotor();
             foreach (var item in items.Values)
@@ -495,60 +505,8 @@ namespace TwoBirds
                 if (item == null || item.Definition == null || !item.gameObject.activeSelf) continue;
                 item.Present();
                 item.SampleBirdContacts();
-                if (!IsHost) item.SamplePlayerContact(victim);
+                if (!IsHost || !item.Simulating) item.SamplePlayerContact(victim);
             }
-        }
-
-        private void AfterTick()
-        {
-            if (!worldReady || Replaying) return;
-            if (IsHost && departureDrops.Count > 0 && Time.unscaledTime >= nextDepartureDrop) PlaceDepartureDrops();
-            cleanup.Clear();
-            foreach (var item in items.Values)
-            {
-                if (item == null || item.Definition == null || !item.gameObject.activeSelf) continue;
-                item.Tick();
-                if (!IsHost || item.Record.State != WorldItemState.World) continue;
-                uint id = item.Record.Motion.Id;
-                Vector3 position = item.Body.position;
-                if (!Finite(position) || !Finite(item.Body.linearVelocity) || !Finite(item.Body.angularVelocity) ||
-                    position.y < settings.FallBoundary || !worldBounds.Contains(position))
-                {
-                    cleanup.Add(id);
-                    continue;
-                }
-                if (!item.Body.IsSleeping())
-                {
-                    if (activePhysicsItems.Add(id))
-                    {
-                        var record = records[id];
-                        record.Sleeping = false;
-                        records[id] = record;
-                        item.SetRecord(record);
-                    }
-                }
-                else if (activePhysicsItems.Remove(id))
-                {
-                    var record = records[id];
-                    record.Motion = item.Capture(ServerTick);
-                    record.Motion.Revision++;
-                    record.Sleeping = true;
-                    records[id] = record;
-                    item.SetRecord(record);
-                    Publish(record);
-                }
-            }
-            foreach (uint id in cleanup) Remove(id);
-            if (!IsHost || ServerTick % (uint)Mathf.Max(1, Mathf.RoundToInt((float)(1d / TickDelta) / snapshotRate)) != 0) return;
-            foreach (uint id in activePhysicsItems)
-            {
-                var item = items[id];
-                var motion = item.Capture(ServerTick);
-                motion.RotationOmitted = !item.Definition.SyncRotation;
-                motionBatch.Add(motion);
-                if (motionBatch.Count == BatchSize) FlushMotion();
-            }
-            FlushMotion();
         }
 
         private void Publish(ItemRecord record)
@@ -566,10 +524,17 @@ namespace TwoBirds
             lifecycleBatch.Clear();
         }
 
-        private void FlushMotion()
+        private void FlushMotion(Channel channel = Channel.Unreliable, NetworkConnection excluded = null)
         {
             if (motionBatch.Count == 0) return;
-            network.ServerManager.Broadcast(observers, new ItemMotionBatch { Epoch = epoch, Items = motionBatch }, channel: Channel.Unreliable);
+            var message = new ItemMotionBatch { Epoch = epoch, Items = motionBatch };
+            if (IsHost)
+            {
+                bool restore = excluded != null && observers.Remove(excluded);
+                network.ServerManager.Broadcast(observers, message, channel: channel);
+                if (restore) observers.Add(excluded);
+            }
+            else network.ClientManager.Broadcast(message, channel);
             motionBatch.Clear();
         }
 
@@ -583,7 +548,6 @@ namespace TwoBirds
 
         private void Pool(uint id)
         {
-            activePhysicsItems.Remove(id);
             pendingReleases.Remove(id);
             if (!items.Remove(id, out var item) || item == null) return;
             if (item.Definition == null)
@@ -599,7 +563,9 @@ namespace TwoBirds
 
         private void ConnectionChanged(NetworkConnection connection, RemoteConnectionStateArgs args)
         {
-            if (args.ConnectionState == RemoteConnectionState.Stopped) observers.Remove(connection);
+            if (args.ConnectionState != RemoteConnectionState.Stopped) return;
+            observers.Remove(connection);
+            if (worldReady && IsHost) TakeOverMotion(connection.ClientId);
         }
 
         public void EndWorld()
@@ -616,7 +582,6 @@ namespace TwoBirds
             players.Clear();
             pendingReleases.Clear();
             earlyMotion.Clear();
-            activePhysicsItems.Clear();
             observers.Clear();
             motionBatch.Clear();
             lifecycleBatch.Clear();
@@ -632,6 +597,7 @@ namespace TwoBirds
         private void OnDestroy()
         {
             network.ServerManager.UnregisterBroadcast<ItemBaselineRequest>(SendBaseline);
+            network.ServerManager.UnregisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
             network.ClientManager.UnregisterBroadcast<ItemBaselineStart>(BeginBaseline);
             network.ClientManager.UnregisterBroadcast<ItemBaselineComplete>(CompleteBaseline);
             network.ClientManager.UnregisterBroadcast<ItemLifecycleBatch>(ReceiveLifecycle);

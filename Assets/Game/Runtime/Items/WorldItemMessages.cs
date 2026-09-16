@@ -12,6 +12,9 @@ namespace TwoBirds
         public uint Id;
         public uint Revision;
         public uint Tick;
+        public uint Sequence;
+        public uint Path;
+        public bool Sleeping, Boundary, Removed;
         public Vector3 Position;
         public Quaternion Rotation;
         public Vector3 Velocity;
@@ -32,6 +35,7 @@ namespace TwoBirds
         public uint Operation;
         public uint LaunchTick;
         public uint BirdPlayer;
+        public int Simulator;
     }
 
     public struct ItemBaselineRequest : IBroadcast { public uint Session; }
@@ -50,7 +54,7 @@ namespace TwoBirds
 
     public static class ItemMotionBatchSerializer
     {
-        private const byte OmitRotation = 1, FullVelocity = 2, FullAngularVelocity = 4;
+        private const byte OmitRotation = 1, FullVelocity = 2, FullAngularVelocity = 4, Sleeping = 8, Boundary = 16, Removed = 32;
 
         public static void WriteItemMotionBatch(this Writer writer, ItemMotionBatch batch)
         {
@@ -59,11 +63,16 @@ namespace TwoBirds
             foreach (var motion in batch.Items)
             {
                 byte flags = motion.RotationOmitted ? OmitRotation : (byte)0;
+                if (motion.Sleeping) flags |= Sleeping;
+                if (motion.Boundary) flags |= Boundary;
+                if (motion.Removed) flags |= Removed;
                 if (!Fits(motion.Velocity)) flags |= FullVelocity;
                 if (!motion.RotationOmitted && !Fits(motion.AngularVelocity)) flags |= FullAngularVelocity;
                 writer.WriteUInt32(motion.Id);
                 writer.WriteUInt32(motion.Revision);
                 writer.WriteUInt32(motion.Tick);
+                writer.WriteUInt32(motion.Sequence);
+                writer.WriteUInt32(motion.Path);
                 writer.WriteByte(flags);
                 writer.WriteVector3(motion.Position);
                 WriteVelocity(writer, motion.Velocity, (flags & FullVelocity) != 0);
@@ -80,9 +89,13 @@ namespace TwoBirds
             var items = new List<ItemMotion>(count);
             for (int i = 0; i < count; i++)
             {
-                var motion = new ItemMotion { Id = reader.ReadUInt32(), Revision = reader.ReadUInt32(), Tick = reader.ReadUInt32() };
+                var motion = new ItemMotion { Id = reader.ReadUInt32(), Revision = reader.ReadUInt32(), Tick = reader.ReadUInt32(),
+                    Sequence = reader.ReadUInt32(), Path = reader.ReadUInt32() };
                 byte flags = reader.ReadByte();
                 motion.RotationOmitted = (flags & OmitRotation) != 0;
+                motion.Sleeping = (flags & Sleeping) != 0;
+                motion.Boundary = (flags & Boundary) != 0;
+                motion.Removed = (flags & Removed) != 0;
                 motion.Position = reader.ReadVector3();
                 motion.Velocity = ReadVelocity(reader, (flags & FullVelocity) != 0);
                 if (!motion.RotationOmitted)

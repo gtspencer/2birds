@@ -234,22 +234,24 @@ namespace TwoBirds
         {
             selected = null; int count = 0;
             Vector3 from = BirdMotion.Evaluate(record.Route, Now, Delta).Position;
-            foreach (var perch in perches.Values)
+            for (int kind = 0; kind < 2; kind++)
             {
-                if (perch.Biome != record.Biome || perch.Clearance < bird.Radius || claims.ContainsKey(perch.Id) ||
-                    perch.Kind == BirdPerchKind.Tree && !bird.Supports(BirdCapabilities.Tree) ||
-                    perch.Kind == BirdPerchKind.Ground && !bird.Supports(BirdCapabilities.Ground) ||
-                    zone && !zone.Contains(perch.Position(bird)) || flee && Vector3.Dot(perch.Position(bird) - from, from - threat) <= 0f) continue;
-                if (Random.Range(0, ++count) == 0) selected = perch;
+                var perchKind = (BirdPerchKind)kind;
+                if (!bird.Supports(perchKind == BirdPerchKind.Tree ? BirdCapabilities.Tree : BirdCapabilities.Ground) ||
+                    !perchGroups.TryGetValue((record.Biome, perchKind), out var group)) continue;
+                foreach (var perch in group)
+                {
+                    if (perch.Clearance < bird.Radius || claims.ContainsKey(perch.Id) ||
+                        zone && !zone.Contains(perch.Position(bird)) || flee && Vector3.Dot(perch.Position(bird) - from, from - threat) <= 0f) continue;
+                    if (Random.Range(0, ++count) == 0) selected = perch;
+                }
             }
             return selected;
         }
 
         private bool ChooseHabitat(ushort biome, BirdHabitatKind kind, out BirdHabitatVolume selected)
         {
-            selected = null; int count = 0;
-            foreach (var habitat in habitats.Values)
-                if (habitat.Biome == biome && habitat.Kind == kind && Random.Range(0, ++count) == 0) selected = habitat;
+            selected = habitatGroups.TryGetValue((biome, kind), out var group) ? group[Random.Range(0, group.Count)] : null;
             return selected;
         }
     }

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,137 +5,64 @@ namespace TwoBirds
 {
     public sealed partial class WorldItem
     {
-        private struct BirdTravel
-        {
-            public Vector3 From, To;
-            public float Speed;
-            public double Start, End;
-        }
         private BirdRegistry birdRegistry;
-        private bool birdRock, birdSampling, birdHistory, birdPrimary;
-        private bool birdSuppressOverlap, birdNewRelease;
-        private Vector3 birdStart, birdVelocity;
-        private double birdPhysicsTick, birdPreviousTick, birdPreviousMotion;
-        private float birdCollisionFraction, nextBirdThreat;
-        private readonly List<BirdTravel> birdTravel = new(8);
+        private bool birdRock;
+        private bool birdRebase;
+        private float nextBirdThreat;
+        private int birdColliderId;
+        private readonly Dictionary<int, uint> touchingBirds = new();
+        private readonly Dictionary<int, uint> suppressedBirds = new();
+        private readonly List<int> separatedBirds = new();
 
         private bool BirdEligible => birdRegistry && birdRock && birdRegistry.hitReporter != null && impactSphere && impactSphere.enabled &&
-            Record.State == WorldItemState.World && !Record.Sleeping && !optimisticPickup && !registry.Replaying;
+            Record.State == WorldItemState.World && !optimisticPickup && !registry.Replaying && Simulating;
 
         private void BeforeBirdPhysics()
         {
-            birdSampling = BirdEligible && birdRegistry.PrimaryRock(Record) && !Body.isKinematic && !Body.IsSleeping();
-            if (!birdSampling) return;
-            InstallBirdDetector(BodySpherePosition);
-            birdStart = BodySpherePosition; birdVelocity = Body.linearVelocity;
-            birdPhysicsTick = birdRegistry.Now; birdCollisionFraction = 0f;
+            if (!BirdEligible || Body.isKinematic) return;
+            birdRegistry.RegisterPhysicalRock(birdColliderId, BodySpherePosition, sphereRadius, birdRebase, suppressedBirds, separatedBirds);
+            birdRebase = false;
         }
 
-        private void BirdSceneryContact(Collision collision)
+        private void BirdContact(Collision collision)
         {
-            if (!birdSampling || registry.Replaying || (registry.EnvironmentMask & (1 << collision.gameObject.layer)) == 0) return;
-            for (int i = 0; i < collision.contactCount; i++)
-            {
-                var contact = collision.GetContact(i);
-                if (contact.thisCollider != impactSphere) continue;
-                Vector3 center = contact.point + contact.normal * sphereRadius;
-                float duration = (float)registry.TickDelta;
-                float portion = Mathf.Clamp((center - birdStart).magnitude / Mathf.Max(0.001f, birdVelocity.magnitude * duration), 0f, 1f - birdCollisionFraction);
-                float speed = birdCollisionFraction == 0f ? birdVelocity.magnitude : collision.relativeVelocity.magnitude;
-                birdTravel.Add(new BirdTravel { From = birdStart, To = center, Speed = speed,
-                    Start = birdPhysicsTick + birdCollisionFraction, End = birdPhysicsTick + birdCollisionFraction + portion });
-                birdCollisionFraction += portion; birdStart = center; birdVelocity = Body.linearVelocity;
-                break;
-            }
+            if (!BirdEligible || !birdRegistry.TryRockContact(birdColliderId, collision.collider, out var contact)) return;
+            int collider = collision.collider.GetInstanceID();
+            if (touchingBirds.TryGetValue(collider, out uint life) && life == contact.Life) return;
+            touchingBirds[collider] = contact.Life;
+            Vector3 normal = contact.Normal;
+            float weight = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(1f + normal.y));
+            Vector3 lift = Vector3.up - normal * Mathf.Min(0f, normal.y);
+            Vector3 velocity = Body.linearVelocity + lift * (Mathf.Max(0f, birdRegistry.Settings.RockLiftMultiplier) * contact.Closing * weight);
+            if (Definition.MaxSpeed > 0f) velocity = Vector3.ClampMagnitude(velocity, Definition.MaxSpeed);
+            Body.linearVelocity = velocity;
+            MotionBoundary = true;
+            birdRegistry.ReportRockContact(Record, contact, registry.ReleasePending(Record.Motion.Id));
         }
-        private void OnCollisionStay(Collision collision) => BirdSceneryContact(collision);
+
+        private void OnCollisionStay(Collision collision) => BirdContact(collision);
+        private void OnCollisionExit(Collision collision) => touchingBirds.Remove(collision.collider.GetInstanceID());
 
         private void AfterBirdPhysics(float seconds)
         {
-            if (!birdSampling) return;
-            birdTravel.Add(new BirdTravel { From = birdStart, To = BodySpherePosition, Speed = birdVelocity.magnitude,
-                Start = birdPhysicsTick + birdCollisionFraction, End = birdPhysicsTick + 1d });
-            birdSampling = false;
-            var source = new BirdHitReport { Source = Record.Motion.Id, Player = Record.BirdPlayer, Operation = Record.Operation };
-            Vector3 offset = PresentedSpherePosition - BodySpherePosition;
-            foreach (var segment in birdTravel)
-                SweepBirds(source, segment.From + offset, segment.To + offset, segment.Speed, segment.Start, segment.End);
-            birdTravel.Clear();
+            if (BirdEligible && Definition.MaxSpeed > 0f && !Body.isKinematic && Body.linearVelocity.sqrMagnitude > Definition.MaxSpeed * Definition.MaxSpeed)
+                Body.linearVelocity = Vector3.ClampMagnitude(Body.linearVelocity, Definition.MaxSpeed);
         }
 
         internal void SampleBirdContacts()
         {
-            bool primary = BirdEligible && birdRegistry.PrimaryRock(Record);
-            if (!primary) { if (birdPrimary) ResetBirdContact(); birdPrimary = false; return; }
-            var source = new BirdHitReport { Source = Record.Motion.Id, Player = Record.BirdPlayer, Operation = Record.Operation };
-            Vector3 sphere = PresentedSpherePosition;
-            InstallBirdDetector(sphere);
-            Vector3 offset = sphere - BodySpherePosition;
-            double now = birdRegistry.Now;
-            if (registry.IsHost || Predicted)
-            {
-                foreach (var segment in birdTravel)
-                    SweepBirds(source, segment.From + offset, segment.To + offset, segment.Speed, segment.Start, segment.End);
-            }
-            else if (sampleCount > 0 && birdHistory && presentedMotionTick > birdPreviousMotion)
-            {
-                double cursor = Math.Max(birdPreviousMotion, samples[0].Tick);
-                double duration = presentedMotionTick - cursor;
-                double first = cursor;
-                Vector3 from = SphereAt(cursor) + offset;
-                while (cursor < presentedMotionTick)
-                {
-                    double endTick = presentedMotionTick;
-                    for (int i = 0; i < sampleCount; i++) if (samples[i].Tick > cursor) { endTick = Math.Min(endTick, samples[i].Tick); break; }
-                    Vector3 to = SphereAt(endTick) + offset;
-                    Vector3 physicalVelocity = samples[sampleCount - 1].Velocity;
-                    for (int i = 0; i < sampleCount; i++) if (samples[i].Tick >= cursor) { physicalVelocity = samples[i].Velocity; break; }
-                    double startBird = birdPreviousTick + (now - birdPreviousTick) * ((cursor - first) / duration);
-                    double endBird = birdPreviousTick + (now - birdPreviousTick) * ((endTick - first) / duration);
-                    SweepBirds(source, from, to, physicalVelocity.magnitude, startBird, endBird);
-                    cursor = endTick; from = to;
-                }
-            }
-            else if (!birdHistory)
-            {
-                float speed = Body.isKinematic ? Record.Motion.Velocity.magnitude : Body.linearVelocity.magnitude;
-                SweepBirds(source, sphere, sphere, speed, now, now);
-            }
-            if (Time.unscaledTime >= nextBirdThreat)
-            {
-                nextBirdThreat = Time.unscaledTime + 0.2f;
-                Vector3 velocity = Body.isKinematic ? Record.Motion.Velocity : Body.linearVelocity;
-                if (velocity.sqrMagnitude > 0.01f)
-                    birdRegistry.hitReporter.Threat(BirdThreatKind.Rock, Record.Motion.Id, sphere, birdRegistry.MaximumScareRadius, now, false);
-            }
-            birdTravel.Clear(); birdPreviousTick = now; birdPreviousMotion = presentedMotionTick; birdHistory = true;
-        }
-
-        private void SweepBirds(BirdHitReport source, Vector3 from, Vector3 to, float speed, double start, double end)
-        {
-            Vector3 travel = to - from;
-            if (travel.sqrMagnitude > 0f && Physics.SphereCast(from, sphereRadius, travel.normalized, out var obstacle,
-                travel.magnitude, registry.EnvironmentMask, QueryTriggerInteraction.Ignore))
-            {
-                float portion = Mathf.Clamp01(obstacle.distance / travel.magnitude);
-                to = Vector3.Lerp(from, to, portion); end = start + (end - start) * portion;
-            }
-            birdRegistry.hitReporter.Sweep(source, from, to, sphereRadius, speed, start, end, Predicted);
-        }
-
-        private void InstallBirdDetector(Vector3 sphere)
-        {
-            if (birdSuppressOverlap || !birdPrimary && !birdNewRelease)
-                birdRegistry.hitReporter.RebaseRock(Record.Motion.Id, sphere, sphereRadius);
-            if (!birdPrimary) birdHistory = false;
-            birdSuppressOverlap = birdNewRelease = false; birdPrimary = true;
+            if (!BirdEligible || Record.Sleeping || Body.IsSleeping() || Time.unscaledTime < nextBirdThreat) return;
+            nextBirdThreat = Time.unscaledTime + 0.2f;
+            if (Body.linearVelocity.sqrMagnitude > 0.01f)
+                birdRegistry.hitReporter.Threat(BirdThreatKind.Rock, Record.Motion.Id, BodySpherePosition,
+                    birdRegistry.MaximumScareRadius, birdRegistry.Now, false);
         }
 
         private void ResetBirdContact(bool suppressOverlap = false)
         {
-            birdTravel.Clear(); birdHistory = birdSampling = false;
-            birdSuppressOverlap = suppressOverlap;
-            if (birdRegistry && birdRegistry.hitReporter != null) birdRegistry.hitReporter.ResetRock(Record.Motion.Id);
+            touchingBirds.Clear();
+            suppressedBirds.Clear();
+            birdRebase = suppressOverlap;
         }
     }
 }

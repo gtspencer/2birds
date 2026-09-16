@@ -6,6 +6,9 @@ namespace TwoBirds
     public sealed class BirdSettings : ScriptableObject
     {
         [Min(0.01f)] public float LethalSpeed = 4f;
+        [Range(0f, 1f)] public float RockBounceMultiplier = 0.65f;
+        [Min(0f)] public float RockLiftMultiplier = 0.25f;
+        [Range(0f, 1f)] public float RockUndersideMultiplier = 0.15f;
         [Min(0)] public int MultiKillBonus = 5;
         [Min(0f)] public float HornRadius = 20f;
         [Min(0.1f)] public float BodyLifetime = 8f, BodyShrinkSeconds = 1f;

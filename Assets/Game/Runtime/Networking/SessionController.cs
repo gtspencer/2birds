@@ -19,7 +19,7 @@ namespace TwoBirds
     {
         public const int MultiplayerCapacity = 8;
         public const string GameId = "two-birds";
-        public const string Protocol = "eight-player-birds-3";
+        public const string Protocol = "eight-player-birds-5";
         public static SessionController Instance { get; private set; }
         [SerializeField] private GameSettings settings;
         [SerializeField] private Multipass multipass;

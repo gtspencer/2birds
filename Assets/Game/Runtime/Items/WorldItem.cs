@@ -70,6 +70,10 @@ namespace TwoBirds
         public ItemDefinition Definition { get; private set; }
         public ItemRecord Record { get; private set; }
         public bool Predicted { get; private set; }
+        internal bool Simulating => registry && (registry.Simulates(Record) || Predicted && Record.Simulator < 0);
+        internal bool MotionAvailable => !optimisticPickup && !Body.isKinematic;
+        internal bool MotionBoundary { get; set; }
+        internal bool RemovalPending { get; private set; }
         public bool IsCharging => useBehaviour != null && useBehaviour.IsCharging;
         public float Charge01 => useBehaviour != null ? useBehaviour.Charge01 : 0f;
         public string ActionText => "Pick up";
@@ -86,6 +90,7 @@ namespace TwoBirds
             playerHitboxMask = LayerMask.GetMask("PlayerItemHitbox");
             colliders = GetComponentsInChildren<Collider>(true);
             impactSphere = GetComponentInChildren<SphereCollider>(true);
+            if (impactSphere) birdColliderId = impactSphere.GetInstanceID();
             renderers = GetComponentsInChildren<Renderer>(true);
             parts = GetComponentsInChildren<Transform>(true);
             prefabScale = transform.localScale;
@@ -159,7 +164,12 @@ namespace TwoBirds
         internal void ApplyRecord(ItemRecord record)
         {
             bool wasPredicted = Predicted;
-            bool smoothCosmetic = !Definition.SyncRotation && !registry.IsHost &&
+            bool activeSimulation = !optimisticPickup && !Body.isKinematic && Record.State == WorldItemState.World;
+            bool preserveMotion = activeSimulation &&
+                record.State == WorldItemState.World && record.Simulator >= 0 && registry.Simulates(record) &&
+                (wasPredicted || Simulating && record.Motion.Revision == Record.Motion.Revision) &&
+                record.Releaser == Record.Releaser && record.Operation == Record.Operation;
+            bool smoothCosmetic = !Definition.SyncRotation && !Simulating &&
                 Record.State == WorldItemState.World && sampleCount > 0;
             bool newRelease = record.State == WorldItemState.World &&
                 (Record.State != WorldItemState.World || record.Releaser != releasePlayer || record.Operation != releaseOperation);
@@ -187,15 +197,16 @@ namespace TwoBirds
             SetVisible(true);
             foreach (var collider in colliders) collider.enabled = true;
             Body.collisionDetectionMode = CollisionDetectionMode.Discrete;
-            Body.isKinematic = !(registry.IsHost || Predicted) || record.Sleeping && !registry.IsHost;
-            Body.collisionDetectionMode = Body.isKinematic ? CollisionDetectionMode.Discrete : Definition.CollisionDetection;
-            if (!wasPredicted || record.Sleeping)
+            Body.isKinematic = !Simulating || record.Sleeping && !registry.Simulates(record);
+            Body.collisionDetectionMode = Body.isKinematic ? CollisionDetectionMode.Discrete :
+                birdRock ? CollisionDetectionMode.ContinuousDynamic : Definition.CollisionDetection;
+            if (!preserveMotion && (!activeSimulation || !wasPredicted || record.Sleeping || !Simulating))
                 CorrectBody(record.Motion, wasPredicted || smoothCosmetic);
             cosmeticSpin = record.Sleeping ? Vector3.zero : record.Motion.AngularVelocity;
-            if (newRelease) { rebaseContactPose = false; birdNewRelease = true; birdSuppressOverlap = false; }
+            if (newRelease) { rebaseContactPose = false; birdRebase = false; }
             if (!Body.isKinematic && record.Sleeping) Body.Sleep();
             if (record.Sleeping) Predicted = false;
-            if (!registry.IsHost && !Predicted)
+            if (!Simulating)
             {
                 sampleCount = 0;
                 AddSample(record.Motion);
@@ -254,7 +265,7 @@ namespace TwoBirds
         {
             CorrectBody(motion, false);
             rebaseContactPose = false;
-            birdNewRelease = true; birdSuppressOverlap = false;
+            birdRebase = false;
         }
 
         internal void PresentHeld(PlayerInventory holder, bool equipped)
@@ -279,7 +290,9 @@ namespace TwoBirds
         {
             return new ItemMotion
             {
-                Id = Record.Motion.Id, Revision = Record.Motion.Revision, Tick = tick,
+                Id = Record.Motion.Id, Revision = Record.Motion.Revision, Tick = tick, Sequence = Record.Motion.Sequence,
+                Path = Record.Motion.Path,
+                Sleeping = !Body.isKinematic && Body.IsSleeping(),
                 Position = Body.position, Rotation = Body.rotation,
                 Velocity = Body.isKinematic ? Vector3.zero : Body.linearVelocity,
                 AngularVelocity = Body.isKinematic ? Vector3.zero : Body.angularVelocity
@@ -295,6 +308,8 @@ namespace TwoBirds
 
         internal void ReceiveMotion(ItemMotion motion)
         {
+            if (Record.Simulator >= 0 && registry.Simulates(Record)) return;
+            if (motion.Path != Record.Motion.Path) motion.Boundary = true;
             if (motion.RotationOmitted)
             {
                 motion.Rotation = Record.Motion.Rotation;
@@ -302,11 +317,21 @@ namespace TwoBirds
             }
             var record = Record;
             record.Motion = motion;
-            record.Sleeping = false;
+            record.Sleeping = motion.Sleeping;
+            if (motion.Sleeping && Predicted)
+            {
+                ApplyRecord(record);
+                return;
+            }
             SetRecord(record);
             if (optimisticPickup) return;
             if (!Predicted)
             {
+                if (motion.Boundary)
+                {
+                    sampleCount = 0;
+                    CorrectBody(motion, false);
+                }
                 AddSample(motion);
                 return;
             }
@@ -367,7 +392,7 @@ namespace TwoBirds
         internal void Present()
         {
             if (registry == null || optimisticPickup || Record.State != WorldItemState.World) return;
-            if (!registry.IsHost && !Predicted && sampleCount > 0)
+            if (!Simulating && sampleCount > 0)
             {
                 ItemMotion latest = samples[sampleCount - 1];
                 double tick = latest.Tick + (Time.unscaledTime - sampleReceivedAt - registry.InterpolationDelay) / registry.TickDelta;
@@ -384,7 +409,7 @@ namespace TwoBirds
                 visualRoot.localPosition = visualOffset * remaining;
                 visualRoot.localRotation = Quaternion.Slerp(Quaternion.identity, visualRotation, remaining);
             }
-            if (!Definition.SyncRotation && !registry.IsHost && !Predicted && !Record.Sleeping && sampleCount > 0)
+            if (!Definition.SyncRotation && !Simulating && !Record.Sleeping && sampleCount > 0)
             {
                 var latest = samples[sampleCount - 1];
                 float radius = Mathf.Max(sphereRadius, DropDiameter * 0.25f);
@@ -507,6 +532,7 @@ namespace TwoBirds
             sampleReceivedAt = 0f;
             localLaunchTick = historyStart = 0;
             optimisticPickup = false;
+            MotionBoundary = RemovalPending = false;
             cosmeticSpin = Vector3.zero;
         }
 
@@ -547,7 +573,7 @@ namespace TwoBirds
             incomingSampled = ContactEligible && !Body.isKinematic && !Body.IsSleeping();
             incomingVelocity = incomingSampled ? Body.linearVelocity : Vector3.zero;
             if (!ContactEligible) ResetContactSamples();
-            physicsContactSampled = incomingSampled && Predicted;
+            physicsContactSampled = incomingSampled && !registry.IsHost;
             if (physicsContactSampled) physicsStartSphere = BodySpherePosition;
         }
 
@@ -596,7 +622,7 @@ namespace TwoBirds
             }
             if (hasContactPose)
             {
-                if (Predicted)
+                if (Simulating)
                 {
                     float elapsed = 0f;
                     Vector3 startPlayer = playerFrom;
@@ -721,8 +747,12 @@ namespace TwoBirds
 
         private void OnCollisionEnter(Collision collision)
         {
-            BirdSceneryContact(collision);
-            if (registry == null || !registry.IsHost || registry.Replaying || !ContactEligible || !incomingSampled) return;
+            BirdContact(collision);
+            if (birdRock && registry && Simulating && !registry.Replaying && !optimisticPickup &&
+                Record.State == WorldItemState.World && collision.impulse.sqrMagnitude > 0.000001f &&
+                (birdRegistry.Settings.SolidMask.value & (1 << collision.collider.gameObject.layer)) != 0)
+                MotionBoundary = true;
+            if (registry == null || !registry.IsHost || !Simulating || registry.Replaying || !ContactEligible || !incomingSampled) return;
             var contact = collision.GetContact(0);
             if (contact.thisCollider != impactSphere) return;
             if (!collision.collider.TryGetComponent<PlayerItemHitbox>(out var player) || !player.Motor.IsOwner) return;
@@ -733,8 +763,8 @@ namespace TwoBirds
 
         private void OnTriggerEnter(Collider other)
         {
-            if (registry != null && registry.IsHost && !registry.Replaying && other.TryGetComponent<ItemKillVolume>(out _))
-                registry.Remove(Record.Motion.Id);
+            if (registry && Simulating && !registry.Replaying && other.TryGetComponent<ItemKillVolume>(out _))
+                RemovalPending = true;
         }
     }
 }

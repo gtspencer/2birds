@@ -61,7 +61,7 @@ namespace TwoBirds
         }
         internal bool Step(BirdRegistry registry)
         {
-            if (!sinking && registry.WaterCrossing(previousPosition, body.position, out float surface))
+            if (!sinking && !body.isKinematic && registry.WaterCrossing(previousPosition, body.position, out float surface))
             {
                 sinking = true; body.isKinematic = true;
                 transform.position = new Vector3(body.position.x, Mathf.Min(body.position.y, surface), body.position.z);

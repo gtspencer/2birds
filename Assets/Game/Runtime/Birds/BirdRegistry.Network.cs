@@ -14,7 +14,7 @@ namespace TwoBirds
             public uint Attempt, Snapshot, Sequence;
             public BirdRecord[] Records;
             public int Cursor, Chunk;
-            public float Credit;
+            public float Credit, EventCredit;
             public readonly Queue<BirdEvent> Events = new();
         }
         private readonly HashSet<NetworkConnection> observers = new();
@@ -99,9 +99,20 @@ namespace TwoBirds
                     SendBaseline(transfer.Connection, request, Channel.Reliable);
                     continue;
                 }
-                transfer.Credit = Mathf.Min(2000f, transfer.Credit + (float)Delta * 16384f);
+                bool snapshotPending = transfer.Cursor < transfer.Records.Length;
+                float allowance = (float)Delta * 16384f;
+                transfer.EventCredit = Mathf.Min(2000f, transfer.EventCredit + allowance * (snapshotPending ? 0.5f : 1f));
+                if (snapshotPending)
+                {
+                    transfer.Credit = Mathf.Min(2000f, transfer.Credit + allowance * 0.5f);
+                    if (transfer.Events.Count == 0)
+                    {
+                        transfer.Credit = Mathf.Min(2000f, transfer.Credit + transfer.EventCredit);
+                        transfer.EventCredit = 0f;
+                    }
+                }
                 int limit = Mathf.Min(1000, network.TransportManager.GetMTU(transfer.Connection.TransportIndex, (byte)Channel.Unreliable) - 96);
-                if (transfer.Cursor < transfer.Records.Length)
+                if (snapshotPending)
                 {
                     recordBatch.Clear();
                     var writer = WriterPool.Retrieve();
@@ -121,14 +132,24 @@ namespace TwoBirds
                             Snapshot = transfer.Snapshot, Index = transfer.Chunk++, Records = recordBatch });
                         transfer.Credit -= size;
                     }
-                    continue;
                 }
-                while (transfer.Events.Count > 0 && transfer.Credit >= 600f)
+                if (transfer.Cursor == transfer.Records.Length)
                 {
-                    network.ServerManager.Broadcast(transfer.Connection, transfer.Events.Dequeue());
-                    transfer.Credit -= 600f;
+                    transfer.EventCredit += transfer.Credit;
+                    transfer.Credit = 0f;
                 }
-                if (transfer.Events.Count > 0) continue;
+                var eventWriter = WriterPool.Retrieve();
+                while (transfer.Events.Count > 0)
+                {
+                    eventWriter.Clear();
+                    eventWriter.WriteBirdEvent(transfer.Events.Peek());
+                    int bytes = eventWriter.Length + 48;
+                    if (transfer.EventCredit < bytes) break;
+                    network.ServerManager.Broadcast(transfer.Connection, transfer.Events.Dequeue());
+                    transfer.EventCredit -= bytes;
+                }
+                eventWriter.Store();
+                if (transfer.Cursor < transfer.Records.Length || transfer.Events.Count > 0) continue;
                 network.ServerManager.Broadcast(transfer.Connection, new BirdBaselineComplete { Epoch = epoch,
                     Snapshot = transfer.Snapshot, Attempt = transfer.Attempt, Sequence = sequence });
                 SendBalance(transfer.Connection);
@@ -165,16 +186,17 @@ namespace TwoBirds
             foreach (var update in stagedEvents) ApplyEvent(update, false);
             receivedSequence = message.Sequence;
             staging.Clear(); stagedEvents.Clear(); receivedChunks.Clear();
-            hitReporter.Clear(); hitReporter.Dirty();
+            hitReporter.Clear();
+            AdvanceClaims(SimulationTick);
             receiving = false; ready = true;
             lastPresentationTick = Now;
             SessionController.Instance.BirdsReady(attempt, epoch);
         }
 
-        private void Publish(BirdEventKind kind, BirdRecord record, Vector3 position = default, uint player = 0, uint kills = 0)
+        private void Publish(BirdEventKind kind, BirdRecord record, Vector3 position = default)
         {
-            hitReporter?.Dirty();
-            var message = new BirdEvent { Epoch = epoch, Sequence = ++sequence, Kind = kind, Record = record, Position = position, Player = player, Kills = kills };
+            hitReporter?.Dirty(record.Life);
+            var message = new BirdEvent { Epoch = epoch, Sequence = ++sequence, Kind = kind, Record = record, Position = position };
             network.ServerManager.Broadcast(observers, message);
             foreach (var transfer in transfers) transfer.Events.Enqueue(message);
         }
@@ -219,7 +241,7 @@ namespace TwoBirds
                 view.Rebase(message.Record, now, Delta);
             records[life] = message.Record;
             if (effects && message.Record.Interrupt == BirdInterrupt.WaitingToFlee && previous.Interrupt == BirdInterrupt.Calm) Alert(life);
-            hitReporter.Dirty();
+            hitReporter.Dirty(life);
         }
 
         private void RemoveLocal(uint life)
@@ -227,7 +249,7 @@ namespace TwoBirds
             records.Remove(life); lives.Remove(life); decisions.Remove(life); repairs.Remove(life);
             expiredRequests.Remove(life);
             ReturnView(life);
-            hitReporter?.Dirty();
+            hitReporter?.Dirty(life);
         }
 
         private void SendDigest(double now)
@@ -240,8 +262,7 @@ namespace TwoBirds
             {
                 digestCursor %= lives.Count;
                 var record = records[lives[digestCursor++]];
-                digestBatch.Add(new BirdDigestEntry { Life = record.Life, Revision = record.Revision,
-                    Next = record.HasNext ? record.Next.Revision : 0, Effective = record.HasNext ? record.Next.StartTick : record.Route.StartTick });
+                digestBatch.Add(new BirdDigestEntry { Life = record.Life, Revision = record.Revision });
             }
             network.ServerManager.Broadcast(observers, new BirdDigest { Epoch = epoch, Sequence = sequence, Entries = digestBatch }, channel: Channel.Unreliable);
         }
@@ -280,7 +301,7 @@ namespace TwoBirds
             if (message.Record.Revision < previous.Revision) return;
             if (views.TryGetValue(message.Life, out var view)) view.Rebase(message.Record, Now, Delta);
             records[message.Life] = message.Record;
-            hitReporter.Dirty();
+            hitReporter.Dirty(message.Life);
         }
 
         private void ConnectionChanged(NetworkConnection connection, RemoteConnectionStateArgs args)

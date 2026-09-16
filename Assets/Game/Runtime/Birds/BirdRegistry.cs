@@ -22,6 +22,9 @@ namespace TwoBirds
         private readonly Dictionary<ushort, BirdSpawnZone> zones = new();
         private readonly Dictionary<ushort, BirdHabitatVolume> habitats = new();
         private readonly Dictionary<ushort, BirdPerch> perches = new();
+        private readonly Dictionary<(ushort biome, BirdPerchKind kind), List<BirdPerch>> perchGroups = new();
+        private readonly Dictionary<(ushort biome, BirdHabitatKind kind), List<BirdHabitatVolume>> habitatGroups = new();
+        private readonly List<BirdHabitatVolume> waterHabitats = new();
         private readonly Dictionary<ushort, (uint life, uint revision)> claims = new();
         private readonly Dictionary<uint, double> decisions = new();
         private readonly List<uint> lives = new();
@@ -30,9 +33,10 @@ namespace TwoBirds
         private readonly BirdClock clock = new();
         private uint epoch, attempt, fingerprint, nextLife, sequence;
         private bool active, ready;
-        private int decisionCursor;
+        private int decisionCursor, plannerCursor;
         private double lastPresentationTick;
         internal double Delta => network.TimeManager.TickDelta;
+        internal uint SimulationTick => network.TimeManager.Tick;
         internal double Now
         {
             get
@@ -53,6 +57,8 @@ namespace TwoBirds
             predictionManager = GetComponent<PredictionManager>();
             RegisterMessages();
             network.TimeManager.OnPostTick += Tick;
+            Physics.ContactModifyEvent += ModifyRockContacts;
+            Physics.ContactModifyEventCCD += ModifyRockCcdContacts;
         }
 
         public void BeginWorld(Scene scene)
@@ -119,6 +125,19 @@ namespace TwoBirds
                     if (perch.gameObject.scene != scene) continue;
                     if (perch.Id == 0 || perch.Biome == 0 || !perches.TryAdd(perch.Id, perch)) throw new InvalidOperationException("Bird perch IDs must be unique and nonzero; duplicated volumes need new IDs.");
                 }
+                foreach (var perch in perches.Values)
+                {
+                    var key = (perch.Biome, perch.Kind);
+                    if (!perchGroups.TryGetValue(key, out var group)) perchGroups.Add(key, group = new List<BirdPerch>());
+                    group.Add(perch);
+                }
+                foreach (var habitat in habitats.Values)
+                {
+                    var key = (habitat.Biome, habitat.Kind);
+                    if (!habitatGroups.TryGetValue(key, out var group)) habitatGroups.Add(key, group = new List<BirdHabitatVolume>());
+                    group.Add(habitat);
+                    if (habitat.Kind == BirdHabitatKind.Water) waterHabitats.Add(habitat);
+                }
                 if (zones.Count > 0 && (LayerMask.NameToLayer("BirdBody") < 0 || LayerMask.NameToLayer("BirdQuery") < 0))
                     throw new InvalidOperationException("Create BirdBody and BirdQuery physics layers before authoring birds.");
                 fingerprint = ContentFingerprint();
@@ -153,39 +172,69 @@ namespace TwoBirds
         private void Tick()
         {
             if (!active || Replaying) return;
-            double now = Now;
+            double now = SimulationTick + 1d;
             hitReporter?.Flush();
-            if (!Host) return;
             AdvanceClaims(now);
-            bool worked = false;
+            if (!Host) return;
+            for (int budget = 0; budget < 4; budget++)
+            {
+                bool worked = false;
+                for (int category = 0; category < 3 && !worked; category++)
+                {
+                    int next = plannerCursor++ % 3;
+                    worked = next == 0 ? PlanEscape(now) : next == 1 ? PlanLiving(now) : PlanVacancy(now);
+                }
+                if (!worked) break;
+            }
+            SendTransfers();
+            SendDigest(now);
+            ledger.Prune(Time.unscaledTime);
+        }
+
+        private bool PlanVacancy(double now)
+        {
             for (int i = 0; i < vacancies.Count; i++)
             {
                 var vacancy = vacancies[i];
                 if (vacancy.Due > now) continue;
-                worked = true;
                 if (TrySpawn(vacancy, now)) vacancies.RemoveAt(i);
                 else
                 {
                     vacancy.Due = now + settings.RetrySeconds / Delta;
                     if (!vacancy.Warned) { Debug.LogWarning($"No compatible starting habitat for {species[vacancy.Species].name} in {zones[vacancy.Zone].name}.", zones[vacancy.Zone]); vacancy.Warned = true; }
                 }
-                break;
+                return true;
             }
-            if (!worked && lives.Count > 0)
+            return false;
+        }
+
+        private bool PlanEscape(double now)
+        {
+            uint selected = 0;
+            uint deadline = uint.MaxValue;
+            foreach (uint life in waitingThreats.Keys)
             {
-                for (int examined = 0; examined < lives.Count; examined++)
-                {
-                    decisionCursor %= lives.Count;
-                    uint life = lives[decisionCursor++];
-                    if (!decisions.TryGetValue(life, out double due) || due > now) continue;
-                    if (records[life].Interrupt == BirdInterrupt.WaitingToFlee && !records[life].HasNext) RetryEscape(life, now);
-                    else PlanNormal(life, now);
-                    break;
-                }
+                var record = records[life];
+                if (record.Interrupt != BirdInterrupt.WaitingToFlee || record.HasNext || decisions[life] > now || record.FleeAt >= deadline) continue;
+                selected = life; deadline = record.FleeAt;
             }
-            SendTransfers();
-            SendDigest(now);
-            ledger.Prune(Time.unscaledTime);
+            if (selected == 0) return false;
+            RetryEscape(selected, now);
+            return true;
+        }
+
+        private bool PlanLiving(double now)
+        {
+            for (int examined = 0; examined < lives.Count; examined++)
+            {
+                decisionCursor %= lives.Count;
+                uint life = lives[decisionCursor++];
+                if (!decisions.TryGetValue(life, out double due) || due > now ||
+                    records[life].Interrupt != BirdInterrupt.Calm || records[life].HasNext) continue;
+                PlanNormal(life, now);
+                return true;
+            }
+            return false;
         }
 
         private void LateUpdate()
@@ -209,17 +258,25 @@ namespace TwoBirds
                 uint life = lives[i]; var record = records[life];
                 if (record.HasNext && now >= record.Next.StartTick)
                 {
-                    ReleaseClaim(record.Occupied, life);
-                    ReleaseClaim(record.Route.Perch, life);
+                    if (Host)
+                    {
+                        ReleaseClaim(record.Occupied, life);
+                        ReleaseClaim(record.Route.Perch, life);
+                    }
                     record.Occupied = 0;
                     record.Route = record.Next; record.Next = default; record.HasNext = false;
                     if (record.Interrupt == BirdInterrupt.WaitingToFlee) record.Interrupt = BirdInterrupt.Fleeing;
+                    hitReporter.Dirty(life);
                 }
                 if (record.Reserved != 0 && !record.HasNext && now >= record.Route.End(Delta))
                 {
                     record.Occupied = record.Reserved; record.Reserved = 0;
                 }
-                if (record.Interrupt == BirdInterrupt.Fleeing && now >= record.Route.End(Delta) + 1d / Delta) record.Interrupt = BirdInterrupt.Calm;
+                if (record.Interrupt == BirdInterrupt.Fleeing && now >= record.Route.End(Delta) + 1d / Delta)
+                {
+                    record.Interrupt = BirdInterrupt.Calm;
+                    if (Host) waitingThreats.Remove(life);
+                }
                 records[life] = record;
             }
         }
@@ -227,19 +284,23 @@ namespace TwoBirds
         public void EndWorld()
         {
             active = ready = false;
+            ClearRockPhysics();
             ClearPresentation(); ClearNetworking();
             records.Clear(); species.Clear(); zones.Clear(); habitats.Clear(); perches.Clear(); claims.Clear();
+            perchGroups.Clear(); habitatGroups.Clear(); waterHabitats.Clear();
             decisions.Clear(); lives.Clear(); vacancies.Clear(); zoneReplacement.Clear(); ledger.Clear();
             waitingThreats.Clear(); MaximumScareRadius = 0f;
             playerTokens.Clear(); tokenPlayers.Clear(); cartDrivers.Clear(); nextPlayerToken = 0;
             hitReporter = null;
-            epoch = nextLife = sequence = 0; decisionCursor = 0; lastPresentationTick = 0;
+            epoch = nextLife = sequence = 0; decisionCursor = plannerCursor = 0; lastPresentationTick = 0;
             clock.Reset(); LocalBalance = 0; rewardRevision = 0;
             RewardChanged?.Invoke(default);
         }
 
         private void OnDestroy()
         {
+            Physics.ContactModifyEvent -= ModifyRockContacts;
+            Physics.ContactModifyEventCCD -= ModifyRockCcdContacts;
             EndWorld();
             if (network) { network.TimeManager.OnPostTick -= Tick; UnregisterMessages(); }
             if (Instance == this) Instance = null;
@@ -253,6 +314,7 @@ namespace TwoBirds
             void Vector(Vector3 value) { Float(value.x); Float(value.y); Float(value.z); }
             void Transform(Transform value) { Vector(value.position); Vector(value.eulerAngles); Vector(value.lossyScale); }
             Number(catalog.ContentVersion); Float(settings.LethalSpeed); Number(settings.MultiKillBonus);
+            Float(settings.RockBounceMultiplier); Float(settings.RockLiftMultiplier); Float(settings.RockUndersideMultiplier);
             Number(settings.SolidMask); Number(settings.GroundMask); Float(settings.GroundSlope); Float(settings.GroundStep);
             var ids = new List<ushort>(species.Keys); ids.Sort();
             foreach (ushort id in ids)
