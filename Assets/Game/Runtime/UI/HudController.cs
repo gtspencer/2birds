@@ -179,14 +179,14 @@ namespace TwoBirds
         private void Bind(PlayerInventory inv, PlayerNetworkState state)
         {
             HideCharge();
-            if (inventory != null) inventory.InventoryChanged -= Refresh;
+            if (inventory) inventory.InventoryChanged -= Refresh;
             inventory = inv;
             playerState = state;
-            equipment = inv != null ? inv.Equipment : null;
-            interaction = inv != null ? inv.GetComponent<PlayerInteraction>() : null;
-            inputReader = inv != null ? inv.GetComponent<PlayerInputReader>() : null;
-            seating = inv != null ? inv.GetComponent<PlayerSeating>() : null;
-            if (inventory != null) inventory.InventoryChanged += Refresh;
+            equipment = inv ? inv.Equipment : null;
+            interaction = inv ? inv.GetComponent<PlayerInteraction>() : null;
+            inputReader = inv ? inv.GetComponent<PlayerInputReader>() : null;
+            seating = inv ? inv.GetComponent<PlayerSeating>() : null;
+            if (inventory) inventory.InventoryChanged += Refresh;
             EnsureCartHints();
             EnsurePassengerHints();
             Refresh();
@@ -195,18 +195,18 @@ namespace TwoBirds
         private void Update()
         {
             var player = SessionController.Instance?.LocalPlayer;
-            if (player == null)
+            if (!player)
             {
-                if (inventory != null) Bind(null, null);
+                if (inventory) Bind(null, null);
                 HideCharge();
                 return;
             }
-            if (inventory == null || inventory.gameObject != player.gameObject)
+            if (!inventory || inventory.gameObject != player.gameObject)
                 Bind(player.GetComponent<PlayerInventory>(), player.GetComponent<PlayerNetworkState>());
             if (!inventory.IsOwner) return;
 
             var session = SessionController.Instance;
-            if (session == null || session.Phase != SessionPhase.InGame || session.PanelOpen) return;
+            if (!session || session.Phase != SessionPhase.InGame || session.PanelOpen) return;
 
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.tabKey.wasPressedThisFrame)
