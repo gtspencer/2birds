@@ -10,6 +10,7 @@ or a narrative of what changed and why.
 - Do not overly rely on existing systems; if a plan or ask conflicts with an existing system, or renders the existing system unnecessary, throw away the existing system in favor of the more appropriate way to accomplish the task.
 - Do not create one off tools for migrations.  Apply the atomic migrations yourself, or ask the user to make them, but do not create editor tools for one time migrations unless explicitly asked.
 - Use implicit checks for Unity object's lifetime (i.e. `if (variable)` instead of `if (variable != null)`)
+- Prefer event driven changes, opposed to update loop driven changes.  Avoid no-op calls in the update loop as much as possible.
 
 ### Networking prioritization
 Prioritize simulation, visualization, and consistency across clients.  Trust clients and what they report (don't worry about game security/cheating).  Propose and implement solutions that prioritize responsiveness on each client, even if it means the gameplay is not server authoritative.  Keep network messages as small as possible, while maintaining consistency across clients.

@@ -36,6 +36,7 @@ namespace TwoBirds
         private PlayerInputReader inputReader;
         private PlayerSeating seating;
         private ControlHint[] cartDriverHints;
+        private ControlHint[] cartPassengerHints;
         private Label seatFeedback;
 
         public bool InventoryOpen => inventoryOpen;
@@ -186,6 +187,8 @@ namespace TwoBirds
             inputReader = inv != null ? inv.GetComponent<PlayerInputReader>() : null;
             seating = inv != null ? inv.GetComponent<PlayerSeating>() : null;
             if (inventory != null) inventory.InventoryChanged += Refresh;
+            EnsureCartHints();
+            EnsurePassengerHints();
             Refresh();
         }
 
@@ -258,11 +261,8 @@ namespace TwoBirds
             }
             else HideCharge();
             interactionTooltip.Update(interaction, inputReader.ActiveDevice);
-            if (seating && seating.IsDriver && !seating.TransitionPending)
-            {
-                EnsureCartHints();
-                controlsHint.Show(cartDriverHints, inputReader.ActiveDevice);
-            }
+            if (seating && seating.Seated && !seating.TransitionPending)
+                controlsHint.Show(seating.IsDriver ? cartDriverHints : cartPassengerHints, inputReader.ActiveDevice);
             else controlsHint.Hide();
         }
 
@@ -277,6 +277,17 @@ namespace TwoBirds
                 new ControlHint { Action = map.FindAction("Jump"), Label = "Handbrake" },
                 new ControlHint { Action = map.FindAction("Lights"), Label = "Lights" },
                 new ControlHint { Action = map.FindAction("Horn"), Label = "Horn" },
+                new ControlHint { Action = map.FindAction("ExitVehicle"), Label = "Exit" },
+            };
+        }
+
+        private void EnsurePassengerHints()
+        {
+            if (cartPassengerHints != null) return;
+            var map = InputSystem.actions?.FindActionMap("Player");
+            if (map == null) return;
+            cartPassengerHints = new[]
+            {
                 new ControlHint { Action = map.FindAction("ExitVehicle"), Label = "Exit" },
             };
         }
