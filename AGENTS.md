@@ -31,6 +31,7 @@ deleting it.
 
 ### Stack
 Unity 6000.5.7f1
+Unity CLI 1.0.0-beta.9 (lives at `C:\Users\spenc\AppData\Local\Unity\bin\unity.exe`)
 FishNet 4.7.3 for networking
 Unity UI Toolkit for UI
 New Input System for input
@@ -39,3 +40,4 @@ New Input System for input
 OS: Windows
 Processor: AMD Ryzen 9 3900X (12 cores)
 Graphics: NVIDIA RTX 3080 Ti
+Target Platform: Steam

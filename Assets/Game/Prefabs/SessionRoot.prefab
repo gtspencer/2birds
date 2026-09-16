@@ -25,6 +25,7 @@ GameObject:
   - component: {fileID: -9185529342162899750}
   - component: {fileID: 7663517603519311750}
   - component: {fileID: -1955571057096831927}
+  - component: {fileID: -2167059706322838791}
   m_Layer: 0
   m_Name: SessionRoot
   m_TagString: Untagged
@@ -331,3 +332,17 @@ MonoBehaviour:
   _transports:
   - {fileID: 432730836199715234}
   - {fileID: 7663517603519311750}
+--- !u!114 &-2167059706322838791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5004959182579645944}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 82744d278cbd164428f493c4eba75f2c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.BirdRegistry
+  catalog: {fileID: 11400000, guid: 3cbeaefa7aa96e14a952957970094b84, type: 2}
+  settings: {fileID: 11400000, guid: 1418cf28fd5e80b408e48f034cad6d1f, type: 2}

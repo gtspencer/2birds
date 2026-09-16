@@ -60,6 +60,7 @@ namespace TwoBirds
         public bool Busy => pending != null;
         public bool Simulating { get; private set; }
         public uint Epoch => epoch;
+        public int DriverId => occupants[0].Player;
         public GolfCartController Controller => controller;
         internal Vector3 RecoveryOrigin { get; private set; }
         public MotionFrame DisplayMotion
@@ -110,6 +111,7 @@ namespace TwoBirds
             baseline.Velocity = baseline.AngularVelocity = Vector3.zero;
             InstallBaseline(baseline, -1);
             StateRevision = 1;
+            BirdRegistry.Instance?.RememberCart(this);
             presentation.SetColor(bodyColor);
         }
 
@@ -219,6 +221,7 @@ namespace TwoBirds
                 controller.SetInput(driver.Input.CartMove, driver.Input.Handbrake);
             else controller.ClearInput();
             controller.BeforePhysics(delta);
+            BirdRegistry.Instance?.CartBefore(this);
         }
 
         private void AfterPhysics(float delta)
@@ -235,6 +238,7 @@ namespace TwoBirds
             }
             if (!Simulating) return;
             controller.AfterPhysics(delta);
+            BirdRegistry.Instance?.CartAfter(this);
             var frame = controller.Capture(epoch, TimeManager.LocalTick);
             bool resting = controller.Body.IsSleeping() || frame.Velocity.sqrMagnitude < 0.0001f && frame.AngularVelocity.sqrMagnitude < 0.0001f;
             bool parkingChanged = frame.ParkingBrake != lastSent.ParkingBrake;
@@ -382,6 +386,7 @@ namespace TwoBirds
             if (revision <= StateRevision) return;
             StateRevision = revision;
             occupants = (CartOccupant[])current.Clone();
+            BirdRegistry.Instance?.RememberCart(this);
             Recovery = recovery;
             if (recovery != CartRecovery.None) RecoveryOrigin = motion.LatestMotion.Position;
             foreach (var transition in transitions) PlayerSeating.Receive(transition, true);
@@ -502,6 +507,7 @@ namespace TwoBirds
         {
             if (hornCooldown > Time.unscaledTime) return;
             hornCooldown = Time.unscaledTime + 0.3f;
+            BirdRegistry.Instance?.Honk(this);
             PlayHorn();
             if (!IsServerInitialized) ServerHonk();
         }
@@ -537,6 +543,7 @@ namespace TwoBirds
 
         public override void OnStopNetwork()
         {
+            BirdRegistry.Instance?.ForgetCart(this);
             TimeManager.OnPrePhysicsSimulation -= BeforePhysics;
             TimeManager.OnPostPhysicsSimulation -= AfterPhysics;
             ServerManager.Objects.OnPreDestroyClientObjects -= Disconnect;

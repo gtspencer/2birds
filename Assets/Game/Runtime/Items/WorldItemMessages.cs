@@ -31,6 +31,7 @@ namespace TwoBirds
         public int Releaser;
         public uint Operation;
         public uint LaunchTick;
+        public uint BirdPlayer;
     }
 
     public struct ItemBaselineRequest : IBroadcast { public uint Session; }

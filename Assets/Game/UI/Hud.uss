@@ -241,3 +241,17 @@
     color: rgb(179, 195, 205);
     font-size: 13px;
 }
+
+.bird-rewards {
+    position: absolute;
+    top: 24px;
+    right: 28px;
+    align-items: flex-end;
+    color: white;
+    font-size: 20px;
+}
+
+#bird-reward {
+    font-size: 15px;
+    color: rgb(245, 215, 120);
+}

@@ -26,7 +26,7 @@ namespace TwoBirds
         {
             inputReader = GetComponent<PlayerInputReader>();
             presentation = GetComponent<PlayerPresentation>();
-            queryMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemHeld", "PlayerItemHitbox", "Player");
+            queryMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemHeld", "PlayerItemHitbox", "Player", "BirdBody", "BirdQuery");
             seatMask = LayerMask.GetMask("CartSeat");
         }
 

@@ -38,8 +38,8 @@ namespace TwoBirds
             Body.mass = settings.Mass;
             Body.centerOfMass = settings.CenterOfMass;
             Body.excludeLayers |= LayerMask.GetMask("Player", "PlayerItemHitbox", "CartSeat");
-            supportMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("GolfCart", "CartSeat", "Player", "PlayerItemHitbox", "ItemHeld", "ItemWorld");
-            clearanceMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("CartSeat", "ItemHeld", "PlayerItemHitbox");
+            supportMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("GolfCart", "CartSeat", "Player", "PlayerItemHitbox", "ItemHeld", "ItemWorld", "BirdBody", "BirdQuery");
+            clearanceMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("CartSeat", "ItemHeld", "PlayerItemHitbox", "BirdBody", "BirdQuery");
             heading = transform.eulerAngles.y;
             int steps = Mathf.FloorToInt(settings.RecoveryRadius / settings.RecoverySpacing);
             for (int x = -steps; x <= steps; x++)

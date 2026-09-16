@@ -58,7 +58,7 @@ namespace TwoBirds
             presentation = GetComponent<PlayerPresentation>();
             networkState = GetComponent<PlayerNetworkState>();
             capsule = GetComponent<CapsuleCollider>();
-            clearanceMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("CartSeat", "ItemHeld", "PlayerItemHitbox");
+            clearanceMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("CartSeat", "ItemHeld", "PlayerItemHitbox", "BirdBody", "BirdQuery");
             groundMask = clearanceMask & ~LayerMask.GetMask("Player", "GolfCart", "ItemWorld");
         }
 

@@ -19,7 +19,7 @@ namespace TwoBirds
     {
         public const int MultiplayerCapacity = 8;
         public const string GameId = "two-birds";
-        public const string Protocol = "eight-player-2";
+        public const string Protocol = "eight-player-birds-3";
         public static SessionController Instance { get; private set; }
         [SerializeField] private GameSettings settings;
         [SerializeField] private Multipass multipass;
@@ -52,7 +52,7 @@ namespace TwoBirds
         private Transport selectedTransport;
         private LocalConnectionState clientState = LocalConnectionState.Stopped;
         private float deadline;
-        private bool sceneLoading, gameStarting, worldReady, quitting;
+        private bool sceneLoading, gameStarting, worldReady, birdsReady, quitting;
         private int attempt, selectedIndex = -1;
         private uint wireSession;
         private ulong pendingInvite, joiningLobby;
@@ -123,7 +123,7 @@ namespace TwoBirds
             Roster = Array.Empty<LobbyMember>();
             LocalPlayer = null;
             localInput = null;
-            worldReady = gameStarting = PanelOpen = false;
+            worldReady = birdsReady = gameStarting = PanelOpen = false;
             ShareEndpoint = "";
             clientState = LocalConnectionState.Stopped;
             multipass.GlobalServerActions = false;
@@ -306,9 +306,16 @@ namespace TwoBirds
             TryEnterGame();
         }
 
+        internal void BirdsReady(uint session, uint epoch)
+        {
+            if (session != SessionId || epoch == 0 || Phase != SessionPhase.LoadingGame) return;
+            birdsReady = true;
+            TryEnterGame();
+        }
+
         private void TryEnterGame()
         {
-            if (Phase != SessionPhase.LoadingGame || !LocalPlayer || !worldReady) return;
+            if (Phase != SessionPhase.LoadingGame || !LocalPlayer || !worldReady || !birdsReady) return;
             SetPhase(SessionPhase.InGame, "");
             localInput.SetGameplay(!PanelOpen);
             Network.ClientManager.Broadcast(new SessionReady { Session = wireSession });
@@ -377,7 +384,7 @@ namespace TwoBirds
             int stoppingAttempt = ++attempt;
             joiningLobby = 0;
             SetPanel(true);
-            worldReady = false;
+            worldReady = birdsReady = false;
             SetPhase(SessionPhase.Stopping, message);
             UpdateLobby();
             Lobby.Leave();

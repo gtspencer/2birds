@@ -1,6 +1,10 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="Hud.uss" />
     <ui:VisualElement class="hud-root" picking-mode="Ignore">
+        <ui:VisualElement class="bird-rewards" picking-mode="Ignore">
+            <ui:Label name="bird-balance" text="0" picking-mode="Ignore" />
+            <ui:Label name="bird-reward" picking-mode="Ignore" />
+        </ui:VisualElement>
         <ui:VisualElement name="crosshair" class="crosshair" picking-mode="Ignore" />
         <ui:VisualElement name="charge-track" class="charge-track" picking-mode="Ignore">
             <ui:VisualElement name="charge-fill" class="charge-fill" picking-mode="Ignore" />

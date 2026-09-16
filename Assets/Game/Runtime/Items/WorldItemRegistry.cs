@@ -64,7 +64,7 @@ namespace TwoBirds
             network = GetComponent<NetworkManager>();
             WorldLayer = LayerMask.NameToLayer("ItemWorld");
             HeldLayer = LayerMask.NameToLayer("ItemHeld");
-            EnvironmentMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemWorld", "ItemHeld", "Player", "PlayerItemHitbox");
+            EnvironmentMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemWorld", "ItemHeld", "Player", "PlayerItemHitbox", "BirdBody", "BirdQuery");
         }
 
         private void Start()
@@ -234,6 +234,7 @@ namespace TwoBirds
         internal void RegisterPlayer(PlayerInventory player)
         {
             players[player.ObjectId] = player;
+            BirdRegistry.Instance?.RegisterPlayer(player);
             if (player.IsOwner) LocalInventory = player;
             else if (LocalInventory == player) LocalInventory = null;
             RefreshHolders();
@@ -241,6 +242,7 @@ namespace TwoBirds
 
         internal void UnregisterPlayer(PlayerInventory player)
         {
+            BirdRegistry.Instance?.UnregisterPlayer(player);
             cleanup.Clear();
             foreach (var record in records.Values)
                 if (record.State == WorldItemState.Held && record.Holder == player.ObjectId) cleanup.Add(record.Motion.Id);
@@ -377,6 +379,7 @@ namespace TwoBirds
         internal void SetHeld(uint id, PlayerInventory holder, bool equipped)
         {
             var record = records[id];
+            BirdRegistry.Instance?.CompleteRelease(record);
             record.Motion = items[id].Capture(ServerTick);
             record.Motion.Revision++;
             record.State = WorldItemState.Held;
@@ -385,6 +388,7 @@ namespace TwoBirds
             record.Sleeping = false;
             record.Operation = 0;
             record.Releaser = -1;
+            record.BirdPlayer = 0;
             records[id] = record;
             items[id].ApplyRecord(record);
             activePhysicsItems.Remove(id);
@@ -411,6 +415,7 @@ namespace TwoBirds
             record.Sleeping = false;
             record.Holder = -1;
             record.Releaser = player.ObjectId;
+            record.BirdPlayer = BirdRegistry.Instance ? BirdRegistry.Instance.PlayerToken(player.ObjectId) : 0;
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             pendingReleases[id] = operation;
@@ -424,6 +429,7 @@ namespace TwoBirds
         private void Release(uint id, uint operation, ItemMotion motion, int releaser)
         {
             var record = records[id];
+            BirdRegistry.Instance?.CompleteRelease(record);
             motion.Id = id;
             motion.Tick = ServerTick;
             motion.Revision = record.Motion.Revision + 1;
@@ -435,7 +441,9 @@ namespace TwoBirds
             record.Releaser = releaser;
             record.Operation = operation;
             record.LaunchTick = ServerTick;
+            record.BirdPlayer = BirdRegistry.Instance ? BirdRegistry.Instance.PlayerToken(releaser) : 0;
             records[id] = record;
+            BirdRegistry.Instance?.AcceptRelease(record);
             items[id].ApplyRecord(record);
             activePhysicsItems.Add(id);
             Publish(record);
@@ -452,6 +460,7 @@ namespace TwoBirds
         public void Remove(uint id)
         {
             if (!IsHost || !records.TryGetValue(id, out var record) || record.State == WorldItemState.Removed) return;
+            BirdRegistry.Instance?.CompleteRelease(record);
             record.State = WorldItemState.Removed;
             record.Motion.Revision++;
             record.Motion.Tick = ServerTick;
@@ -471,7 +480,7 @@ namespace TwoBirds
 
         private void AfterPhysics(float delta)
         {
-            if (!worldReady || Replaying || IsHost) return;
+            if (!worldReady || Replaying) return;
             foreach (var item in items.Values)
                 if (item != null && item.Definition != null && item.gameObject.activeSelf) item.AfterPhysics(delta);
         }
@@ -485,6 +494,7 @@ namespace TwoBirds
             {
                 if (item == null || item.Definition == null || !item.gameObject.activeSelf) continue;
                 item.Present();
+                item.SampleBirdContacts();
                 if (!IsHost) item.SamplePlayerContact(victim);
             }
         }

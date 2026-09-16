@@ -266,6 +266,9 @@ namespace TwoBirds
             {
                 var request = pending[i];
                 if (request.Operation > acknowledged) continue;
+                if (request.Kind == InventoryOperation.Release)
+                    foreach (uint id in request.Ids)
+                        BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, accepted || request.Operation != operation);
                 if (!accepted && request.Operation == operation && request.Ids != null)
                     foreach (uint id in request.Ids) registry.Rollback(id, request.Operation);
                 pending.RemoveAt(i);

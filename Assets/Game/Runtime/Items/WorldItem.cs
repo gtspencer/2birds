@@ -5,7 +5,7 @@ using UnityEngine;
 namespace TwoBirds
 {
     [RequireComponent(typeof(Rigidbody))]
-    public sealed class WorldItem : MonoBehaviour, IInteractable
+    public sealed partial class WorldItem : MonoBehaviour, IInteractable
     {
         private struct ContactSegment
         {
@@ -139,6 +139,8 @@ namespace TwoBirds
             InterruptUse();
             registry = owner;
             Definition = definition;
+            birdRegistry = BirdRegistry.Instance;
+            birdRock = birdRegistry && birdRegistry.IsRock(definition);
             ResetPresentation();
             Body.mass = definition.Mass;
             Body.linearDamping = definition.LinearDamping;
@@ -190,7 +192,7 @@ namespace TwoBirds
             if (!wasPredicted || record.Sleeping)
                 CorrectBody(record.Motion, wasPredicted || smoothCosmetic);
             cosmeticSpin = record.Sleeping ? Vector3.zero : record.Motion.AngularVelocity;
-            if (newRelease) rebaseContactPose = false;
+            if (newRelease) { rebaseContactPose = false; birdNewRelease = true; birdSuppressOverlap = false; }
             if (!Body.isKinematic && record.Sleeping) Body.Sleep();
             if (record.Sleeping) Predicted = false;
             if (!registry.IsHost && !Predicted)
@@ -252,6 +254,7 @@ namespace TwoBirds
         {
             CorrectBody(motion, false);
             rebaseContactPose = false;
+            birdNewRelease = true; birdSuppressOverlap = false;
         }
 
         internal void PresentHeld(PlayerInventory holder, bool equipped)
@@ -321,6 +324,7 @@ namespace TwoBirds
 
         private void CorrectBody(ItemMotion motion, bool smooth)
         {
+            ResetBirdContact(true);
             ResetIncomingMotion();
             rebaseContactPose = true;
             presentedMotionTick = previousMotionTick = motion.Tick;
@@ -538,6 +542,7 @@ namespace TwoBirds
 
         internal void BeforePhysics()
         {
+            BeforeBirdPhysics();
             UpdateIgnore();
             incomingSampled = ContactEligible && !Body.isKinematic && !Body.IsSleeping();
             incomingVelocity = incomingSampled ? Body.linearVelocity : Vector3.zero;
@@ -548,6 +553,7 @@ namespace TwoBirds
 
         internal void AfterPhysics(float seconds)
         {
+            AfterBirdPhysics(seconds);
             if (!physicsContactSampled) return;
             Vector3 end = BodySpherePosition;
             physicsSegments.Add(new ContactSegment { End = end, Velocity = (end - physicsStartSphere) / seconds,
@@ -697,6 +703,7 @@ namespace TwoBirds
 
         private void ResetContactState()
         {
+            ResetBirdContact();
             ResetContactSamples();
             releasePlayer = -1;
             releaseOperation = 0;
@@ -714,6 +721,7 @@ namespace TwoBirds
 
         private void OnCollisionEnter(Collision collision)
         {
+            BirdSceneryContact(collision);
             if (registry == null || !registry.IsHost || registry.Replaying || !ContactEligible || !incomingSampled) return;
             var contact = collision.GetContact(0);
             if (contact.thisCollider != impactSphere) return;

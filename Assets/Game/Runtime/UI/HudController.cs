@@ -38,12 +38,24 @@ namespace TwoBirds
         private ControlHint[] cartDriverHints;
         private ControlHint[] cartPassengerHints;
         private Label seatFeedback;
+        private Label birdBalance, birdReward;
+        private BirdRegistry birds;
+        private IVisualElementScheduledItem hideReward;
+        private int rewardTotal, rewardBonus;
 
         public bool InventoryOpen => inventoryOpen;
 
         private void OnEnable()
         {
             root = GetComponent<UIDocument>().rootVisualElement;
+            birdBalance = root.Q<Label>("bird-balance");
+            birdReward = root.Q<Label>("bird-reward");
+            birds = BirdRegistry.Instance;
+            if (birds)
+            {
+                birds.RewardChanged += BirdRewardChanged;
+                birdBalance.text = birds.LocalBalance.ToString();
+            }
             seatFeedback = root.Q<Label>("seat-feedback");
             hotbar = root.Q("hotbar");
             inventoryPanel = root.Q("inventory-panel");
@@ -388,8 +400,24 @@ namespace TwoBirds
             return def != null ? def.ItemName : $"Item {itemId}";
         }
 
+        private void BirdRewardChanged(BirdReward reward)
+        {
+            birdBalance.text = reward.Balance.ToString();
+            if (!reward.Notify)
+            {
+                hideReward?.Pause(); birdReward.text = ""; rewardTotal = rewardBonus = 0;
+                return;
+            }
+            rewardTotal += reward.Reward + reward.Bonus; rewardBonus += reward.Bonus;
+            birdReward.text = rewardBonus > 0 ? $"+{rewardTotal}  (+{rewardBonus} multi-kill bonus)" : $"+{rewardTotal}";
+            hideReward?.Pause();
+            hideReward = birdReward.schedule.Execute(() => { birdReward.text = ""; rewardTotal = rewardBonus = 0; }).StartingIn(2500);
+        }
+
         private void OnDisable()
         {
+            if (birds) birds.RewardChanged -= BirdRewardChanged;
+            hideReward?.Pause();
             HideCharge();
             interactionTooltip?.Dispose();
             controlsHint?.Dispose();

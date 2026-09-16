@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9631546041ae24b4ba3631d8aa3dc638, type: 3}
+  m_Name: BirdSettings
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.BirdSettings
+  LethalSpeed: 4
+  MultiKillBonus: 5
+  HornRadius: 20
+  BodyLifetime: 8
+  BodyShrinkSeconds: 1
+  BodyLimit: 32
+  ViewDistance: 150
+  AnimationDistance: 40
+  AudioDistance: 25
+  AnimatedLimit: 60
+  SoundLimit: 12
+  RetrySeconds: 2
+  GroundSlope: 35
+  GroundStep: 0.3
+  SolidMask:
+    serializedVersion: 2
+    m_Bits: 1
+  GroundMask:
+    serializedVersion: 2
+    m_Bits: 1
+  Animations:
+    Idle: 
+    Takeoff: 
+    Flight: 
+    Soar: 
+    Landing: 
+    GroundMove: 
+    Swim: 
+  Sounds:
+    Ambient: {fileID: 0}
+    Scare: {fileID: 0}
+    Wings: {fileID: 0}
+    Hit: {fileID: 0}
+  Rocks: []
