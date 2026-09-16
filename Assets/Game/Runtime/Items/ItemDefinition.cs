@@ -48,6 +48,8 @@ namespace TwoBirds
         [InspectorName("Impulse Multiplier"), Min(0f)] public float ImpulseMultiplier = 1f;
 
         [Header("Physics")]
+        [Tooltip("Synchronize airborne rotation. Disable only for orientation-independent colliders and hit volumes with a collider-free visual root.")]
+        public bool SyncRotation = true;
         [Tooltip("Launch speed (m/s) when the player drops (not throws) the item.")]
         [Min(0f)] public float DropSpeed = 1.5f;
         [Tooltip("How much of the player's velocity transfers to the item on release. 0 = none, 1 = full.")]

@@ -43,4 +43,24 @@ This produces a development build at `Builds/Windows/TwoBirds.exe`. `TWOBIRDS_BU
 
 See `Specs/Generated/NetworkedSceneMVPResults.md` for measured results, limitations, and outstanding manual checks. `Specs/Validation/run-pair.ps1` launches two standalone processes; the Python UDP proxy supplies reproducible delay, jitter, and packet loss. The scripted routes inject movement intent at the input boundary, so they exercise prediction and authority but do not replace physical keyboard/mouse/gamepad testing.
 
-Development-only command-line switches include `-mvpMode Solo|Host|Join`, `-mvpPort`, `-mvpIp`, `-mvpFps`, `-mvpRoute walk|collision|impulse|fall|idle`, `-mvpSeconds`, `-mvpCycles`, `-mvpDelay`, `-mvpCancelAfter`, `-mvpCancelPhase`, and `-mvpOutput`. The harness exits after its run and has a watchdog. `-mvpCapture path.png` captures rendered scene/UI textures even when the validation window is hidden; `-mvpPage host|join` submits the corresponding menu button before capture.
+Development-only command-line switches include `-mvpMode Solo|Host|Join`, `-mvpPlayers`, `-mvpPort`, `-mvpIp`, `-mvpFps`, `-mvpRoute walk|collision|impulse|fall|idle`, `-mvpSeconds`, `-mvpCycles`, `-mvpDelay`, `-mvpCancelAfter`, `-mvpCancelPhase`, and `-mvpOutput`. Automated Host/Join runs require `-localNetworking`. The automated host calls Start once the lobby roster reaches `-mvpPlayers` (including the host; default 1, maximum 8), within the runner's 45-second connection window. Interactive hosts still start manually. The harness exits after its run and has a watchdog. `-mvpCapture path.png` captures rendered scene/UI textures even when the validation window is hidden; `-mvpPage host|join` submits the corresponding menu button before capture.
+
+## Item motion format
+
+Protocol `eight-player-2` uses compact velocities only in unreliable `ItemMotionBatch` messages. Launch requests and reliable lifecycle/baseline records retain their existing format. Position stays at three floats and synchronized rotation uses FishNet's four-byte quaternion.
+
+Each sample has three packed unsigned integers (ID, revision, tick), totaling 3–15 bytes. The original serializer adds 40 bytes for position, rotation, and both velocities: 43–55 bytes per sample. The compact format adds one flag byte for omitted rotation and full-precision linear/angular fallback:
+
+| Sample | Bytes excluding the three packed integers | Saving |
+| --- | --- | --- |
+| Original | 40 | — |
+| Synchronized rotation, both velocities compact | 29 | 11 |
+| Cosmetic rotation, linear velocity compact | 19 | 21 |
+
+Each fallback vector adds six bytes. Each batch also contains a packed epoch (1–5 bytes) and a packed list count (one byte for the eight-item batches); broadcast and transport framing are separate. At 64 active items, 20 Hz, and seven guests, these encodings save approximately 0.79 or 1.51 Mbps of sample payload respectively when all samples fit.
+
+Velocity components use signed 16-bit values with 0.01 m/s or rad/s steps, rounded to nearest: at most 0.005 quantization error per component, apart from floating-point arithmetic. The range is -327.68 through 327.67. Any vector outside that range uses three original floats. Rock's configured linear cap is 50 m/s and its angular cap is at least 50 rad/s; fallback preserves larger values from other definitions or physics impulses without changing simulation limits.
+
+`ItemDefinition.SyncRotation` defaults to enabled. Disable it only for orientation-independent collision and hit volumes with a separate collider-free visual root. The existing Rock retains synchronization because its sphere center is offset from its root. Cosmetic rotation affects observer visuals; host physics, predicted thrower rotation, and reliable launch/settled orientations remain authoritative for their existing roles.
+
+Departure drops search within four metres of the departing player's pose using cached item bounds, swept paths, destination clearance, ground support, and cleanup bounds. If no nearby position fits, the same search uses the player's spawn area. Drops start at rest. Items blocked at both locations detach from the departing inventory and remain hidden until a one-second placement retry finds space; they remain part of the reliable world baseline. The returning player receives an empty inventory.

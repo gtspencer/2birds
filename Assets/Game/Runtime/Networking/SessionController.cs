@@ -19,7 +19,7 @@ namespace TwoBirds
     {
         public const int MultiplayerCapacity = 8;
         public const string GameId = "two-birds";
-        public const string Protocol = "eight-player-1";
+        public const string Protocol = "eight-player-2";
         public static SessionController Instance { get; private set; }
         [SerializeField] private GameSettings settings;
         [SerializeField] private Multipass multipass;
@@ -55,7 +55,7 @@ namespace TwoBirds
         private bool sceneLoading, gameStarting, worldReady, quitting;
         private int attempt, selectedIndex = -1;
         private uint wireSession;
-        private ulong pendingInvite;
+        private ulong pendingInvite, joiningLobby;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         internal Dictionary<int, (long sent, long received)> PayloadTraffic =>
             UsingLocal ? localTransport.Traffic : steamTransport.Traffic;
@@ -167,6 +167,8 @@ namespace TwoBirds
         public void JoinSteamLobby(ulong lobby)
         {
             if (LocalNetworking || lobby == 0) return;
+            if (pendingInvite == lobby || Phase != SessionPhase.Stopping && Phase != SessionPhase.Idle &&
+                (joiningLobby == lobby || Lobby && Lobby.CurrentLobby == lobby)) return;
             pendingInvite = lobby;
             if (Phase != SessionPhase.Idle) Leave();
         }
@@ -360,6 +362,7 @@ namespace TwoBirds
                 pendingInvite = 0;
                 if (BeginAttempt(SessionMode.Join))
                 {
+                    joiningLobby = invite;
                     SetPhase(SessionPhase.Connecting, "Joining Steam lobby…");
                     Lobby.Join(invite, attempt);
                 }
@@ -372,6 +375,7 @@ namespace TwoBirds
         {
             if (Phase is SessionPhase.Idle or SessionPhase.Stopping) return;
             int stoppingAttempt = ++attempt;
+            joiningLobby = 0;
             SetPanel(true);
             worldReady = false;
             SetPhase(SessionPhase.Stopping, message);
@@ -394,7 +398,7 @@ namespace TwoBirds
             yield return null;
             while (sceneLoading) yield return null;
             StopNetwork();
-            while (clientState != LocalConnectionState.Stopped || multipass.GetConnectionState(true, selectedIndex) != LocalConnectionState.Stopped || Lobby.HasPendingOperations)
+            while (clientState != LocalConnectionState.Stopped || multipass.GetConnectionState(true, selectedIndex) != LocalConnectionState.Stopped)
                 yield return null;
             yield return null;
             LocalPlayer = null;

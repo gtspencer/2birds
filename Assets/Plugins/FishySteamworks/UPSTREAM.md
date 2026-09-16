@@ -12,5 +12,8 @@ Local adaptations:
 - Connection timeout belongs to `SessionController`; the upstream timeout worker and `Thread.Abort` path are removed. Native shutdown runs through the Unity lifecycle instead of a finalizer.
 - Server stop closes remote connections and clears queued host packets. Incoming host packet arrays return to the pool after delivery.
 - Steam connection callbacks are scoped to the current client socket or server listener.
+- Rejected reliable sends close the affected connection; later sends cannot overtake a lost reliable packet. Unreliable congestion remains lossy.
+- Channel markers use the actual resized buffer and the segment end offset.
+- Failed accepts and terminal callbacks release native handles, including connections not yet registered with FishNet.
 
 Preserve these adaptations when updating the pin. `GameSteamTransport` supplies development payload accounting without changing FishNet's cart motion extension.

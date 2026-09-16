@@ -54,6 +54,12 @@ namespace TwoBirds
             session.SetFrameCap(Number("-mvpFps", 60));
             session.Changed += LogState;
             var mode = Enum.Parse<SessionMode>(Argument("-mvpMode"), true);
+            if (mode != SessionMode.Solo && !session.LocalNetworking)
+            {
+                Debug.LogError("Address-based MVP Host/Join runs require -localNetworking.");
+                Application.Quit(1);
+                yield break;
+            }
             for (int cycle = 0; cycle < Number("-mvpCycles", 1); cycle++)
             {
                 inputTick = 0;
@@ -64,6 +70,9 @@ namespace TwoBirds
                 {
                     if (cancelAfter >= 0 && Time.unscaledTime - started >= cancelAfter) session.Leave();
                     if (Argument("-mvpCancelPhase") == session.Phase.ToString()) session.Leave();
+                    if (mode == SessionMode.Host && session.CanStart &&
+                        session.Roster.Length >= Mathf.Clamp(Number("-mvpPlayers", 1), 1, SessionController.MultiplayerCapacity))
+                        session.StartGame();
                     yield return null;
                 }
                 if (session.Phase == SessionPhase.InGame)

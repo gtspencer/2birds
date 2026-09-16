@@ -71,6 +71,7 @@ namespace FishySteamworks.Server
         /// Next Id to use for a connection.
         /// </summary>
         private int _nextConnectionId;
+        private readonly HashSet<int> _closingConnections = new();
         /// <summary>
         /// Socket for the connection.
         /// </summary>
@@ -143,6 +144,7 @@ namespace FishySteamworks.Server
                 SetMaximumClients(maximumClients);
                 _nextConnectionId = 0;
                 _cachedConnectionIds.Clear();
+                _closingConnections.Clear();
                 _iteratingConnections = false;
 
                 base.SetLocalConnectionState(LocalConnectionState.Starting, true);
@@ -264,17 +266,23 @@ namespace FishySteamworks.Server
         /// <param name="socket"></param>
         private bool StopConnection(int connectionId, HSteamNetConnection socket)
         {
-#if UNITY_SERVER
-            SteamGameServerNetworkingSockets.CloseConnection(socket, 0, string.Empty, false);
-#else
-            SteamNetworkingSockets.CloseConnection(socket, 0, string.Empty, false);
-#endif
+            if (!_closingConnections.Add(connectionId)) return false;
+            CloseNativeConnection(socket);
             if (!_iteratingConnections)
                 RemoveConnection(connectionId);
             else
                 _pendingConnectionChanges.Add(new ConnectionChange(connectionId));
 
             return true;
+        }
+
+        private static void CloseNativeConnection(HSteamNetConnection socket)
+        {
+#if UNITY_SERVER
+            SteamGameServerNetworkingSockets.CloseConnection(socket, 0, string.Empty, false);
+#else
+            SteamNetworkingSockets.CloseConnection(socket, 0, string.Empty, false);
+#endif
         }
 
         /// <summary>
@@ -306,7 +314,10 @@ namespace FishySteamworks.Server
                 if (res == EResult.k_EResultOK)
                     base.Transport.NetworkManager.Log($"Accepting connection {clientSteamID}");
                 else
+                {
                     base.Transport.NetworkManager.Log($"Connection {clientSteamID} could not be accepted: {res.ToString()}");
+                    CloseNativeConnection(args.m_hConn);
+                }
             }
             else if (args.m_info.m_eState == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected)
             {
@@ -321,6 +332,17 @@ namespace FishySteamworks.Server
                 if (_steamConnections.TryGetValue(args.m_hConn, out int connId))
                 {
                     StopConnection(connId, args.m_hConn);
+                }
+                else
+                {
+                    CloseNativeConnection(args.m_hConn);
+                    for (int i = _pendingConnectionChanges.Count - 1; i >= 0; i--)
+                    {
+                        var change = _pendingConnectionChanges[i];
+                        if (!change.IsConnect || change.SteamConnection != args.m_hConn) continue;
+                        _cachedConnectionIds.Enqueue(change.ConnectionId);
+                        _pendingConnectionChanges.RemoveAt(i);
+                    }
                 }
             }
             else
@@ -345,6 +367,7 @@ namespace FishySteamworks.Server
         /// </summary>
         private void RemoveConnection(int connectionId)
         {
+            _closingConnections.Remove(connectionId);
             _steamConnections.Remove(connectionId);
             _steamIds.Remove(connectionId);
 
@@ -444,7 +467,7 @@ namespace FishySteamworks.Server
         /// </summary>
         internal void SendToClient(byte channelId, ArraySegment<byte> segment, int connectionId)
         {
-            if (base.GetLocalConnectionState() != LocalConnectionState.Started)
+            if (base.GetLocalConnectionState() != LocalConnectionState.Started || _closingConnections.Contains(connectionId))
                 return;
 
             //Check if sending local client first, send and exit if so.
@@ -463,7 +486,8 @@ namespace FishySteamworks.Server
             {
                 EResult res = base.Send(steamConn, segment, channelId);
 
-                if (res == EResult.k_EResultNoConnection || res == EResult.k_EResultInvalidParam)
+                if (res == EResult.k_EResultNoConnection || res == EResult.k_EResultInvalidParam ||
+                    channelId == (byte)Channel.Reliable && res != EResult.k_EResultOK)
                 {
                     base.Transport.NetworkManager.Log($"Connection to {connectionId} was lost.");
                     StopConnection(connectionId, steamConn);

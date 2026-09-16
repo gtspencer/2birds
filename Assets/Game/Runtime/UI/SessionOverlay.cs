@@ -12,6 +12,8 @@ namespace TwoBirds
         private VisualElement root;
         private Label sessionInfo;
         private InputAction pause;
+        private SessionMode displayedMode;
+        private int displayedCount = -1, displayedCapacity;
         private void OnEnable()
         {
             session = SessionController.Instance;
@@ -20,6 +22,7 @@ namespace TwoBirds
             hud = FindAnyObjectByType<HudController>();
             root = GetComponent<UIDocument>().rootVisualElement;
             sessionInfo = root.Q<Label>("session-info");
+            displayedCount = -1;
             root.Q<Button>("resume").clicked += Resume;
             root.Q<Button>("leave").clicked += Leave;
             root.Q<Button>("copy").clicked += Copy;
@@ -42,10 +45,21 @@ namespace TwoBirds
         private void Invite() => session.Lobby.InviteFriends();
         private void Update()
         {
-            if (sessionInfo != null) sessionInfo.text = $"{session.Mode} · {(spawner ? spawner.PlayerCount : 0)} / {session.Capacity} players";
+            RefreshSessionInfo();
+        }
+        private void RefreshSessionInfo()
+        {
+            if (sessionInfo == null || !session) return;
+            int count = spawner ? spawner.PlayerCount : 0;
+            if (displayedMode == session.Mode && displayedCount == count && displayedCapacity == session.Capacity) return;
+            displayedMode = session.Mode;
+            displayedCount = count;
+            displayedCapacity = session.Capacity;
+            sessionInfo.text = $"{displayedMode} · {displayedCount} / {displayedCapacity} players";
         }
         private void Render()
         {
+            RefreshSessionInfo();
             bool visible = session.PanelOpen || session.Phase != SessionPhase.InGame;
             root.Q("session-panel").style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             root.Q<Button>("resume").SetEnabled(session.Phase == SessionPhase.InGame);

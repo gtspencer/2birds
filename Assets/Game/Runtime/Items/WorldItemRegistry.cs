@@ -32,6 +32,10 @@ namespace TwoBirds
         private readonly List<uint> cleanup = new();
         private readonly List<ItemMotion> motionBatch = new(BatchSize);
         private readonly List<ItemRecord> lifecycleBatch = new(BatchSize);
+        private readonly List<(uint Id, Vector3 Origin, Vector3 Fallback, Quaternion Facing, int Retries)> departureDrops = new();
+        private readonly List<(Vector3 Position, float Radius)> placedDrops = new();
+        private readonly Collider[] dropOverlaps = new Collider[32];
+        private float nextDepartureDrop;
         private NetworkManager network;
         private PredictionManager predictionManager;
         private uint epoch;
@@ -208,6 +212,11 @@ namespace TwoBirds
                 return;
             }
             if (record.State != WorldItemState.World || !Newer(motion, record.Motion)) return;
+            if (motion.RotationOmitted)
+            {
+                motion.Rotation = record.Motion.Rotation;
+                motion.AngularVelocity = record.Motion.AngularVelocity;
+            }
             record.Motion = motion;
             record.Sleeping = false;
             records[motion.Id] = record;
@@ -253,25 +262,109 @@ namespace TwoBirds
                 var seating = player.GetComponent<PlayerSeating>();
                 var pose = seating.Seated ? seating.Cart.GetSeat(seating.SeatIndex).Rider : player.transform;
                 Vector3 origin = pose.position;
-                Vector3 velocity = seating.PointVelocity;
                 cleanup.Clear();
-                float spacing = 0.24f;
                 foreach (var record in records.Values)
                 {
                     if (record.State != WorldItemState.Held || record.Holder != player.ObjectId) continue;
                     cleanup.Add(record.Motion.Id);
-                    spacing = Mathf.Max(spacing, items[record.Motion.Id].DropDiameter + 0.05f);
                 }
-                int width = Mathf.CeilToInt(Mathf.Sqrt(cleanup.Count));
-                for (int i = 0; i < cleanup.Count; i++)
+                Vector3 fallback = player.GetComponent<PlayerMotor>().SpawnPoint;
+                Quaternion facing = Quaternion.Euler(0f, pose.eulerAngles.y, 0f);
+                foreach (uint id in cleanup)
                 {
-                    uint id = cleanup[i];
-                    Vector3 offset = new((i % width - (width - 1) * 0.5f) * spacing,
-                        1f + i / width * spacing, 1.5f);
-                    Release(id, 0, new ItemMotion { Position = origin + Quaternion.Euler(0f, pose.eulerAngles.y, 0f) * offset,
-                        Rotation = items[id].Body.rotation, Velocity = velocity }, player);
+                    var record = records[id];
+                    record.Motion = items[id].Capture(ServerTick);
+                    record.Motion.Revision++;
+                    record.State = WorldItemState.World;
+                    record.Holder = -1;
+                    record.Equipped = false;
+                    record.Sleeping = false;
+                    records[id] = record;
+                    items[id].ApplyRecord(record);
+                    Publish(record);
+                    departureDrops.Add((id, origin + Vector3.up, fallback + Vector3.up, facing, 0));
                 }
             }
+            PlaceDepartureDrops();
+        }
+
+        private void PlaceDepartureDrops()
+        {
+            nextDepartureDrop = Time.unscaledTime + 1f;
+            placedDrops.Clear();
+            for (int i = departureDrops.Count - 1; i >= 0; i--)
+            {
+                var drop = departureDrops[i];
+                var item = items[drop.Id];
+                float radius = Mathf.Max(0.05f, item.DropDiameter * 0.5f) + 0.025f;
+                if (!FindDropPosition(drop.Origin, drop.Facing, radius, out Vector3 position) &&
+                    !FindDropPosition(drop.Fallback, drop.Facing, radius, out position))
+                {
+                    if (drop.Retries < 5)
+                    {
+                        departureDrops[i] = (drop.Id, drop.Origin, drop.Fallback, drop.Facing, drop.Retries + 1);
+                        continue;
+                    }
+                    position = item.Record.Motion.Position;
+                }
+                placedDrops.Add((position, radius));
+                Release(drop.Id, 0, new ItemMotion { Position = position, Rotation = item.Record.Motion.Rotation }, -1);
+                departureDrops.RemoveAt(i);
+            }
+        }
+
+        private bool FindDropPosition(Vector3 origin, Quaternion facing, float radius, out Vector3 position)
+        {
+            position = default;
+            if (!InsideDropBounds(origin, radius) || Physics.CheckSphere(origin, radius, EnvironmentMask, QueryTriggerInteraction.Ignore))
+                return false;
+            float spacing = radius * 2f + 0.05f;
+            int rings = Mathf.CeilToInt(4f / spacing);
+            for (int ring = 0; ring <= rings; ring++)
+            {
+                int count = Mathf.Max(1, Mathf.CeilToInt(2f * Mathf.PI * ring));
+                for (int step = 0; step < count; step++)
+                {
+                    float angle = step * 2f * Mathf.PI / count;
+                    Vector3 candidate = origin + facing * new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (ring * spacing);
+                    if (!InsideDropBounds(candidate, radius)) continue;
+                    Vector3 travel = candidate - origin;
+                    if (travel.sqrMagnitude > 0f && Physics.SphereCast(origin, radius, travel.normalized, out _, travel.magnitude,
+                            EnvironmentMask, QueryTriggerInteraction.Ignore)) continue;
+                    if (!Physics.SphereCast(candidate, radius, Vector3.down, out var ground, 4f,
+                            EnvironmentMask, QueryTriggerInteraction.Ignore) || ground.normal.y < 0.5f) continue;
+                    Vector3 landing = candidate + Vector3.down * ground.distance;
+                    if (!InsideDropBounds(landing, radius)) continue;
+                    bool blocked = false;
+                    int fallOverlaps = Physics.OverlapCapsuleNonAlloc(candidate, landing, radius, dropOverlaps,
+                        EnvironmentMask, QueryTriggerInteraction.Collide);
+                    if (fallOverlaps == dropOverlaps.Length) continue;
+                    for (int index = 0; index < fallOverlaps; index++)
+                        if (dropOverlaps[index].GetComponent<ItemKillVolume>()) { blocked = true; break; }
+                    if (blocked) continue;
+                    foreach (var placed in placedDrops)
+                        if ((candidate - placed.Position).sqrMagnitude < (radius + placed.Radius) * (radius + placed.Radius))
+                        { blocked = true; break; }
+                    if (blocked) continue;
+                    int overlaps = Physics.OverlapSphereNonAlloc(candidate, radius, dropOverlaps,
+                        EnvironmentMask | (1 << WorldLayer), QueryTriggerInteraction.Collide);
+                    if (overlaps == dropOverlaps.Length) continue;
+                    for (int index = 0; index < overlaps; index++)
+                        if (!dropOverlaps[index].isTrigger || dropOverlaps[index].GetComponent<ItemKillVolume>())
+                        { blocked = true; break; }
+                    if (blocked) continue;
+                    position = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool InsideDropBounds(Vector3 position, float radius)
+        {
+            Vector3 margin = Vector3.one * radius;
+            return Finite(position) && position.y - radius > settings.FallBoundary &&
+                worldBounds.Contains(position - margin) && worldBounds.Contains(position + margin);
         }
 
         public void RefreshHolders()
@@ -326,6 +419,9 @@ namespace TwoBirds
         }
 
         internal void Release(uint id, uint operation, ItemMotion motion, PlayerInventory player)
+            => Release(id, operation, motion, player.ObjectId);
+
+        private void Release(uint id, uint operation, ItemMotion motion, int releaser)
         {
             var record = records[id];
             motion.Id = id;
@@ -336,7 +432,7 @@ namespace TwoBirds
             record.Holder = -1;
             record.Equipped = false;
             record.Sleeping = false;
-            record.Releaser = player.ObjectId;
+            record.Releaser = releaser;
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             records[id] = record;
@@ -396,6 +492,7 @@ namespace TwoBirds
         private void AfterTick()
         {
             if (!worldReady || Replaying) return;
+            if (IsHost && departureDrops.Count > 0 && Time.unscaledTime >= nextDepartureDrop) PlaceDepartureDrops();
             cleanup.Clear();
             foreach (var item in items.Values)
             {
@@ -435,7 +532,10 @@ namespace TwoBirds
             if (!IsHost || ServerTick % (uint)Mathf.Max(1, Mathf.RoundToInt((float)(1d / TickDelta) / snapshotRate)) != 0) return;
             foreach (uint id in activePhysicsItems)
             {
-                motionBatch.Add(items[id].Capture(ServerTick));
+                var item = items[id];
+                var motion = item.Capture(ServerTick);
+                motion.RotationOmitted = !item.Definition.SyncRotation;
+                motionBatch.Add(motion);
                 if (motionBatch.Count == BatchSize) FlushMotion();
             }
             FlushMotion();
@@ -511,6 +611,8 @@ namespace TwoBirds
             motionBatch.Clear();
             lifecycleBatch.Clear();
             LocalInventory = null;
+            departureDrops.Clear();
+            placedDrops.Clear();
             epoch = 0;
             sessionId = 0;
         }

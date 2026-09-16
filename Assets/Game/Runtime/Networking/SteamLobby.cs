@@ -9,11 +9,12 @@ namespace TwoBirds
     {
         public readonly List<(ulong Id, string Name)> Friends = new();
         public bool HasLobby => lobby.IsValid();
-        internal bool HasPendingOperations => pending.Count > 0;
+        internal ulong CurrentLobby => lobby.m_SteamID;
         public bool Available => steam && steam.Ready;
         public string FriendsStatus { get; private set; } = "Refresh to find friends playing Two Birds.";
         public event Action Changed;
         private readonly List<IDisposable> pending = new();
+        private readonly Dictionary<ulong, int> joining = new();
         private readonly Dictionary<ulong, string> candidates = new();
         private SteamLifetime steam;
         private SessionController session;
@@ -46,7 +47,8 @@ namespace TwoBirds
                 var created = new CSteamID(result.m_ulSteamIDLobby);
                 if (!session.IsAttempt(attempt))
                 {
-                    if (!failed && result.m_eResult == EResult.k_EResultOK && created != lobby) SteamMatchmaking.LeaveLobby(created);
+                    if (!failed && result.m_eResult == EResult.k_EResultOK && created != lobby && !joining.ContainsKey(created.m_SteamID))
+                        SteamMatchmaking.LeaveLobby(created);
                     return;
                 }
                 if (failed || result.m_eResult != EResult.k_EResultOK)
@@ -74,14 +76,19 @@ namespace TwoBirds
 
         internal void Join(ulong id, int attempt)
         {
+            bool alreadyPending = joining.ContainsKey(id);
+            joining[id] = attempt;
+            if (alreadyPending) return;
             CallResult<LobbyEnter_t> call = null;
             call = CallResult<LobbyEnter_t>.Create((result, failed) =>
             {
                 pending.Remove(call);
                 call.Dispose();
+                int currentAttempt = joining[id];
+                joining.Remove(id);
                 var entered = new CSteamID(result.m_ulSteamIDLobby);
                 bool success = !failed && result.m_EChatRoomEnterResponse == (uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess;
-                if (!session.IsAttempt(attempt))
+                if (!session.IsAttempt(currentAttempt))
                 {
                     if (success && entered != lobby) SteamMatchmaking.LeaveLobby(entered);
                     return;
@@ -101,13 +108,14 @@ namespace TwoBirds
                 lobby = entered;
                 string error = ConnectionError(lobby, out originalHost);
                 if (error != null) { session.Leave(error); return; }
-                session.SteamJoined(attempt, originalHost);
+                session.SteamJoined(currentAttempt, originalHost);
                 Changed?.Invoke();
             });
             pending.Add(call);
             var handle = SteamMatchmaking.JoinLobby(new CSteamID(id));
             if (handle == SteamAPICall_t.Invalid)
             {
+                joining.Remove(id);
                 pending.Remove(call);
                 call.Dispose();
                 session.Leave("Steam could not submit the lobby join request.");
@@ -216,6 +224,7 @@ namespace TwoBirds
             data?.Dispose();
             foreach (var call in pending) call.Dispose();
             pending.Clear();
+            joining.Clear();
         }
 
         private void OnDestroy() => Shutdown();

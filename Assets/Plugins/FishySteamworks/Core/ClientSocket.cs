@@ -155,7 +155,8 @@ namespace FishySteamworks.Client
                 return;
 
             EResult res = base.Send(_socket, segment, channelId);
-            if (res == EResult.k_EResultNoConnection || res == EResult.k_EResultInvalidParam)
+            if (res == EResult.k_EResultNoConnection || res == EResult.k_EResultInvalidParam ||
+                channelId == (byte)Channel.Reliable && res != EResult.k_EResultOK)
             {
                 base.Transport.NetworkManager.Log($"Connection to server was lost.");
                 StopConnection();

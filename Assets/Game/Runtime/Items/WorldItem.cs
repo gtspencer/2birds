@@ -31,6 +31,7 @@ namespace TwoBirds
         private uint historyStart;
         private Vector3 visualOffset;
         private Quaternion visualRotation = Quaternion.identity;
+        private Vector3 cosmeticSpin;
         private float correctionRemaining;
         private Vector3 prefabScale;
         private bool optimisticPickup;
@@ -156,12 +157,16 @@ namespace TwoBirds
         internal void ApplyRecord(ItemRecord record)
         {
             bool wasPredicted = Predicted;
+            bool smoothCosmetic = !Definition.SyncRotation && !registry.IsHost &&
+                Record.State == WorldItemState.World && sampleCount > 0;
             bool newRelease = record.State == WorldItemState.World &&
                 (Record.State != WorldItemState.World || record.Releaser != releasePlayer || record.Operation != releaseOperation);
             SetRecord(record);
             optimisticPickup = false;
             if (record.State == WorldItemState.Held)
             {
+                cosmeticSpin = Vector3.zero;
+                ClearVisualOffset();
                 ClearIgnore();
                 Predicted = false;
                 StopBody();
@@ -183,7 +188,8 @@ namespace TwoBirds
             Body.isKinematic = !(registry.IsHost || Predicted) || record.Sleeping && !registry.IsHost;
             Body.collisionDetectionMode = Body.isKinematic ? CollisionDetectionMode.Discrete : Definition.CollisionDetection;
             if (!wasPredicted || record.Sleeping)
-                CorrectBody(record.Motion, wasPredicted);
+                CorrectBody(record.Motion, wasPredicted || smoothCosmetic);
+            cosmeticSpin = record.Sleeping ? Vector3.zero : record.Motion.AngularVelocity;
             if (newRelease) rebaseContactPose = false;
             if (!Body.isKinematic && record.Sleeping) Body.Sleep();
             if (record.Sleeping) Predicted = false;
@@ -286,6 +292,11 @@ namespace TwoBirds
 
         internal void ReceiveMotion(ItemMotion motion)
         {
+            if (motion.RotationOmitted)
+            {
+                motion.Rotation = Record.Motion.Rotation;
+                motion.AngularVelocity = Record.Motion.AngularVelocity;
+            }
             var record = Record;
             record.Motion = motion;
             record.Sleeping = false;
@@ -316,12 +327,12 @@ namespace TwoBirds
             Vector3 visiblePosition = visualRoot.position;
             Quaternion visibleRotation = visualRoot.rotation;
             Body.position = motion.Position;
-            Body.rotation = motion.Rotation;
-            transform.SetPositionAndRotation(motion.Position, motion.Rotation);
+            if (!motion.RotationOmitted) Body.rotation = motion.Rotation;
+            transform.SetPositionAndRotation(motion.Position, Body.rotation);
             if (!Body.isKinematic)
             {
                 Body.linearVelocity = motion.Velocity;
-                Body.angularVelocity = motion.AngularVelocity;
+                if (!motion.RotationOmitted) Body.angularVelocity = motion.AngularVelocity;
             }
             if (smooth)
             {
@@ -333,7 +344,7 @@ namespace TwoBirds
             else ClearVisualOffset();
             if (hasContactPose)
             {
-                previousSphere = visualRoot.TransformPoint(sphereCenter);
+                previousSphere = PresentedSpherePosition;
                 previousCorrectionOffset = previousSphere - BodySpherePosition;
             }
         }
@@ -359,8 +370,8 @@ namespace TwoBirds
                 presentedMotionTick = System.Math.Max(presentedMotionTick, System.Math.Max(samples[0].Tick, tick));
                 ItemMotion motion = PresentedMotionAt(presentedMotionTick, out _);
                 Body.position = motion.Position;
-                Body.rotation = motion.Rotation;
-                transform.SetPositionAndRotation(motion.Position, motion.Rotation);
+                if (!motion.RotationOmitted) Body.rotation = motion.Rotation;
+                transform.SetPositionAndRotation(motion.Position, Body.rotation);
             }
             if (correctionRemaining > 0f)
             {
@@ -368,6 +379,21 @@ namespace TwoBirds
                 float remaining = correctionRemaining / registry.CorrectionDuration;
                 visualRoot.localPosition = visualOffset * remaining;
                 visualRoot.localRotation = Quaternion.Slerp(Quaternion.identity, visualRotation, remaining);
+            }
+            if (!Definition.SyncRotation && !registry.IsHost && !Predicted && !Record.Sleeping && sampleCount > 0)
+            {
+                var latest = samples[sampleCount - 1];
+                float radius = Mathf.Max(sphereRadius, DropDiameter * 0.25f);
+                if (Physics.Raycast(BodySpherePosition, Vector3.down, out var ground, radius + 0.05f,
+                        registry.EnvironmentMask, QueryTriggerInteraction.Ignore))
+                {
+                    Vector3 rolling = Vector3.Cross(ground.normal, latest.Velocity) / radius;
+                    cosmeticSpin = Vector3.Lerp(cosmeticSpin, rolling, 1f - Mathf.Exp(-12f * Time.deltaTime));
+                }
+                else cosmeticSpin *= Mathf.Exp(-Definition.AngularDamping * Time.deltaTime);
+                float speed = cosmeticSpin.magnitude;
+                if (speed > 0f)
+                    visualRoot.rotation = Quaternion.AngleAxis(speed * Mathf.Rad2Deg * Time.deltaTime, cosmeticSpin / speed) * visualRoot.rotation;
             }
         }
 
@@ -382,7 +408,7 @@ namespace TwoBirds
             }
             float amount = to.Tick == from.Tick ? 1f : Mathf.Clamp01((float)((tick - from.Tick) / (to.Tick - from.Tick)));
             var motion = new ItemMotion { Position = Vector3.Lerp(from.Position, to.Position, amount),
-                Rotation = Quaternion.Slerp(from.Rotation, to.Rotation, amount) };
+                Rotation = Quaternion.Slerp(from.Rotation, to.Rotation, amount), RotationOmitted = to.RotationOmitted };
             velocity = to.Tick > from.Tick && tick >= from.Tick
                 ? (to.Position - from.Position) / (float)((to.Tick - from.Tick) * registry.TickDelta) : Vector3.zero;
             ItemMotion latest = samples[sampleCount - 1];
@@ -477,6 +503,7 @@ namespace TwoBirds
             sampleReceivedAt = 0f;
             localLaunchTick = historyStart = 0;
             optimisticPickup = false;
+            cosmeticSpin = Vector3.zero;
         }
 
         internal void ReturnToPool()
@@ -501,6 +528,8 @@ namespace TwoBirds
         }
 
         private Vector3 BodySpherePosition => Body.position + Body.rotation * bodySphereCenter;
+        private Vector3 PresentedSpherePosition => Definition.SyncRotation ? visualRoot.TransformPoint(sphereCenter) :
+            BodySpherePosition + visualRoot.position - transform.position;
 
         private bool ContactEligible => impactSphere != null && impactSphere.enabled && !impactSphere.isTrigger &&
             Definition.ImpulseMultiplier > 0f &&
@@ -544,7 +573,7 @@ namespace TwoBirds
                 contactReset = player.Motor.ResetRevision;
                 rebaseContactPose = rebase;
             }
-            Vector3 sphere = visualRoot.TransformPoint(sphereCenter);
+            Vector3 sphere = PresentedSpherePosition;
             Vector3 correctionOffset = sphere - BodySpherePosition;
             Vector3 correctionDelta = correctionOffset - previousCorrectionOffset;
             Vector3 from = previousSphere + correctionDelta;
