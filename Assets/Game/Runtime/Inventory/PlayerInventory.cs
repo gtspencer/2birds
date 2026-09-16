@@ -71,8 +71,10 @@ namespace TwoBirds
             registry.RegisterPlayer(this);
         }
 
-        public override void OnSpawnServer(NetworkConnection connection) =>
-            TargetInventory(connection, serverRevision, lastOperation, serverSlots, serverSelection);
+        public override void OnSpawnServer(NetworkConnection connection)
+        {
+            if (connection == Owner) ReplyInventory(true, 0);
+        }
 
         public override void OnOwnershipClient(NetworkConnection previousOwner) => registry.RegisterPlayer(this);
 
@@ -182,15 +184,14 @@ namespace TwoBirds
         {
             if (request.Operation <= lastOperation)
             {
-                TargetInventory(Owner, serverRevision, lastOperation, serverSlots, serverSelection);
+                ReplyInventory(true, 0);
                 return;
             }
             bool accepted = Commit(request);
             lastOperation = request.Operation;
             serverRevision++;
             registry.UpdateEquipment(this, EquippedId(serverSlots, serverSelection));
-            if (IsOwner) AcceptInventory(serverRevision, lastOperation, serverSlots, serverSelection, accepted, request.Operation);
-            ObserversInventory(serverRevision, lastOperation, serverSlots, serverSelection, accepted, request.Operation);
+            ReplyInventory(accepted, request.Operation);
         }
 
         private bool Commit(InventoryRequest request)
@@ -243,16 +244,16 @@ namespace TwoBirds
             float.IsFinite(motion.Rotation.x) && float.IsFinite(motion.Rotation.y) && float.IsFinite(motion.Rotation.z) &&
             float.IsFinite(motion.Rotation.w) && Quaternion.Dot(motion.Rotation, motion.Rotation) > 0.5f;
 
-        [ObserversRpc]
-        private void ObserversInventory(uint revision, uint acknowledged, ItemStack[] slots, sbyte selected, bool accepted, uint operation)
+        private void ReplyInventory(bool accepted, uint operation)
         {
-            if (!IsServerInitialized) AcceptInventory(revision, acknowledged, slots, selected, accepted, operation);
+            if (IsOwner) AcceptInventory(serverRevision, lastOperation, serverSlots, serverSelection, accepted, operation);
+            else if (Owner.IsActive) TargetInventory(Owner, serverRevision, lastOperation, serverSlots, serverSelection, accepted, operation);
         }
 
         [TargetRpc]
-        private void TargetInventory(NetworkConnection target, uint revision, uint acknowledged, ItemStack[] slots, sbyte selected)
+        private void TargetInventory(NetworkConnection target, uint revision, uint acknowledged, ItemStack[] slots, sbyte selected, bool accepted, uint operation)
         {
-            if (!IsServerInitialized) AcceptInventory(revision, acknowledged, slots, selected, true, 0);
+            if (!IsServerInitialized) AcceptInventory(revision, acknowledged, slots, selected, accepted, operation);
         }
 
         private void AcceptInventory(uint revision, uint acknowledged, ItemStack[] slots, sbyte selected, bool accepted, uint operation)
@@ -314,7 +315,7 @@ namespace TwoBirds
                 serverSelection = -1;
                 serverRevision++;
                 registry.UpdateEquipment(this, 0);
-                ObserversInventory(serverRevision, lastOperation, serverSlots, serverSelection, true, 0);
+                ReplyInventory(true, 0);
             }
             foreach (var request in pending)
                 if (request.Kind == InventoryOperation.Release && request.SeatingRevision != seating.Revision)

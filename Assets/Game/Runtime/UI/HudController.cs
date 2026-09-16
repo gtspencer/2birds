@@ -36,12 +36,14 @@ namespace TwoBirds
         private PlayerInputReader inputReader;
         private PlayerSeating seating;
         private ControlHint[] cartDriverHints;
+        private Label seatFeedback;
 
         public bool InventoryOpen => inventoryOpen;
 
         private void OnEnable()
         {
             root = GetComponent<UIDocument>().rootVisualElement;
+            seatFeedback = root.Q<Label>("seat-feedback");
             hotbar = root.Q("hotbar");
             inventoryPanel = root.Q("inventory-panel");
             inventoryGrid = root.Q("inventory-grid");
@@ -238,7 +240,7 @@ namespace TwoBirds
 
         private void LateUpdate()
         {
-            glyphs.Update();
+            seatFeedback.text = seating ? seating.RequestFeedback : "";
             var session = SessionController.Instance;
             if (session == null || session.Phase != SessionPhase.InGame || session.PanelOpen ||
                 session.LocalPlayer == null || inventory == null || !inventory.IsOwner ||

@@ -35,6 +35,7 @@ namespace TwoBirds
         private NetworkManager network;
         private PredictionManager predictionManager;
         private uint epoch;
+        private uint sessionId;
         private bool worldReady;
         private Scene worldScene;
 
@@ -67,9 +68,11 @@ namespace TwoBirds
             predictionManager = GetComponent<PredictionManager>();
             network.ServerManager.RegisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ClientManager.RegisterBroadcast<ItemBaselineStart>(BeginBaseline);
+            network.ClientManager.RegisterBroadcast<ItemBaselineComplete>(CompleteBaseline);
             network.ClientManager.RegisterBroadcast<ItemLifecycleBatch>(ReceiveLifecycle);
             network.ClientManager.RegisterBroadcast<ItemMotionBatch>(ReceiveMotion);
             network.ServerManager.OnRemoteConnectionState += ConnectionChanged;
+            network.ServerManager.Objects.OnPreDestroyClientObjects += DropDepartingItems;
             network.TimeManager.OnPrePhysicsSimulation += BeforePhysics;
             network.TimeManager.OnPostPhysicsSimulation += AfterPhysics;
             network.TimeManager.OnPostTick += AfterTick;
@@ -78,6 +81,7 @@ namespace TwoBirds
         public void BeginWorld(Scene scene)
         {
             worldScene = scene;
+            sessionId = SessionController.Instance.SessionId;
             epoch = (uint)Random.Range(1, int.MaxValue);
             worldReady = true;
             foreach (var seed in FindObjectsByType<BakedPickup>(FindObjectsSortMode.None))
@@ -102,12 +106,14 @@ namespace TwoBirds
                 item.Initialize(this, itemRegistry.Get(record.DefinitionId), record, false);
                 activePhysicsItems.Add(record.Motion.Id);
             }
+            SessionController.Instance.WorldReady(sessionId, epoch);
         }
 
         public void JoinWorld(Scene scene)
         {
             if (IsHost) return;
             worldScene = scene;
+            sessionId = SessionController.Instance.SessionId;
             worldReady = true;
             foreach (var seed in FindObjectsByType<BakedPickup>(FindObjectsSortMode.None))
             {
@@ -116,14 +122,14 @@ namespace TwoBirds
                     items.Add(seed.BakedId, seed.GetComponent<WorldItem>());
                 seed.gameObject.SetActive(false);
             }
-            network.ClientManager.Broadcast(new ItemBaselineRequest());
+            network.ClientManager.Broadcast(new ItemBaselineRequest { Session = sessionId });
         }
 
         private void SendBaseline(NetworkConnection connection, ItemBaselineRequest request, Channel channel)
         {
             if (!worldReady) return;
             observers.Add(connection);
-            network.ServerManager.Broadcast(connection, new ItemBaselineStart { Epoch = epoch });
+            network.ServerManager.Broadcast(connection, new ItemBaselineStart { Session = request.Session, Epoch = epoch });
             lifecycleBatch.Clear();
             foreach (var saved in records.Values)
             {
@@ -137,12 +143,19 @@ namespace TwoBirds
                 if (lifecycleBatch.Count == BatchSize) FlushLifecycle(connection);
             }
             FlushLifecycle(connection);
+            network.ServerManager.Broadcast(connection, new ItemBaselineComplete { Session = request.Session, Epoch = epoch });
         }
 
         private void BeginBaseline(ItemBaselineStart message, Channel channel)
         {
-            if (IsHost || !worldReady) return;
+            if (IsHost || !worldReady || message.Session != sessionId || sessionId != SessionController.Instance.SessionId) return;
             epoch = message.Epoch;
+        }
+
+        private void CompleteBaseline(ItemBaselineComplete message, Channel channel)
+        {
+            if (IsHost || !worldReady || message.Session != sessionId || message.Epoch != epoch || epoch == 0) return;
+            SessionController.Instance.WorldReady(sessionId, epoch);
         }
 
         private void ReceiveLifecycle(ItemLifecycleBatch message, Channel channel)
@@ -229,6 +242,36 @@ namespace TwoBirds
             }
             players.Remove(player.ObjectId);
             if (LocalInventory == player) LocalInventory = null;
+        }
+
+        private void DropDepartingItems(NetworkConnection connection)
+        {
+            if (!worldReady || !IsHost || SessionController.Instance.Phase == SessionPhase.Stopping) return;
+            foreach (var player in players.Values)
+            {
+                if (!player || player.Owner != connection) continue;
+                var seating = player.GetComponent<PlayerSeating>();
+                var pose = seating.Seated ? seating.Cart.GetSeat(seating.SeatIndex).Rider : player.transform;
+                Vector3 origin = pose.position;
+                Vector3 velocity = seating.PointVelocity;
+                cleanup.Clear();
+                float spacing = 0.24f;
+                foreach (var record in records.Values)
+                {
+                    if (record.State != WorldItemState.Held || record.Holder != player.ObjectId) continue;
+                    cleanup.Add(record.Motion.Id);
+                    spacing = Mathf.Max(spacing, items[record.Motion.Id].DropDiameter + 0.05f);
+                }
+                int width = Mathf.CeilToInt(Mathf.Sqrt(cleanup.Count));
+                for (int i = 0; i < cleanup.Count; i++)
+                {
+                    uint id = cleanup[i];
+                    Vector3 offset = new((i % width - (width - 1) * 0.5f) * spacing,
+                        1f + i / width * spacing, 1.5f);
+                    Release(id, 0, new ItemMotion { Position = origin + Quaternion.Euler(0f, pose.eulerAngles.y, 0f) * offset,
+                        Rotation = items[id].Body.rotation, Velocity = velocity }, player);
+                }
+            }
         }
 
         public void RefreshHolders()
@@ -469,6 +512,7 @@ namespace TwoBirds
             lifecycleBatch.Clear();
             LocalInventory = null;
             epoch = 0;
+            sessionId = 0;
         }
 
         internal static bool Finite(Vector3 value) => float.IsFinite(value.x) && float.IsFinite(value.y) && float.IsFinite(value.z);
@@ -477,9 +521,11 @@ namespace TwoBirds
         {
             network.ServerManager.UnregisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ClientManager.UnregisterBroadcast<ItemBaselineStart>(BeginBaseline);
+            network.ClientManager.UnregisterBroadcast<ItemBaselineComplete>(CompleteBaseline);
             network.ClientManager.UnregisterBroadcast<ItemLifecycleBatch>(ReceiveLifecycle);
             network.ClientManager.UnregisterBroadcast<ItemMotionBatch>(ReceiveMotion);
             network.ServerManager.OnRemoteConnectionState -= ConnectionChanged;
+            network.ServerManager.Objects.OnPreDestroyClientObjects -= DropDepartingItems;
             network.TimeManager.OnPrePhysicsSimulation -= BeforePhysics;
             network.TimeManager.OnPostPhysicsSimulation -= AfterPhysics;
             network.TimeManager.OnPostTick -= AfterTick;

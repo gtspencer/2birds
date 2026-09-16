@@ -11,6 +11,7 @@
             <ui:Label text="Session" class="title" />
             <ui:Label name="status" class="status" />
             <ui:Button name="resume" text="Resume" />
+            <ui:Button name="invite" text="Invite Steam Friends" />
             <ui:Button name="leave" text="Leave Session" />
         </ui:VisualElement>
     </ui:VisualElement>

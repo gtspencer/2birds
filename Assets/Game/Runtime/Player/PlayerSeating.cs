@@ -5,6 +5,8 @@ using UnityEngine;
 
 namespace TwoBirds
 {
+    public enum SeatRequestResult : byte { Completed, Occupied, Busy, Blocked }
+
     [DefaultExecutionOrder(20)]
     public sealed class PlayerSeating : NetworkBehaviour
     {
@@ -31,6 +33,9 @@ namespace TwoBirds
         private float retryTime, seatYaw, lookOffset;
         private int clearanceMask, groundMask;
         private bool receivedState;
+        private string requestFeedback;
+        private float feedbackUntil;
+        public string RequestFeedback => Time.unscaledTime < feedbackUntil ? requestFeedback : "";
         public GolfCartNetwork Cart { get; private set; }
         public int SeatIndex { get; private set; } = -1;
         public uint Revision { get; private set; }
@@ -113,27 +118,35 @@ namespace TwoBirds
             if (!IsOwner || TransitionPending || PlacementPending || !Input.GameplayActive) return;
             TransitionPending = true;
             Input.ClearContext();
-            if (IsServerInitialized) cart.Request(this, ++requestId, Revision, cart.StateRevision, destination);
-            else ServerRequest(++requestId, Revision, cart.ObjectId, cart.StateRevision, destination);
+            if (IsServerInitialized) cart.Request(this, ++requestId, Revision, cart.StateRevision, cart.Epoch, destination);
+            else ServerRequest(++requestId, Revision, cart.ObjectId, cart.StateRevision, cart.Epoch, destination);
         }
 
         public void RequestExit() { if (Seated) Request(Cart, -1); }
-        [ServerRpc] private void ServerRequest(uint request, uint revision, int cartId, uint cartRevision, int destination)
+        [ServerRpc] private void ServerRequest(uint request, uint revision, int cartId, uint cartRevision, uint epoch, int destination)
         {
-            if (GolfCartNetwork.Carts.TryGetValue(cartId, out var cart)) cart.Request(this, request, revision, cartRevision, destination);
-            else CompleteRequest(request);
+            if (GolfCartNetwork.Carts.TryGetValue(cartId, out var cart)) cart.Request(this, request, revision, cartRevision, epoch, destination);
+            else CompleteRequest(request, SeatRequestResult.Busy);
         }
-        internal void CompleteRequest(uint request)
+        internal void CompleteRequest(uint request, SeatRequestResult result = SeatRequestResult.Completed)
         {
-            if (IsOwner) FinishRequest(request);
-            if (Owner.IsActive) TargetRequest(Owner, request);
+            if (IsOwner) FinishRequest(request, result);
+            else if (Owner.IsActive) TargetRequest(Owner, request, result);
         }
-        [TargetRpc] private void TargetRequest(NetworkConnection connection, uint request) => FinishRequest(request);
-        private void FinishRequest(uint request)
+        [TargetRpc] private void TargetRequest(NetworkConnection connection, uint request, SeatRequestResult result) => FinishRequest(request, result);
+        private void FinishRequest(uint request, SeatRequestResult result)
         {
             if (request != requestId) return;
             TransitionPending = false;
             Input.ClearContext();
+            requestFeedback = result switch
+            {
+                SeatRequestResult.Occupied => "That seat is occupied.",
+                SeatRequestResult.Busy => "Cart is busy. Try again.",
+                SeatRequestResult.Blocked => "No clear space to exit or recover the cart.",
+                _ => ""
+            };
+            feedbackUntil = Time.unscaledTime + 3f;
         }
 
         private void Apply(SeatTransition state, bool impulse)

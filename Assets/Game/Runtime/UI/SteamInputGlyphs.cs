@@ -14,32 +14,14 @@ namespace TwoBirds
     {
         private readonly Dictionary<EInputActionOrigin, (Texture2D Texture, string Name)> glyphs = new();
         private readonly InputHandle_t[] handles = new InputHandle_t[Constants.STEAM_INPUT_MAX_COUNT];
-        private bool attempted, steamReady, inputReady;
-
-        public void Update()
-        {
-            if (steamReady) SteamAPI.RunCallbacks();
-        }
+        private readonly SteamLifetime steam = SteamLifetime.Instance;
 
         private EInputActionOrigin ResolveOrigin(InputControl control)
         {
             if (control?.device is not Gamepad gamepad) return EInputActionOrigin.k_EInputActionOrigin_None;
             var button = XboxOrigin(control);
             if (button == EXboxOrigin.k_EXboxOrigin_Count) return EInputActionOrigin.k_EInputActionOrigin_None;
-            if (!attempted)
-            {
-                attempted = true;
-                try
-                {
-                    steamReady = SteamAPI.Init();
-                    inputReady = steamReady && SteamInput.Init(false);
-                }
-                catch (Exception e) when (e is DllNotFoundException || e is EntryPointNotFoundException || e is BadImageFormatException)
-                {
-                    inputReady = false;
-                }
-            }
-            if (!inputReady) return EInputActionOrigin.k_EInputActionOrigin_None;
+            if (!steam || !steam.InputReady) return EInputActionOrigin.k_EInputActionOrigin_None;
 
             // The Xbox origin enums share the same button ordering.
             var origin = EInputActionOrigin.k_EInputActionOrigin_XBoxOne_A + (int)button;
@@ -125,9 +107,6 @@ namespace TwoBirds
             foreach (var glyph in glyphs.Values)
                 if (glyph.Texture) UnityEngine.Object.Destroy(glyph.Texture);
             glyphs.Clear();
-            if (inputReady) SteamInput.Shutdown();
-            if (steamReady) SteamAPI.Shutdown();
-            steamReady = inputReady = false;
         }
     }
 }

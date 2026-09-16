@@ -1,12 +1,16 @@
 # Networked scene MVP
 
-Open `Assets/Scenes/MainMenu.unity` and press Play, or build the two enabled scenes for Windows. Solo uses a loopback server with an OS-assigned port. Host uses UDP 7770 by default; Join accepts an IPv4 literal and port. A host and one guest can play together.
+Open `Assets/Scenes/MainMenu.unity` and press Play, or build the two enabled scenes for Windows. Multiplayer supports one host and seven guests. Steam hosts create a friends-only lobby; guests join through friends or invitations. The host starts manually, and guests can join during play. Solo uses a loopback server with an OS-assigned port and starts immediately.
 
-Controls: WASD / left stick to move, mouse / right stick to orbit, Space / gamepad south button to jump, Escape / gamepad cancel to open the session panel. Resume restores gameplay input; Leave Session returns to the menu. Settings and Quit on the main page are intentionally unwired placeholders.
+Launch with `-localNetworking` for temporary development networking without Steam. Host uses UDP 7770 by default; local guests use `127.0.0.1` and the same port (an IPv4 host address is also accepted). Both paths share the same lobby and gameplay flow. Steam peers require distinct accounts/devices. See [the implementation note](../../Eight_Player_Networking_Implementation.md) for required SessionRoot transport wiring and eight Game spawn markers.
+
+The root `steam_appid.txt` is the development App ID configuration. Windows development builds copy it beside the executable. Steam launch invitations use `+connect_lobby <id>`. Steam discovery checks the Two Birds game/protocol metadata before connecting.
+
+Controls: WASD / left stick to move, mouse / right stick to orbit, Space / gamepad south button to jump, Escape / gamepad cancel to open the session panel. Resume restores gameplay input; Leave Session returns to the menu. Settings persists a 60, 90, or 120 FPS rendering cap with v-sync disabled; simulation remains at 60 Hz. Quit remains an unwired placeholder.
 
 ## Ownership and responsibilities
 
-- `SessionController` owns connection attempts, deadlines, scene transitions, cancellation, and shutdown. UI presenters send intentions and render its state. `SessionAuthenticator` reserves the host identity before admitting guests.
+- `SessionController` owns admission, lobby roster, connection attempts, deadlines, scene transitions, readiness, cancellation, and shutdown. `SteamLifetime` owns Steam and Steam Input throughout menus and gameplay; `SteamLobby` handles discovery and invitations. `SessionAuthenticator` reserves the host identity before admitting guests. Gameplay waits for the local player and item baseline; host departure ends the session.
 - `GamePlayerSpawner` responds to scene observation, waits for initial scene acknowledgement, and maintains the server's connection/slot registry. FishNet destroys owned players on disconnect.
 - `PlayerInputReader` reads only the local owner's actions after a dynamic Input System update. It buffers jump edges until consumed by a tick and converts movement using camera yaw.
 - `PlayerMotor` is the sole movement authority. FishNet runs its replicate/reconcile methods and physics at 60 Hz. Horizontal acceleration is bounded, vertical velocity is preserved, and scripted impulses enter through a server-only boundary. Motor mode, cooldown, pending impulse, and reset revision reconcile with the body.

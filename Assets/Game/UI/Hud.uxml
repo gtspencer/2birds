@@ -25,5 +25,6 @@
             <ui:VisualElement name="inventory-grid" class="inventory-grid" />
         </ui:VisualElement>
         <ui:VisualElement name="controls-hint" class="controls-hint" picking-mode="Ignore" style="display:none;" />
+        <ui:Label name="seat-feedback" picking-mode="Ignore" style="position: absolute; top: 58%; align-self: center; color: rgb(255, 204, 147);" />
     </ui:VisualElement>
 </ui:UXML>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -11,32 +11,52 @@ namespace TwoBirds
     {
         private VisualElement root;
         private SessionController session;
+        private SteamLobby lobby;
         private readonly List<Action> unbind = new();
-        private List<EndpointUtility.LanAddress> addresses = new();
+        private readonly Label[] roster = new Label[SessionController.MultiplayerCapacity];
+        private DropdownField frameCap;
         private string page = "main";
         private InputAction cancel;
 
         private void Start() => Bind();
-        private void OnEnable() { if (session != null) Bind(); }
+        private void OnEnable() { if (session) Bind(); }
         private void Bind()
         {
             root = GetComponent<UIDocument>().rootVisualElement;
             session = SessionController.Instance;
-            Click("solo", () => session.StartSession(SessionMode.Solo, "127.0.0.1", "7770"));
-            Click("host", () => { Refresh(); Show("host"); });
-            Click("join", () => Show("join"));
+            lobby = session.GetComponent<SteamLobby>();
+            Click("solo", () => session.StartSession(SessionMode.Solo));
+            Click("host", () => { if (session.LocalNetworking) Show("host"); else session.StartSession(SessionMode.Host); });
+            Click("join", () => { Show("join"); if (!session.LocalNetworking && lobby) lobby.RefreshFriends(); });
             Click("host-back", () => Show("main"));
             Click("join-back", () => Show("main"));
-            Click("refresh", Refresh);
-            Click("copy", () => GUIUtility.systemCopyBuffer = Endpoint());
-            Click("start-host", () => session.StartSession(SessionMode.Host, "127.0.0.1", root.Q<TextField>("host-port").value, SelectedAddress()));
+            Click("settings", () => Show("settings"));
+            Click("settings-back", () => Show("main"));
+            Click("start-host", () => session.StartSession(SessionMode.Host, portText: root.Q<TextField>("host-port").value));
             Click("connect", () => session.StartSession(SessionMode.Join, root.Q<TextField>("join-ip").value, root.Q<TextField>("join-port").value));
+            Click("friends-refresh", () => { if (lobby) lobby.RefreshFriends(); });
+            Click("start-game", session.StartGame);
+            Click("invite", () => { if (lobby) lobby.InviteFriends(); });
+            Click("lobby-leave", () => session.Leave());
             Click("cancel", () => session.Leave());
-            root.Q<TextField>("host-port").RegisterValueChangedCallback(PortChanged);
-            root.Q<DropdownField>("lan-address").RegisterValueChangedCallback(AddressChanged);
+            root.Q("local-join").style.display = session.LocalNetworking ? DisplayStyle.Flex : DisplayStyle.None;
+            root.Q("steam-join").style.display = session.LocalNetworking ? DisplayStyle.None : DisplayStyle.Flex;
+            var slots = root.Q("roster");
+            slots.Clear();
+            for (int i = 0; i < roster.Length; i++)
+            {
+                roster[i] = new Label { enableRichText = false };
+                slots.Add(roster[i]);
+            }
+            frameCap = root.Q<DropdownField>("frame-cap");
+            frameCap.choices = new List<string> { "60 FPS", "90 FPS", "120 FPS" };
+            frameCap.SetValueWithoutNotify($"{PlayerPrefs.GetInt("RenderingFrameCap", 60)} FPS");
+            frameCap.RegisterValueChangedCallback(FrameCapChanged);
             session.Changed += Render;
+            if (lobby) lobby.Changed += RenderFriends;
             cancel = InputSystem.actions.FindAction("UI/Cancel");
             cancel.performed += Cancel;
+            RenderFriends();
             Render();
             root.Q<Button>("solo").Focus();
         }
@@ -52,53 +72,61 @@ namespace TwoBirds
         {
             if (session.Phase != SessionPhase.Idle) session.Leave(); else Show("main");
         }
-        private void PortChanged(ChangeEvent<string> evt) => RenderEndpoint();
-        private void AddressChanged(ChangeEvent<string> evt) => RenderEndpoint();
-        private void Refresh()
-        {
-            try { addresses = EndpointUtility.Discover(); }
-            catch (System.Net.NetworkInformation.NetworkInformationException) { addresses.Clear(); }
-            var field = root.Q<DropdownField>("lan-address");
-            field.choices = addresses.ConvertAll(a => a.Label);
-            field.SetEnabled(addresses.Count > 0);
-            field.index = addresses.Count > 0 ? 0 : -1;
-            RenderEndpoint();
-        }
-        private string SelectedAddress()
-        {
-            int index = root.Q<DropdownField>("lan-address").index;
-            return index >= 0 && index < addresses.Count ? addresses[index].Address : "";
-        }
-        private string Endpoint() => $"{SelectedAddress()}:{root.Q<TextField>("host-port").value.Trim()}";
-        private void RenderEndpoint()
-        {
-            bool available = SelectedAddress() != "";
-            root.Q<Label>("endpoint").text = available ? Endpoint() : "No LAN IPv4 address found. Only same-machine access is available.";
-            root.Q<Button>("copy").SetEnabled(available && EndpointUtility.TryPort(root.Q<TextField>("host-port").value, out _));
-        }
+
+        private void FrameCapChanged(ChangeEvent<string> evt) => session.SetFrameCap(frameCap.index switch { 1 => 90, 2 => 120, _ => 60 });
+
         private void Show(string next)
         {
             page = next;
-            foreach (string name in new[] { "main", "host", "join" })
-                root.Q(name + "-page").style.display = name == page ? DisplayStyle.Flex : DisplayStyle.None;
+            Render();
             root.Q(page + "-page").Q<Button>()?.Focus();
         }
+
+        private void RenderFriends()
+        {
+            var list = root.Q("friends-list");
+            list.Clear();
+            root.Q<Label>("friends-status").text = lobby ? lobby.FriendsStatus : "Configure Steam on SessionRoot.";
+            if (lobby)
+                foreach (var friend in lobby.Friends)
+                {
+                    ulong id = friend.Id;
+                    var button = new Button(() => session.JoinSteamLobby(id)) { text = friend.Name, enableRichText = false };
+                    list.Add(button);
+                }
+            Render();
+        }
+
         private void Render()
         {
             bool idle = session.Phase == SessionPhase.Idle;
-            foreach (string name in new[] { "main", "host", "join" }) root.Q(name + "-page").SetEnabled(idle);
+            bool inLobby = session.Phase == SessionPhase.InLobby;
+            foreach (string name in new[] { "main", "host", "join", "settings" })
+                root.Q(name + "-page").style.display = idle && name == page ? DisplayStyle.Flex : DisplayStyle.None;
+            root.Q("lobby-page").style.display = inLobby ? DisplayStyle.Flex : DisplayStyle.None;
+            for (int i = 0; i < roster.Length; i++)
+            {
+                if (i >= session.Roster.Length) { roster[i].text = $"{i + 1}. Open slot"; continue; }
+                var member = session.Roster[i];
+                roster[i].text = $"{i + 1}. {member.Name}{(member.Host ? " (Host)" : "")}{(member.Ready ? " · In game" : "")}";
+            }
+            root.Q<Button>("start-game").style.display = session.Mode == SessionMode.Host ? DisplayStyle.Flex : DisplayStyle.None;
+            root.Q<Button>("start-game").SetEnabled(session.CanStart);
+            root.Q<Button>("invite").style.display = session.LocalNetworking ? DisplayStyle.None : DisplayStyle.Flex;
+            root.Q<Button>("invite").SetEnabled(lobby && lobby.HasLobby);
             root.Q<Label>("status").text = session.Status;
-            root.Q<Button>("cancel").style.display = idle ? DisplayStyle.None : DisplayStyle.Flex;
+            root.Q<Button>("cancel").style.display = idle || inLobby ? DisplayStyle.None : DisplayStyle.Flex;
             root.Q<Button>("cancel").SetEnabled(session.Phase != SessionPhase.Stopping);
         }
+
         private void OnDisable()
         {
             foreach (Action action in unbind) action();
             unbind.Clear();
-            if (session != null) session.Changed -= Render;
+            if (session) session.Changed -= Render;
+            if (lobby) lobby.Changed -= RenderFriends;
             if (cancel != null) cancel.performed -= Cancel;
-            root?.Q<TextField>("host-port").UnregisterValueChangedCallback(PortChanged);
-            root?.Q<DropdownField>("lan-address").UnregisterValueChangedCallback(AddressChanged);
+            frameCap?.UnregisterValueChangedCallback(FrameCapChanged);
         }
     }
 }

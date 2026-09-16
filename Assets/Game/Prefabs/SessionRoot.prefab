@@ -21,6 +21,10 @@ GameObject:
   - component: {fileID: 4570614726009044673}
   - component: {fileID: 8774293012789587237}
   - component: {fileID: 9052649437900679749}
+  - component: {fileID: 2370554174596899949}
+  - component: {fileID: -9185529342162899750}
+  - component: {fileID: 7663517603519311750}
+  - component: {fileID: -1955571057096831927}
   m_Layer: 0
   m_Name: SessionRoot
   m_TagString: Untagged
@@ -62,7 +66,7 @@ MonoBehaviour:
   _enableIpv6: 0
   _ipv6BindAddress: 
   _port: 7770
-  _maximumClients: 2
+  _maximumClients: 8
   _clientAddress: localhost
 --- !u!114 &445990651066151924
 MonoBehaviour:
@@ -168,7 +172,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 34e4a322dca349547989b14021da4e23, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Managing.Transporting.TransportManager
-  Transport: {fileID: 432730836199715234}
+  Transport: {fileID: -1955571057096831927}
   _maximumClientPacketSize: 20480
   _intermediateLayer: {fileID: 0}
   _latencySimulator:
@@ -245,6 +249,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.SessionController
   settings: {fileID: 11400000, guid: e799dd0d6b6d59745bf66e23092e9f6a, type: 2}
+  multipass: {fileID: -1955571057096831927}
+  localTransport: {fileID: 432730836199715234}
+  steamTransport: {fileID: 7663517603519311750}
 --- !u!114 &9052649437900679749
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -264,7 +271,63 @@ MonoBehaviour:
   correctionDuration: 0.075
   interpolationDelay: 0.1
   releaseGrace: 0.3
-  minimumHitImpulse: 0.5
   worldBounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 1000, y: 1000, z: 1000}
+--- !u!114 &2370554174596899949
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5004959182579645944}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c6f9eb9d26015c429b7cb98519fb589, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.SteamLifetime
+--- !u!114 &-9185529342162899750
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5004959182579645944}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87819fe52a917534d857e30433611eb0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.SteamLobby
+--- !u!114 &7663517603519311750
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5004959182579645944}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8406d07b5e548b94ebc00d89292327f2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.GameSteamTransport
+  _serverBindAddress: 
+  _port: 7770
+  _maximumClients: 7
+  _peerToPeer: 1
+  _clientAddress: 
+--- !u!114 &-1955571057096831927
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5004959182579645944}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 314b449d3505bd24487ba69b61c2fda5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FishNet.Runtime::FishNet.Transporting.Multipass.Multipass
+  GlobalServerActions: 0
+  _transports:
+  - {fileID: 432730836199715234}
+  - {fileID: 7663517603519311750}

@@ -42,6 +42,7 @@ namespace TwoBirds
         private Vector3 sphereCenter;
         private Vector3 bodySphereCenter;
         private float sphereRadius;
+        internal float DropDiameter { get; private set; }
         private Vector3 incomingVelocity;
         private bool incomingSampled;
         private Vector3 physicsStartSphere;
@@ -87,6 +88,9 @@ namespace TwoBirds
             renderers = GetComponentsInChildren<Renderer>(true);
             parts = GetComponentsInChildren<Transform>(true);
             prefabScale = transform.localScale;
+            foreach (var collider in colliders)
+                if (!collider.isTrigger) DropDiameter = Mathf.Max(DropDiameter,
+                    2f * ((collider.bounds.center - transform.position).magnitude + collider.bounds.extents.magnitude));
             Body.collisionDetectionMode = CollisionDetectionMode.Discrete;
             Body.isKinematic = true;
         }

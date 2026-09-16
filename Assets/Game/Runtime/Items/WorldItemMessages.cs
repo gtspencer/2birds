@@ -30,8 +30,9 @@ namespace TwoBirds
         public uint LaunchTick;
     }
 
-    public struct ItemBaselineRequest : IBroadcast { }
-    public struct ItemBaselineStart : IBroadcast { public uint Epoch; }
+    public struct ItemBaselineRequest : IBroadcast { public uint Session; }
+    public struct ItemBaselineStart : IBroadcast { public uint Session, Epoch; }
+    public struct ItemBaselineComplete : IBroadcast { public uint Session, Epoch; }
     public struct ItemLifecycleBatch : IBroadcast
     {
         public uint Epoch;

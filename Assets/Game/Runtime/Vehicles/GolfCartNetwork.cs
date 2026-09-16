@@ -129,12 +129,14 @@ namespace TwoBirds
             presentation.SetLights(lights);
         }
 
-        internal void Request(PlayerSeating player, uint request, uint playerRevision, uint cartRevision, int destination)
+        internal void Request(PlayerSeating player, uint request, uint playerRevision, uint cartRevision, uint motionEpoch, int destination)
         {
             if (!IsServerInitialized) return;
-            if (Busy || player.Revision != playerRevision || cartRevision != StateRevision || destination < -1 || destination > 3 ||
+            bool changesDriver = player.SeatIndex == 0 || destination == 0;
+            if (Busy || player.Revision != playerRevision || motionEpoch != epoch ||
+                (changesDriver || Recovery != CartRecovery.None) && cartRevision != StateRevision || destination < -1 || destination > 3 ||
                 player.PlacementPending || player.Cart != null && player.Cart != this || destination < 0 && player.Cart != this)
-            { player.CompleteRequest(request); return; }
+            { player.CompleteRequest(request, SeatRequestResult.Busy); return; }
             if (Recovery != CartRecovery.None)
             {
                 if (destination >= 0 && Array.TrueForAll(occupants, entry => entry.Player < 0) &&
@@ -151,10 +153,10 @@ namespace TwoBirds
                     Recovery = CartRecovery.None;
                     Broadcast(Array.Empty<SeatTransition>(), true);
                 }
-                player.CompleteRequest(request);
+                player.CompleteRequest(request, Recovery == CartRecovery.None ? SeatRequestResult.Completed : SeatRequestResult.Blocked);
                 return;
             }
-            if (destination >= 0 && IsOccupied(destination)) { player.CompleteRequest(request); return; }
+            if (destination >= 0 && IsOccupied(destination)) { player.CompleteRequest(request, SeatRequestResult.Occupied); return; }
             var change = new PendingChange { Player = player, Seat = destination, Request = request };
             if (player.SeatIndex == 0 || destination == 0) BeginHandoff(change);
             else Commit(change, motion.LatestMotion, false);
@@ -228,7 +230,7 @@ namespace TwoBirds
                 pending = null;
                 if (simulator >= 0 && !IsOwner) TargetResume(Owner, timedOut.Token, epoch);
                 else stopToken = 0;
-                timedOut.Player?.CompleteRequest(timedOut.Request);
+                timedOut.Player?.CompleteRequest(timedOut.Request, SeatRequestResult.Busy);
                 incidentPending = false;
             }
             if (!Simulating) return;
@@ -307,7 +309,7 @@ namespace TwoBirds
                     {
                         pending = null;
                         if (handoff) ResumeStopped(change.Token, frame);
-                        player.CompleteRequest(change.Request);
+                        player.CompleteRequest(change.Request, SeatRequestResult.Blocked);
                         return;
                     }
                 }
@@ -399,21 +401,25 @@ namespace TwoBirds
             incidentPending = true;
             var velocities = new Vector3[4];
             for (int i = 0; i < 4; i++) velocities[i] = controller.PreImpactVelocity(transform.InverseTransformPoint(seats[i].Rider.position));
-            if (IsServerInitialized) AcceptIncident(epoch, ++eventSequence, StateRevision, recovery, velocities);
+            if (IsServerInitialized) AcceptIncident(epoch, ++eventSequence, StateRevision, recovery, velocities, null);
             else ServerIncident(epoch, ++eventSequence, StateRevision, recovery, velocities);
         }
 
-        [ServerRpc]
-        private void ServerIncident(uint motionEpoch, uint sequence, uint revision, CartRecovery recovery, Vector3[] velocities) =>
-            AcceptIncident(motionEpoch, sequence, revision, recovery, velocities);
+        [ServerRpc(RequireOwnership = false)]
+        private void ServerIncident(uint motionEpoch, uint sequence, uint revision, CartRecovery recovery, Vector3[] velocities, NetworkConnection sender = null) =>
+            AcceptIncident(motionEpoch, sequence, revision, recovery, velocities, sender);
 
-        private void AcceptIncident(uint motionEpoch, uint sequence, uint revision, CartRecovery recovery, Vector3[] velocities)
+        private void AcceptIncident(uint motionEpoch, uint sequence, uint revision, CartRecovery recovery, Vector3[] velocities, NetworkConnection sender)
         {
-            if (motionEpoch != epoch || sequence <= lastIncident || revision != StateRevision) return;
+            bool accepted = motionEpoch == epoch && sequence > lastIncident && revision == StateRevision &&
+                (sender == null || sender == Owner) && velocities != null && velocities.Length == 4;
+            if (sender == null) FinishIncident(motionEpoch, sequence, accepted);
+            else TargetIncident(sender, motionEpoch, sequence, accepted, StateRevision, occupants, Recovery);
+            if (!accepted) return;
             lastIncident = sequence;
             if (pending != null)
             {
-                pending.Player?.CompleteRequest(pending.Request);
+                pending.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
                 pending.Player = null;
                 pending.Eject = true;
                 pending.Recovery = recovery;
@@ -421,6 +427,22 @@ namespace TwoBirds
                 return;
             }
             BeginHandoff(new PendingChange { Eject = true, Recovery = recovery, RiderVelocities = velocities });
+        }
+
+        [TargetRpc]
+        private void TargetIncident(NetworkConnection target, uint motionEpoch, uint sequence, bool accepted,
+            uint revision, CartOccupant[] current, CartRecovery recovery)
+        {
+            if (motionEpoch != epoch) return;
+            ApplyState(revision, current, recovery, Array.Empty<SeatTransition>());
+            FinishIncident(motionEpoch, sequence, accepted);
+        }
+
+        private void FinishIncident(uint motionEpoch, uint sequence, bool accepted)
+        {
+            if (motionEpoch != epoch || sequence != eventSequence || !incidentPending || accepted) return;
+            incidentPending = false;
+            controller.ReassessIncident();
         }
 
         internal void ClearRecovery()

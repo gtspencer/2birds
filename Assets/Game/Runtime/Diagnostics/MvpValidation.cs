@@ -47,12 +47,11 @@ namespace TwoBirds
             events = new StreamWriter(Path.Combine(directory, "session.log"));
             events.AutoFlush = true;
             events.WriteLine($"Unity {Application.unityVersion}; {SystemInfo.processorType}; GPU {SystemInfo.graphicsDeviceName}; route {Argument("-mvpRoute")}; FPS {Number("-mvpFps", 60)}");
-            QualitySettings.vSyncCount = 0;
-            Application.targetFrameRate = Number("-mvpFps", 60);
             route = Argument("-mvpRoute") ?? "walk";
             yield return new WaitForSecondsRealtime(Number("-mvpDelay", 0));
             while (SessionController.Instance == null || SessionController.Instance.Network == null) yield return null;
             session = SessionController.Instance;
+            session.SetFrameCap(Number("-mvpFps", 60));
             session.Changed += LogState;
             var mode = Enum.Parse<SessionMode>(Argument("-mvpMode"), true);
             for (int cycle = 0; cycle < Number("-mvpCycles", 1); cycle++)
@@ -96,8 +95,7 @@ namespace TwoBirds
                 diagnostics.Open(Argument("-mvpOutput") ?? Path.Combine(Application.persistentDataPath, "Validation"));
                 if (motor.IsOwner) motor.GetComponent<PlayerInputReader>().AutomatedInput = RouteInput;
             }
-            var transport = session.GetComponent<GameTransport>();
-            foreach (var peer in transport.Traffic)
+            foreach (var peer in session.PayloadTraffic)
             {
                 traffic.TryGetValue(peer.Key, out var previous);
                 var current = peer.Value;

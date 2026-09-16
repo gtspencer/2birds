@@ -149,6 +149,8 @@ namespace TwoBirds
             preRotation = Body.rotation;
         }
 
+        internal void ReassessIncident() => rolloverReported = false;
+
         internal void AfterPhysics(float delta)
         {
             bool overturned = Vector3.Angle(Body.rotation * Vector3.up, Vector3.up) > settings.RolloverAngle;

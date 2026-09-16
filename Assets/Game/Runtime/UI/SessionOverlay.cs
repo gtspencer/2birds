@@ -10,6 +10,7 @@ namespace TwoBirds
         private GamePlayerSpawner spawner;
         private HudController hud;
         private VisualElement root;
+        private Label sessionInfo;
         private InputAction pause;
         private void OnEnable()
         {
@@ -18,9 +19,11 @@ namespace TwoBirds
             spawner = FindAnyObjectByType<GamePlayerSpawner>();
             hud = FindAnyObjectByType<HudController>();
             root = GetComponent<UIDocument>().rootVisualElement;
+            sessionInfo = root.Q<Label>("session-info");
             root.Q<Button>("resume").clicked += Resume;
             root.Q<Button>("leave").clicked += Leave;
             root.Q<Button>("copy").clicked += Copy;
+            root.Q<Button>("invite").clicked += Invite;
             session.Changed += Render;
             pause = InputSystem.actions.FindAction("UI/Cancel");
             pause.performed += Pause;
@@ -36,9 +39,10 @@ namespace TwoBirds
         private void Resume() => session.SetPanel(false);
         private void Leave() => session.Leave();
         private void Copy() => GUIUtility.systemCopyBuffer = session.ShareEndpoint;
+        private void Invite() => session.Lobby.InviteFriends();
         private void Update()
         {
-            if (root != null) root.Q<Label>("session-info").text = $"{session.Mode} · { (spawner != null ? spawner.PlayerCount : 0) } / {(session.Mode == SessionMode.Solo ? 1 : 2)} players";
+            if (sessionInfo != null) sessionInfo.text = $"{session.Mode} · {(spawner ? spawner.PlayerCount : 0)} / {session.Capacity} players";
         }
         private void Render()
         {
@@ -46,6 +50,8 @@ namespace TwoBirds
             root.Q("session-panel").style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             root.Q<Button>("resume").SetEnabled(session.Phase == SessionPhase.InGame);
             root.Q<Button>("leave").SetEnabled(session.Phase != SessionPhase.Stopping);
+            root.Q<Button>("invite").style.display = !session.LocalNetworking && session.Mode != SessionMode.Solo ? DisplayStyle.Flex : DisplayStyle.None;
+            root.Q<Button>("invite").SetEnabled(session.Phase == SessionPhase.InGame);
             root.Q<Label>("status").text = session.Status;
             root.Q<Label>("share-endpoint").text = session.ShareEndpoint;
             root.Q<Button>("copy").style.display = session.ShareEndpoint == "" ? DisplayStyle.None : DisplayStyle.Flex;
@@ -59,6 +65,7 @@ namespace TwoBirds
             root.Q<Button>("resume").clicked -= Resume;
             root.Q<Button>("leave").clicked -= Leave;
             root.Q<Button>("copy").clicked -= Copy;
+            root.Q<Button>("invite").clicked -= Invite;
         }
     }
 }

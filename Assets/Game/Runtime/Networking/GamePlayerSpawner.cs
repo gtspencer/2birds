@@ -20,11 +20,24 @@ namespace TwoBirds
         public override void OnStartServer()
         {
             sessionId = SessionController.Instance.SessionId;
+            int capacity = SessionController.Instance.Capacity;
+            if (spawnPoints == null || spawnPoints.Length < capacity)
+            {
+                SessionController.Instance.Leave($"Game needs {capacity} assigned spawn markers before play can start.");
+                return;
+            }
+            for (int i = 0; i < capacity; i++)
+                if (!spawnPoints[i])
+                {
+                    SessionController.Instance.Leave($"Game spawn marker {i + 1} is missing.");
+                    return;
+                }
             ServerManager.OnRemoteConnectionState += RemoteState;
         }
 
         public override void OnSpawnServer(NetworkConnection connection)
         {
+            if (SessionController.Instance.Phase == SessionPhase.Stopping) return;
             if (!connection.LoadedStartScenes(true))
             {
                 if (pending.Add(connection)) connection.OnLoadedStartScenes += StartScenesReady;
@@ -46,7 +59,7 @@ namespace TwoBirds
             if (!IsServerInitialized || !connection.IsActive || !connection.IsAuthenticated ||
                 gameObject.scene.name != "Game" || sessionId != SessionController.Instance.SessionId ||
                 SessionController.Instance.Phase == SessionPhase.Stopping || players.ContainsKey(connection.ClientId)) return;
-            for (int slot = 0; slot < spawnPoints.Length; slot++)
+            for (int slot = 0; slot < SessionController.Instance.Capacity; slot++)
             {
                 bool occupied = false;
                 foreach (var entry in players.Values) occupied |= entry.slot == slot;

@@ -63,7 +63,7 @@ namespace TwoBirds
             ActiveDevice = Keyboard.current;
             InputSystem.onEvent += TrackDevice;
             InputSystem.onAfterUpdate += ReadInput;
-            SetGameplay(true);
+            SetGameplay(false);
             SessionController.Instance.PlayerReady(GetComponent<PlayerMotor>());
         }
 
