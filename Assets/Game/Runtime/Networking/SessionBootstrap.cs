@@ -5,8 +5,13 @@ namespace TwoBirds
 {
     public sealed class SessionBootstrap : MonoBehaviour
     {
-        public static bool LocalNetworking { get; } = System.Array.Exists(System.Environment.GetCommandLineArgs(),
-            argument => argument.Equals("-localNetworking", System.StringComparison.OrdinalIgnoreCase));
+        private static bool? localNetworking;
+        public static bool LocalNetworking => localNetworking ??=
+#if UNITY_EDITOR
+            UnityEditor.EditorPrefs.GetBool("TwoBirds.LocalNetworking", false) ||
+#endif
+            System.Array.Exists(System.Environment.GetCommandLineArgs(),
+                argument => argument.Equals("-localNetworking", System.StringComparison.OrdinalIgnoreCase));
         [SerializeField] private GameObject sessionPrefab;
         private void Awake()
         {
