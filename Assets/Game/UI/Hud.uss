@@ -125,11 +125,25 @@
 
 .slot.filled { background-color: rgba(34, 45, 56, 0.85); }
 
+.slot-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+/* Hidden by default. To show item names, also uncomment the label in MakeSlot/UpdateSlotVisual. */
 .slot-label {
-    font-size: 11px;
+    display: none;
+    position: absolute;
+    bottom: 1px;
+    left: 0;
+    right: 0;
+    font-size: 9px;
     color: rgb(231, 237, 241);
-    -unity-text-align: middle-center;
-    white-space: normal;
+    -unity-text-align: lower-center;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 .slot-count {
@@ -159,9 +173,19 @@
     border-color: rgba(92, 113, 125, 0.5);
 }
 
+.equipped-icon {
+    width: 48px;
+    height: 48px;
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+/* Hidden by default. Uncomment the label in Hud.uxml to show equipped item name. */
 .equipped-label {
-    font-size: 14px;
+    display: none;
+    font-size: 12px;
     color: rgb(231, 237, 241);
+    -unity-text-align: upper-center;
+    margin-top: 4px;
 }
 
 .inventory-panel {

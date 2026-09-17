@@ -21,7 +21,9 @@
             <ui:Label name="health-text" class="health-text" text="100" />
         </ui:VisualElement>
         <ui:VisualElement name="equipped-preview" class="equipped-preview" style="display:none;">
-            <ui:Label name="equipped-label" class="equipped-label" />
+            <ui:Image name="equipped-icon" class="equipped-icon" />
+            <!-- Uncomment to show equipped item name below the icon: -->
+            <!-- <ui:Label name="equipped-label" class="equipped-label" /> -->
         </ui:VisualElement>
         <ui:VisualElement name="hotbar" class="hotbar" picking-mode="Ignore" />
         <ui:VisualElement name="inventory-panel" class="inventory-panel" style="display:none;">

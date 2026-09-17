@@ -20,6 +20,7 @@ namespace TwoBirds
         private VisualElement healthFill;
         private Label healthText;
         private VisualElement equippedPreview;
+        private Image equippedIcon;
         private Label equippedLabel;
         private VisualElement crosshair;
         private VisualElement chargeTrack;
@@ -63,6 +64,7 @@ namespace TwoBirds
             healthFill = root.Q("health-fill");
             healthText = root.Q<Label>("health-text");
             equippedPreview = root.Q("equipped-preview");
+            equippedIcon = root.Q<Image>("equipped-icon");
             equippedLabel = root.Q<Label>("equipped-label");
             crosshair = root.Q("crosshair");
             chargeTrack = root.Q("charge-track");
@@ -99,6 +101,12 @@ namespace TwoBirds
             for (int i = 0; i < PlayerInventory.SlotCount; i++)
             {
                 var slot = MakeSlot(i);
+                if (i < PlayerInventory.HotbarSize)
+                {
+                    var key = new Label((i + 1).ToString());
+                    key.AddToClassList("slot-key");
+                    slot.Add(key);
+                }
                 slot.RegisterCallback<PointerDownEvent>(OnSlotPointerDown);
                 slot.RegisterCallback<PointerMoveEvent>(OnSlotPointerMove);
                 slot.RegisterCallback<PointerUpEvent>(OnSlotPointerUp);
@@ -112,9 +120,13 @@ namespace TwoBirds
             var slot = new VisualElement();
             slot.AddToClassList("slot");
             slot.userData = index;
-            var label = new Label { name = "slot-label" };
-            label.AddToClassList("slot-label");
-            slot.Add(label);
+            var icon = new Image { name = "slot-icon" };
+            icon.AddToClassList("slot-icon");
+            slot.Add(icon);
+            // Uncomment to show item name (positioned at the bottom of the slot via USS):
+            // var label = new Label { name = "slot-label" };
+            // label.AddToClassList("slot-label");
+            // slot.Add(label);
             var count = new Label { name = "slot-count" };
             count.AddToClassList("slot-count");
             slot.Add(count);
@@ -138,7 +150,9 @@ namespace TwoBirds
             EnsureDragGhost();
             dragGhost.style.display = DisplayStyle.Flex;
             var item = inventory.GetSlot(index);
-            dragGhost.Q<Label>("slot-label").text = GetItemName(item.ItemId);
+            var def = itemRegistry != null ? itemRegistry.Get(item.ItemId) : null;
+            var ghostIcon = dragGhost.Q<Image>("slot-icon");
+            if (ghostIcon != null) ghostIcon.sprite = def != null ? def.Icon : null;
             PositionGhost(evt.position);
         }
 
@@ -356,9 +370,12 @@ namespace TwoBirds
             }
 
             var equipped = inventory.GetEquipped();
-            if (equippedLabel != null)
+            if (equippedPreview != null)
             {
-                equippedLabel.text = equipped.IsEmpty ? "" : GetItemName(equipped.ItemId);
+                var def = !equipped.IsEmpty && itemRegistry != null ? itemRegistry.Get(equipped.ItemId) : null;
+                if (equippedIcon != null) equippedIcon.sprite = def != null ? def.Icon : null;
+                // Uncomment to show equipped item name:
+                // if (equippedLabel != null) equippedLabel.text = def != null ? def.ItemName : "";
                 equippedPreview.style.display = equipped.IsEmpty ? DisplayStyle.None : DisplayStyle.Flex;
             }
 
@@ -372,17 +389,22 @@ namespace TwoBirds
 
         private void UpdateSlotVisual(VisualElement slot, ItemStack item)
         {
-            var label = slot.Q<Label>("slot-label");
+            var icon = slot.Q<Image>("slot-icon");
             var count = slot.Q<Label>("slot-count");
             if (item.IsEmpty)
             {
-                label.text = "";
+                if (icon != null) icon.sprite = null;
+                // Uncomment to show item name:
+                // var label = slot.Q<Label>("slot-label"); if (label != null) label.text = "";
                 count.text = "";
                 SetClass(slot, "filled", false);
             }
             else
             {
-                label.text = GetItemName(item.ItemId);
+                var def = itemRegistry != null ? itemRegistry.Get(item.ItemId) : null;
+                if (icon != null) icon.sprite = def != null ? def.Icon : null;
+                // Uncomment to show item name:
+                // var label = slot.Q<Label>("slot-label"); if (label != null) label.text = def != null ? def.ItemName : $"Item {item.ItemId}";
                 count.text = item.Count > 1 ? item.Count.ToString() : "";
                 SetClass(slot, "filled", true);
             }
