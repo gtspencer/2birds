@@ -45,4 +45,5 @@ MonoBehaviour:
     Scare: {fileID: 0}
     Wings: {fileID: 0}
     Hit: {fileID: 0}
-  Rocks: []
+  Rocks:
+  - {fileID: 11400000, guid: 9f574bf6e57f89d4cb07ba4618076463, type: 2}

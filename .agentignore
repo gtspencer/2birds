@@ -1,0 +1,19 @@
+# Directories and files that AI agents should ignore.
+# Uses .gitignore glob syntax.
+# Respected by: Claude Code (via hooks), Codex CLI (via instructions).
+
+# Unity generated directories
+Library/
+Temp/
+obj/
+Logs/
+Builds/
+UserSettings/
+.utmp/
+
+# IDE / editor caches
+.vs/
+.idea/
+.gradle/
+
+Specs/
