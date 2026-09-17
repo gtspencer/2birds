@@ -232,7 +232,7 @@ namespace TwoBirds
             if (!inventory.IsOwner) return;
 
             var session = SessionController.Instance;
-            if (!session || session.Phase != SessionPhase.InGame || session.PanelOpen) return;
+            if (!session || session.Phase != SessionPhase.InGame || session.PanelOpen || session.ConsoleOpen) return;
 
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.tabKey.wasPressedThisFrame)

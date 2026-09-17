@@ -10,6 +10,7 @@ namespace TwoBirds
         public readonly List<(ulong Id, string Name)> Friends = new();
         public bool HasLobby => lobby.IsValid();
         internal ulong CurrentLobby => lobby.m_SteamID;
+        internal ulong HostId => originalHost;
         public bool Available => steam && steam.Ready;
         public string FriendsStatus { get; private set; } = "Refresh to find friends playing Two Birds.";
         public event Action Changed;

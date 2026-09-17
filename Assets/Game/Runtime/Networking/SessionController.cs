@@ -33,6 +33,7 @@ namespace TwoBirds
         public string ShareEndpoint { get; private set; } = "";
         public uint SessionId { get; private set; }
         public bool PanelOpen { get; private set; }
+        public bool ConsoleOpen { get; private set; }
         public PlayerMotor LocalPlayer { get; private set; }
         public LobbyMember[] Roster { get; private set; } = Array.Empty<LobbyMember>();
         public bool LocalNetworking => SessionBootstrap.LocalNetworking;
@@ -59,6 +60,16 @@ namespace TwoBirds
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         internal Dictionary<int, (long sent, long received)> PayloadTraffic =>
             UsingLocal ? localTransport.Traffic : steamTransport.Traffic;
+        internal Transport DiagnosticTransport => selectedTransport;
+        internal string DiagnosticEndpoint => UsingLocal
+            ? $"{localTransport.GetClientAddress()}:{localTransport.GetPort()}"
+            : $"Steam host {Lobby.HostId} (IP unavailable)";
+
+        internal void SetConsoleOpen(bool open)
+        {
+            ConsoleOpen = open;
+            if (localInput) localInput.SetGameplay(!open && !PanelOpen && Phase == SessionPhase.InGame);
+        }
 #endif
 
         private void Awake()
@@ -87,6 +98,9 @@ namespace TwoBirds
             Network.SceneManager.OnQueueStart += QueueStarted;
             Network.SceneManager.OnQueueEnd += QueueEnded;
             SetFrameCap(PlayerPrefs.GetInt("RenderingFrameCap", 60));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!Application.isBatchMode) gameObject.AddComponent<DevConsole>();
+#endif
         }
 
         public void SetFrameCap(int value)
@@ -317,7 +331,7 @@ namespace TwoBirds
         {
             if (Phase != SessionPhase.LoadingGame || !LocalPlayer || !worldReady || !birdsReady) return;
             SetPhase(SessionPhase.InGame, "");
-            localInput.SetGameplay(!PanelOpen);
+            localInput.SetGameplay(!PanelOpen && !ConsoleOpen);
             Network.ClientManager.Broadcast(new SessionReady { Session = wireSession });
             UpdateLobby();
         }
@@ -357,7 +371,7 @@ namespace TwoBirds
         public void SetPanel(bool open)
         {
             PanelOpen = open;
-            if (localInput) localInput.SetGameplay(!open && Phase == SessionPhase.InGame);
+            if (localInput) localInput.SetGameplay(!open && !ConsoleOpen && Phase == SessionPhase.InGame);
             Changed?.Invoke();
         }
 
