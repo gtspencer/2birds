@@ -14,5 +14,5 @@ TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
 .hint { white-space: normal; color: rgb(179, 195, 205); font-size: 14px; margin-top: 8px; margin-bottom: 8px; }
 .status { white-space: normal; color: rgb(255, 204, 147); margin-top: 10px; }
 .overlay { flex-grow: 1; }
-.hud { position: absolute; left: 20px; top: 20px; padding: 14px; background-color: rgba(20, 28, 36, 0.88); border-radius: 8px; }
+
 .pause { position: absolute; align-self: center; top: 28%; }
