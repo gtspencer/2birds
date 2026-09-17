@@ -73,7 +73,7 @@ namespace TwoBirds
                 writer.WriteUInt32(motion.Tick);
                 writer.WriteUInt32(motion.Sequence);
                 writer.WriteUInt32(motion.Path);
-                writer.WriteByte(flags);
+                writer.WriteUInt8Unpacked(flags);
                 writer.WriteVector3(motion.Position);
                 WriteVelocity(writer, motion.Velocity, (flags & FullVelocity) != 0);
                 if (motion.RotationOmitted) continue;
@@ -91,7 +91,7 @@ namespace TwoBirds
             {
                 var motion = new ItemMotion { Id = reader.ReadUInt32(), Revision = reader.ReadUInt32(), Tick = reader.ReadUInt32(),
                     Sequence = reader.ReadUInt32(), Path = reader.ReadUInt32() };
-                byte flags = reader.ReadByte();
+                byte flags = reader.ReadUInt8Unpacked();
                 motion.RotationOmitted = (flags & OmitRotation) != 0;
                 motion.Sleeping = (flags & Sleeping) != 0;
                 motion.Boundary = (flags & Boundary) != 0;

@@ -9,10 +9,10 @@ namespace TwoBirds
         private bool birdRock;
         private bool birdRebase;
         private float nextBirdThreat;
-        private int birdColliderId;
-        private readonly Dictionary<int, uint> touchingBirds = new();
-        private readonly Dictionary<int, uint> suppressedBirds = new();
-        private readonly List<int> separatedBirds = new();
+        private EntityId birdColliderId;
+        private readonly Dictionary<EntityId, uint> touchingBirds = new();
+        private readonly Dictionary<EntityId, uint> suppressedBirds = new();
+        private readonly List<EntityId> separatedBirds = new();
 
         private bool BirdEligible => birdRegistry && birdRock && birdRegistry.hitReporter != null && impactSphere && impactSphere.enabled &&
             Record.State == WorldItemState.World && !optimisticPickup && !registry.Replaying && Simulating;
@@ -27,7 +27,7 @@ namespace TwoBirds
         private void BirdContact(Collision collision)
         {
             if (!BirdEligible || !birdRegistry.TryRockContact(birdColliderId, collision.collider, out var contact)) return;
-            int collider = collision.collider.GetInstanceID();
+            EntityId collider = collision.collider.GetEntityId();
             if (touchingBirds.TryGetValue(collider, out uint life) && life == contact.Life) return;
             touchingBirds[collider] = contact.Life;
             Vector3 normal = contact.Normal;
@@ -41,7 +41,7 @@ namespace TwoBirds
         }
 
         private void OnCollisionStay(Collision collision) => BirdContact(collision);
-        private void OnCollisionExit(Collision collision) => touchingBirds.Remove(collision.collider.GetInstanceID());
+        private void OnCollisionExit(Collision collision) => touchingBirds.Remove(collision.collider.GetEntityId());
 
         private void AfterBirdPhysics(float seconds)
         {

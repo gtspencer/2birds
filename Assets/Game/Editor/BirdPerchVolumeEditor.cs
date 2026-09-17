@@ -29,7 +29,7 @@ namespace TwoBirds.Editor
             var ids = new HashSet<ushort>();
             var positions = new List<Vector3>();
             var reusable = new List<ushort>();
-            foreach (var perch in Object.FindObjectsByType<BirdPerch>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var perch in Object.FindObjectsByType<BirdPerch>(FindObjectsInactive.Include))
             {
                 if (perch.gameObject.scene != volume.gameObject.scene) continue;
                 if (perch.GeneratedBy == volume && perch.transform.IsChildOf(volume.transform)) reusable.Add(perch.Id);

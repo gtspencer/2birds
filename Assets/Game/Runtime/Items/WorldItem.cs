@@ -90,7 +90,7 @@ namespace TwoBirds
             playerHitboxMask = LayerMask.GetMask("PlayerItemHitbox");
             colliders = GetComponentsInChildren<Collider>(true);
             impactSphere = GetComponentInChildren<SphereCollider>(true);
-            if (impactSphere) birdColliderId = impactSphere.GetInstanceID();
+            if (impactSphere) birdColliderId = impactSphere.GetEntityId();
             renderers = GetComponentsInChildren<Renderer>(true);
             parts = GetComponentsInChildren<Transform>(true);
             prefabScale = transform.localScale;

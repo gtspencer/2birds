@@ -61,7 +61,7 @@ namespace TwoBirds.Editor
                 }
             }
 
-            var pickups = Object.FindObjectsByType<BakedPickup>(FindObjectsSortMode.None);
+            var pickups = Object.FindObjectsByType<BakedPickup>();
             if (pickups.Length == 0)
             {
                 log.Add(("No BakedPickup components found in scene.", MessageType.Info));

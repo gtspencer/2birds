@@ -6,7 +6,6 @@
 Library/
 Temp/
 obj/
-Logs/
 Builds/
 UserSettings/
 .utmp/

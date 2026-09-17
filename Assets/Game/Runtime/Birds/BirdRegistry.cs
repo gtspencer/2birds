@@ -98,7 +98,7 @@ namespace TwoBirds
                         throw new InvalidOperationException($"Invalid bird tuning: {entry.name}.");
                     MaximumScareRadius = Mathf.Max(MaximumScareRadius, entry.ScareRadius);
                 }
-                foreach (var zone in FindObjectsByType<BirdSpawnZone>(FindObjectsSortMode.None))
+                foreach (var zone in FindObjectsByType<BirdSpawnZone>())
                 {
                     if (zone.gameObject.scene != scene) continue;
                     if (zone.Id == 0 || zone.Biome == 0 || !zones.TryAdd(zone.Id, zone)) throw new InvalidOperationException("Bird spawn IDs must be unique and nonzero.");
@@ -112,7 +112,7 @@ namespace TwoBirds
                     }
                     if (zone.Maximum > 0 && weight <= 0f) throw new InvalidOperationException($"No weighted species: {zone.name}.");
                 }
-                foreach (var habitat in FindObjectsByType<BirdHabitatVolume>(FindObjectsSortMode.None))
+                foreach (var habitat in FindObjectsByType<BirdHabitatVolume>())
                 {
                     if (habitat.gameObject.scene != scene) continue;
                     if (habitat.Id == 0 || habitat.Biome == 0 || !habitats.TryAdd(habitat.Id, habitat)) throw new InvalidOperationException("Bird habitat IDs must be unique and nonzero.");
@@ -120,7 +120,7 @@ namespace TwoBirds
                         !habitat.Contains(new Vector3(habitat.transform.position.x, habitat.WaterHeight, habitat.transform.position.z))))
                         throw new InvalidOperationException($"Water surface must be upright and inside its habitat: {habitat.name}.");
                 }
-                foreach (var perch in FindObjectsByType<BirdPerch>(FindObjectsSortMode.None))
+                foreach (var perch in FindObjectsByType<BirdPerch>())
                 {
                     if (perch.gameObject.scene != scene) continue;
                     if (perch.Id == 0 || perch.Biome == 0 || !perches.TryAdd(perch.Id, perch)) throw new InvalidOperationException("Bird perch IDs must be unique and nonzero; duplicated volumes need new IDs.");

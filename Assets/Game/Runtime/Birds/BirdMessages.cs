@@ -54,7 +54,7 @@ namespace TwoBirds
         public static void WriteBirdRoute(this Writer writer, BirdRoute route)
         {
             writer.WriteUInt32(route.Revision); writer.WriteUInt32(route.StartTick);
-            writer.WriteByte((byte)route.Kind); writer.WriteByte((byte)route.Activity);
+            writer.WriteUInt8Unpacked((byte)route.Kind); writer.WriteUInt8Unpacked((byte)route.Activity);
             writer.WriteVector3(route.A);
             writer.WriteSingle(route.Facing);
             writer.WriteUInt16(route.Habitat); writer.WriteUInt16(route.Perch);
@@ -62,7 +62,7 @@ namespace TwoBirds
             writer.WriteSingle(route.Seconds);
             if (route.Kind == BirdMotionKind.Surface)
             {
-                int count = route.Surface.Length; writer.WriteByte((byte)count);
+                int count = route.Surface.Length; writer.WriteUInt8Unpacked((byte)count);
                 for (int i = 1; i < count; i++) WritePoint(writer, route.Surface[i], route.A);
                 return;
             }
@@ -76,13 +76,13 @@ namespace TwoBirds
         public static BirdRoute ReadBirdRoute(this Reader reader)
         {
             var route = new BirdRoute { Revision = reader.ReadUInt32(), StartTick = reader.ReadUInt32(),
-                Kind = (BirdMotionKind)reader.ReadByte(), Activity = (BirdActivity)reader.ReadByte(), A = reader.ReadVector3(), Facing = reader.ReadSingle() };
+                Kind = (BirdMotionKind)reader.ReadUInt8Unpacked(), Activity = (BirdActivity)reader.ReadUInt8Unpacked(), A = reader.ReadVector3(), Facing = reader.ReadSingle() };
             route.Habitat = reader.ReadUInt16(); route.Perch = reader.ReadUInt16();
             if (route.Kind == BirdMotionKind.Hold) { route.D = route.A; return route; }
             route.Seconds = reader.ReadSingle();
             if (route.Kind == BirdMotionKind.Surface)
             {
-                int count = reader.ReadByte();
+                int count = reader.ReadUInt8Unpacked();
                 route.Surface = new Vector3[count];
                 route.Surface[0] = route.A;
                 for (int i = 1; i < count; i++) route.Surface[i] = ReadPoint(reader, route.A);
@@ -99,7 +99,7 @@ namespace TwoBirds
         }
         public static void WriteBirdEvent(this Writer writer, BirdEvent message)
         {
-            writer.WriteUInt32(message.Epoch); writer.WriteUInt32(message.Sequence); writer.WriteByte((byte)message.Kind);
+            writer.WriteUInt32(message.Epoch); writer.WriteUInt32(message.Sequence); writer.WriteUInt8Unpacked((byte)message.Kind);
             var record = message.Record;
             if (message.Kind == BirdEventKind.Spawn) { writer.WriteBirdRecord(record); return; }
             writer.WriteUInt32(record.Life);
@@ -109,13 +109,13 @@ namespace TwoBirds
             }
             writer.WriteUInt32(record.Revision); writer.WriteUInt32(record.Route.Revision);
             writer.WriteUInt16(record.Occupied); writer.WriteUInt16(record.Reserved);
-            writer.WriteByte((byte)record.Interrupt); writer.WriteUInt32(record.FleeAt);
+            writer.WriteUInt8Unpacked((byte)record.Interrupt); writer.WriteUInt32(record.FleeAt);
             writer.WriteBoolean(record.HasNext);
             if (record.HasNext) writer.WriteBirdRoute(record.Next);
         }
         public static BirdEvent ReadBirdEvent(this Reader reader)
         {
-            var message = new BirdEvent { Epoch = reader.ReadUInt32(), Sequence = reader.ReadUInt32(), Kind = (BirdEventKind)reader.ReadByte() };
+            var message = new BirdEvent { Epoch = reader.ReadUInt32(), Sequence = reader.ReadUInt32(), Kind = (BirdEventKind)reader.ReadUInt8Unpacked() };
             if (message.Kind == BirdEventKind.Spawn) { message.Record = reader.ReadBirdRecord(); return message; }
             message.Record.Life = reader.ReadUInt32();
             if (message.Kind == BirdEventKind.Death)
@@ -124,7 +124,7 @@ namespace TwoBirds
             }
             message.Record.Revision = reader.ReadUInt32(); message.Record.Route.Revision = reader.ReadUInt32();
             message.Record.Occupied = reader.ReadUInt16(); message.Record.Reserved = reader.ReadUInt16();
-            message.Record.Interrupt = (BirdInterrupt)reader.ReadByte(); message.Record.FleeAt = reader.ReadUInt32();
+            message.Record.Interrupt = (BirdInterrupt)reader.ReadUInt8Unpacked(); message.Record.FleeAt = reader.ReadUInt32();
             message.Record.HasNext = reader.ReadBoolean();
             if (message.Record.HasNext) message.Record.Next = reader.ReadBirdRoute();
             return message;
@@ -162,7 +162,7 @@ namespace TwoBirds
             writer.WriteUInt32(record.Life); writer.WriteUInt32(record.Revision);
             writer.WriteUInt16(record.Species); writer.WriteUInt16(record.Zone); writer.WriteUInt16(record.Biome);
             writer.WriteUInt16(record.Occupied); writer.WriteUInt16(record.Reserved);
-            writer.WriteByte((byte)record.Interrupt); writer.WriteUInt32(record.FleeAt);
+            writer.WriteUInt8Unpacked((byte)record.Interrupt); writer.WriteUInt32(record.FleeAt);
             writer.WriteBirdRoute(record.Route); writer.WriteBoolean(record.HasNext);
             if (record.HasNext) writer.WriteBirdRoute(record.Next);
         }
@@ -171,7 +171,7 @@ namespace TwoBirds
             var record = new BirdRecord
             {
                 Life = reader.ReadUInt32(), Revision = reader.ReadUInt32(), Species = reader.ReadUInt16(), Zone = reader.ReadUInt16(), Biome = reader.ReadUInt16(),
-                Occupied = reader.ReadUInt16(), Reserved = reader.ReadUInt16(), Interrupt = (BirdInterrupt)reader.ReadByte(), FleeAt = reader.ReadUInt32(),
+                Occupied = reader.ReadUInt16(), Reserved = reader.ReadUInt16(), Interrupt = (BirdInterrupt)reader.ReadUInt8Unpacked(), FleeAt = reader.ReadUInt32(),
                 Route = reader.ReadBirdRoute(), HasNext = reader.ReadBoolean()
             };
             if (record.HasNext) record.Next = reader.ReadBirdRoute();

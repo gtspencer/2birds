@@ -22,11 +22,11 @@ namespace TwoBirds
             public Vector3 Normal, Position;
         }
         private readonly Dictionary<uint, HitShape> hitShapes = new();
-        private readonly Dictionary<int, uint> shapeLives = new();
-        private readonly HashSet<int> physicalRocks = new();
-        private readonly HashSet<(int rock, int bird)> suppressedRockPairs = new();
-        private readonly Dictionary<int, HitShape> colliderShapes = new();
-        private readonly ConcurrentDictionary<(int rock, int bird), RockContact> rockContacts = new();
+        private readonly Dictionary<EntityId, uint> shapeLives = new();
+        private readonly HashSet<EntityId> physicalRocks = new();
+        private readonly HashSet<(EntityId rock, EntityId bird)> suppressedRockPairs = new();
+        private readonly Dictionary<EntityId, HitShape> colliderShapes = new();
+        private readonly ConcurrentDictionary<(EntityId rock, EntityId bird), RockContact> rockContacts = new();
         private readonly Stack<HitShape> spareShapes = new();
         private readonly List<uint> retiredShapes = new();
         private float bounceMultiplier, undersideMultiplier;
@@ -55,8 +55,8 @@ namespace TwoBirds
             foreach (uint life in retiredShapes)
             {
                 var shape = hitShapes[life];
-                shapeLives.Remove(shape.Collider.GetInstanceID());
-                colliderShapes.Remove(shape.Collider.GetInstanceID());
+                shapeLives.Remove(shape.Collider.GetEntityId());
+                colliderShapes.Remove(shape.Collider.GetEntityId());
                 shape.Collider.enabled = false;
                 shape.Body.collisionDetectionMode = CollisionDetectionMode.Discrete;
                 shape.Body.isKinematic = true;
@@ -71,8 +71,8 @@ namespace TwoBirds
                     shape = spareShapes.Count > 0 ? spareShapes.Pop() : CreateHitShape();
                     shape.Collider.radius = species[record.Species].Radius;
                     hitShapes.Add(record.Life, shape);
-                    shapeLives.Add(shape.Collider.GetInstanceID(), record.Life);
-                    colliderShapes.Add(shape.Collider.GetInstanceID(), shape);
+                    shapeLives.Add(shape.Collider.GetEntityId(), record.Life);
+                    colliderShapes.Add(shape.Collider.GetEntityId(), shape);
                 }
                 bool enabled = !hitReporter.Predicted(record.Life);
                 if (shape.Collider.enabled != enabled) shape.Collider.enabled = enabled;
@@ -109,8 +109,8 @@ namespace TwoBirds
             return new HitShape { Body = body, Collider = collider };
         }
 
-        internal void RegisterPhysicalRock(int collider, Vector3 center, float radius, bool rebase,
-            Dictionary<int, uint> suppressed, List<int> separated)
+        internal void RegisterPhysicalRock(EntityId collider, Vector3 center, float radius, bool rebase,
+            Dictionary<EntityId, uint> suppressed, List<EntityId> separated)
         {
             physicalRocks.Add(collider);
             separated.Clear();
@@ -120,16 +120,16 @@ namespace TwoBirds
                     (shape.Body.position - center).sqrMagnitude > Mathf.Pow(radius + shape.Collider.radius, 2f))
                     separated.Add(pair.Key);
             }
-            foreach (int bird in separated) suppressed.Remove(bird);
+            foreach (EntityId bird in separated) suppressed.Remove(bird);
             foreach (var pair in hitShapes)
             {
                 var shape = pair.Value;
                 if (!rebase && !shape.Rebased) continue;
                 float combined = radius + shape.Collider.radius;
                 if (shape.Collider.enabled && (shape.Body.position - center).sqrMagnitude <= combined * combined)
-                    suppressed[shape.Collider.GetInstanceID()] = pair.Key;
+                    suppressed[shape.Collider.GetEntityId()] = pair.Key;
             }
-            foreach (int bird in suppressed.Keys) suppressedRockPairs.Add((collider, bird));
+            foreach (EntityId bird in suppressed.Keys) suppressedRockPairs.Add((collider, bird));
         }
         private void ModifyRockContacts(PhysicsScene scene, NativeArray<ModifiableContactPair> pairs) => ModifyRockContacts(pairs, false);
         private void ModifyRockCcdContacts(PhysicsScene scene, NativeArray<ModifiableContactPair> pairs) => ModifyRockContacts(pairs, true);
@@ -139,10 +139,10 @@ namespace TwoBirds
             for (int pairIndex = 0; pairIndex < pairs.Length; pairIndex++)
             {
                 var pair = pairs[pairIndex];
-                bool birdFirst = shapeLives.TryGetValue(pair.colliderInstanceID, out uint life);
-                if (!birdFirst && !shapeLives.TryGetValue(pair.otherColliderInstanceID, out life)) continue;
-                int rock = birdFirst ? pair.otherColliderInstanceID : pair.colliderInstanceID;
-                int bird = birdFirst ? pair.colliderInstanceID : pair.otherColliderInstanceID;
+                bool birdFirst = shapeLives.TryGetValue(pair.colliderEntityId, out uint life);
+                if (!birdFirst && !shapeLives.TryGetValue(pair.otherColliderEntityId, out life)) continue;
+                EntityId rock = birdFirst ? pair.otherColliderEntityId : pair.colliderEntityId;
+                EntityId bird = birdFirst ? pair.colliderEntityId : pair.otherColliderEntityId;
                 if (!physicalRocks.Contains(rock) || suppressedRockPairs.Contains((rock, bird)))
                 {
                     for (int i = 0; i < pair.contactCount; i++) pair.IgnoreContact(i);
@@ -169,8 +169,8 @@ namespace TwoBirds
             }
         }
 
-        internal bool TryRockContact(int rock, Collider bird, out RockContact contact) =>
-            rockContacts.TryRemove((rock, bird.GetInstanceID()), out contact);
+        internal bool TryRockContact(EntityId rock, Collider bird, out RockContact contact) =>
+            rockContacts.TryRemove((rock, bird.GetEntityId()), out contact);
 
         internal void ReportRockContact(ItemRecord rock, RockContact contact, bool waiting)
         {

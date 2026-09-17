@@ -88,7 +88,7 @@ namespace TwoBirds
             sessionId = SessionController.Instance.SessionId;
             epoch = (uint)Random.Range(1, int.MaxValue);
             worldReady = true;
-            foreach (var seed in FindObjectsByType<BakedPickup>(FindObjectsSortMode.None))
+            foreach (var seed in FindObjectsByType<BakedPickup>())
             {
                 if (seed.gameObject.scene != scene) continue;
                 if (seed.BakedId == 0 || records.ContainsKey(seed.BakedId))
@@ -118,7 +118,7 @@ namespace TwoBirds
             worldScene = scene;
             sessionId = SessionController.Instance.SessionId;
             worldReady = true;
-            foreach (var seed in FindObjectsByType<BakedPickup>(FindObjectsSortMode.None))
+            foreach (var seed in FindObjectsByType<BakedPickup>())
             {
                 if (seed.gameObject.scene != scene) continue;
                 if (seed.BakedId != 0 && !items.ContainsKey(seed.BakedId))
