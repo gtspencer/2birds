@@ -1,6 +1,3 @@
-### .agentignore
-Respect `.agentignore` at the project root. Do not read, search, edit, or reference any path that matches a pattern in that file.  Before exploring a directory or searching files, check `.agentignore` and skip matching paths entirely.
-
 ### General Rules
 - Use the Unity CLI when possible.  If not possible, fall back to the Unity MCP.
 - Do not write verbose comments.  If you think a comment is stricly necessary, keep it short and concise.
