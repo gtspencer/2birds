@@ -6,10 +6,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -File .agentignore.hook.ps1",
-            "commandWindows": "powershell -NoProfile -File .agentignore.hook.ps1",
+            "command": "powershell -NoProfile -File .hooks/.agentignore.hook.ps1",
+            "commandWindows": "powershell -NoProfile -File .hooks/.agentignore.hook.ps1",
             "timeout": 10,
             "statusMessage": "Checking .agentignore"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -File .hooks/block-git-writes.ps1",
+            "commandWindows": "powershell -NoProfile -File .hooks/block-git-writes.ps1",
+            "timeout": 10,
+            "statusMessage": "Checking for git write operations"
           }
         ]
       }

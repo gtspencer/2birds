@@ -2,22 +2,20 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Read|Edit|Write|Glob|Grep|Bash|PowerShell",
+        "matcher": "Read|Edit|Write|Glob|Grep",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -File .agentignore.hook.ps1"
+            "command": "powershell -NoProfile -File .hooks/.agentignore.hook.ps1"
           }
         ]
-      }
-    ],
-    "PostToolUse": [
+      },
       {
-        "matcher": "Grep|Glob",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -File .agentignore.postfilter.ps1"
+            "command": "powershell -NoProfile -File .hooks/block-git-writes.ps1"
           }
         ]
       }

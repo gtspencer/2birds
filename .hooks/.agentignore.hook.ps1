@@ -1,6 +1,8 @@
 param()
 
-$raw = [Console]::In.ReadToEnd()
+$task = [System.Threading.Tasks.Task]::Run([Func[string]]{ [Console]::In.ReadToEnd() })
+if (-not $task.Wait(5000)) { exit 0 }
+$raw = $task.Result
 if (-not $raw) { exit 0 }
 
 $data = $raw | ConvertFrom-Json
