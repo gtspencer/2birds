@@ -99,7 +99,10 @@ namespace TwoBirds
             Network.SceneManager.OnQueueEnd += QueueEnded;
             SetFrameCap(PlayerPrefs.GetInt("RenderingFrameCap", 60));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!Application.isBatchMode) gameObject.AddComponent<DevConsole>();
+            if (!Application.isBatchMode) {
+                gameObject.AddComponent<DevConsole>();
+                gameObject.AddComponent<LogMarkerService>();
+            }
 #endif
         }
 
