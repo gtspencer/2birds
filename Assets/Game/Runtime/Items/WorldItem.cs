@@ -37,6 +37,7 @@ namespace TwoBirds
         private bool optimisticPickup;
         private float interactableAfter;
         private int playerHitboxMask;
+        private int golfCartMask;
         private ItemUseBehaviour useBehaviour;
         private PlayerEquipment useUser;
         private SphereCollider impactSphere;
@@ -88,6 +89,7 @@ namespace TwoBirds
             offlineRigidbody = GetComponent<OfflineRigidbody>();
             useBehaviour = GetComponent<ItemUseBehaviour>();
             playerHitboxMask = LayerMask.GetMask("PlayerItemHitbox");
+            golfCartMask = LayerMask.GetMask("GolfCart");
             colliders = GetComponentsInChildren<Collider>(true);
             impactSphere = GetComponentInChildren<SphereCollider>(true);
             if (impactSphere) birdColliderId = impactSphere.GetEntityId();
@@ -254,9 +256,10 @@ namespace TwoBirds
             }
             if (record.State == WorldItemState.Removed) InterruptUse();
             Record = record;
+            int sleepMask = playerHitboxMask | golfCartMask;
             int excludedLayers = record.Sleeping
-                ? Body.excludeLayers.value | playerHitboxMask
-                : Body.excludeLayers.value & ~playerHitboxMask;
+                ? Body.excludeLayers.value | sleepMask
+                : Body.excludeLayers.value & ~sleepMask;
             if (Body.excludeLayers.value == excludedLayers) return;
             Body.excludeLayers = excludedLayers;
             if (record.Sleeping && !Body.isKinematic) Body.Sleep();
