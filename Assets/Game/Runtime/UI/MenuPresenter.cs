@@ -14,9 +14,10 @@ namespace TwoBirds
         private SteamLobby lobby;
         private readonly List<Action> unbind = new();
         private readonly Label[] roster = new Label[SessionController.MultiplayerCapacity];
-        private DropdownField frameCap;
         private string page = "main";
         private InputAction cancel;
+        private InputAction pause;
+        private SettingsPanel settings;
 
         private void Start() => Bind();
         private void OnEnable() { if (session) Bind(); }
@@ -31,7 +32,7 @@ namespace TwoBirds
             Click("host-back", () => Show("main"));
             Click("join-back", () => Show("main"));
             Click("settings", () => Show("settings"));
-            Click("settings-back", () => Show("main"));
+            settings = new SettingsPanel(root, session, () => Show("main"));
             Click("start-host", () => session.StartSession(SessionMode.Host, portText: root.Q<TextField>("host-port").value));
             Click("connect", () => session.StartSession(SessionMode.Join, root.Q<TextField>("join-ip").value, root.Q<TextField>("join-port").value));
             Click("friends-refresh", () => { if (lobby) lobby.RefreshFriends(); });
@@ -48,14 +49,12 @@ namespace TwoBirds
                 roster[i] = new Label { enableRichText = false };
                 slots.Add(roster[i]);
             }
-            frameCap = root.Q<DropdownField>("frame-cap");
-            frameCap.choices = new List<string> { "60 FPS", "90 FPS", "120 FPS" };
-            frameCap.SetValueWithoutNotify($"{PlayerPrefs.GetInt("RenderingFrameCap", 60)} FPS");
-            frameCap.RegisterValueChangedCallback(FrameCapChanged);
             session.Changed += Render;
             if (lobby) lobby.Changed += RenderFriends;
             cancel = InputSystem.actions.FindAction("UI/Cancel");
             cancel.performed += Cancel;
+            pause = InputSystem.actions.FindAction("UI/Pause");
+            pause.performed += Pause;
             RenderFriends();
             Render();
             root.Q<Button>("solo").Focus();
@@ -70,10 +69,15 @@ namespace TwoBirds
 
         private void Cancel(InputAction.CallbackContext context)
         {
+            if (ControlsRemapPanel.SuppressMenuInput || context.control == Keyboard.current?.escapeKey) return;
             if (session.Phase != SessionPhase.Idle) session.Leave(); else Show("main");
         }
 
-        private void FrameCapChanged(ChangeEvent<string> evt) => session.SetFrameCap(frameCap.index switch { 1 => 90, 2 => 120, _ => 60 });
+        private void Pause(InputAction.CallbackContext context)
+        {
+            if (ControlsRemapPanel.SuppressMenuInput) return;
+            if (session.Phase != SessionPhase.Idle) session.Leave(); else Show("main");
+        }
 
         private void Show(string next)
         {
@@ -100,8 +104,10 @@ namespace TwoBirds
         private void Render()
         {
             bool idle = session.Phase == SessionPhase.Idle;
+            settings.SetVisible(idle && page == "settings");
+            root.Q(className: "card").EnableInClassList("settings-card", idle && page == "settings");
             bool inLobby = session.Phase == SessionPhase.InLobby;
-            foreach (string name in new[] { "main", "host", "join", "settings" })
+            foreach (string name in new[] { "main", "host", "join" })
                 root.Q(name + "-page").style.display = idle && name == page ? DisplayStyle.Flex : DisplayStyle.None;
             root.Q("lobby-page").style.display = inLobby ? DisplayStyle.Flex : DisplayStyle.None;
             for (int i = 0; i < roster.Length; i++)
@@ -121,12 +127,14 @@ namespace TwoBirds
 
         private void OnDisable()
         {
+            settings?.Dispose();
+            settings = null;
             foreach (Action action in unbind) action();
             unbind.Clear();
             if (session) session.Changed -= Render;
             if (lobby) lobby.Changed -= RenderFriends;
             if (cancel != null) cancel.performed -= Cancel;
-            frameCap?.UnregisterValueChangedCallback(FrameCapChanged);
+            if (pause != null) pause.performed -= Pause;
         }
     }
 }

@@ -16,3 +16,18 @@ TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
 .overlay { flex-grow: 1; }
 
 .pause { position: absolute; align-self: center; top: 28%; }
+.settings-card { width: 760px; max-width: 95%; max-height: 95%; }
+.pause.settings-card { top: 5%; }
+.shared-settings { flex-shrink: 1; min-height: 0; }
+#settings-page, #controls-settings, #controls-options { flex-shrink: 1; min-height: 0; }
+.settings-tabs { flex-direction: row; }
+.settings-tabs > Button { flex-grow: 1; flex-basis: 0; }
+.selected-tab { background-color: rgb(74, 99, 109); border-color: rgb(165, 225, 204); }
+.binding-list { height: 330px; flex-shrink: 1; min-height: 100px; }
+.binding-row { flex-direction: row; align-items: center; }
+.binding-name { width: 205px; font-size: 16px; white-space: normal; }
+.binding-button { flex-grow: 1; flex-basis: 0; flex-direction: row; align-items: center; justify-content: center; }
+.binding-button > Label { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+.binding-glyph { width: 28px; height: 28px; margin-right: 6px; }
+.binding-reset { width: 68px; font-size: 14px; }
+#binding-feedback { background-color: rgb(20, 28, 36); padding: 10px; }

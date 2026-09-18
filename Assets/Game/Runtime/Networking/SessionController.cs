@@ -27,6 +27,8 @@ namespace TwoBirds
         [SerializeField] private GameSteamTransport steamTransport;
         public NetworkManager Network { get; private set; }
         public SteamLobby Lobby { get; private set; }
+        public InputBindings Bindings { get; private set; }
+        public InputPresentation InputPresentation { get; private set; }
         public SessionMode Mode { get; private set; }
         public SessionPhase Phase { get; private set; }
         public string Status { get; private set; } = "";
@@ -76,6 +78,8 @@ namespace TwoBirds
         {
             if (Instance && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
+            Bindings = new InputBindings(UnityEngine.InputSystem.InputSystem.actions);
+            InputPresentation = new InputPresentation(Bindings);
             DontDestroyOnLoad(gameObject);
             Application.runInBackground = true;
         }
@@ -461,6 +465,7 @@ namespace TwoBirds
         private void OnDestroy()
         {
             if (Instance != this) return;
+            InputPresentation?.Dispose();
             ShutdownPlatform();
             Instance = null;
             if (!Network) return;

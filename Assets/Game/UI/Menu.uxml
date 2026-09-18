@@ -1,5 +1,6 @@
 ﻿<ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="Shared.uss" />
+    <ui:Template name="Settings" src="Settings.uxml" />
     <ui:VisualElement class="screen">
         <ui:VisualElement class="card">
             <ui:Label text="TWO BIRDS" class="eyebrow" />
@@ -39,12 +40,7 @@
                 <ui:Button name="invite" text="Invite Steam Friends" />
                 <ui:Button name="lobby-leave" text="Leave Lobby" />
             </ui:VisualElement>
-            <ui:VisualElement name="settings-page" style="display: none;">
-                <ui:Label text="Settings" class="heading" />
-                <ui:DropdownField name="frame-cap" label="Frame rate" />
-                <ui:Label text="V-sync is disabled so your selected frame-rate cap can take effect." class="hint" />
-                <ui:Button name="settings-back" text="Back" />
-            </ui:VisualElement>
+            <ui:Instance template="Settings" class="shared-settings" />
             <ui:Label name="status" class="status" />
             <ui:Button name="cancel" text="Cancel connection" style="display: none;" />
         </ui:VisualElement>

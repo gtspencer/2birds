@@ -279,3 +279,7 @@
     font-size: 15px;
     color: rgb(245, 215, 120);
 }
+
+.slot-binding-glyph { position: absolute; top: 2px; left: 4px; width: 22px; height: 22px; }
+.slot-key { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#inventory-shortcut { font-size: 14px; color: rgb(179, 195, 205); margin-top: 8px; }

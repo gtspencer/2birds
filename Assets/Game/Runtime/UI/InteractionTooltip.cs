@@ -10,26 +10,23 @@ namespace TwoBirds
         private readonly VisualElement root, tooltip, chargeTrack;
         private readonly Image glyph;
         private readonly Label keycap, verb;
-        private readonly SteamInputGlyphs glyphs;
+        private readonly InputPresentation presentation;
         private InputAction displayedAction;
-        private InputControl displayedControl;
-        private string displayedName;
         private bool bindingDirty = true;
 
-        public InteractionTooltip(VisualElement root, SteamInputGlyphs glyphs)
+        public InteractionTooltip(VisualElement root, InputPresentation presentation)
         {
             this.root = root;
-            this.glyphs = glyphs;
+            this.presentation = presentation;
             tooltip = root.Q("interaction-tooltip");
             chargeTrack = root.Q("charge-track");
             glyph = root.Q<Image>("interaction-glyph");
             keycap = root.Q<Label>("interaction-keycap");
             verb = root.Q<Label>("interaction-action");
-            InputSystem.onActionChange += OnActionChange;
-            InputSystem.onDeviceChange += OnDeviceChange;
+            presentation.Changed += PresentationChanged;
         }
 
-        public void Update(PlayerInteraction interaction, InputDevice device)
+        public void Update(PlayerInteraction interaction)
         {
             if (interaction == null || !interaction.IsOwner || interaction.TargetCollider == null ||
                 !interaction.TargetCollider.gameObject.activeInHierarchy || !interaction.Target.CanInteract)
@@ -38,21 +35,16 @@ namespace TwoBirds
                 return;
             }
             var action = interaction.Action;
-            var control = FindControl(action, device);
-            if (control == null) { Hide(); return; }
-            var texture = glyphs.Get(control, out var name);
-            if (bindingDirty || displayedAction != action || displayedControl != control || displayedName != name)
+            if (bindingDirty || displayedAction != action)
             {
                 displayedAction = action;
-                displayedControl = control;
-                displayedName = name;
                 bindingDirty = false;
-                keycap.text = !string.IsNullOrEmpty(name) ? name :
-                    string.IsNullOrEmpty(control.shortDisplayName) ? control.displayName : control.shortDisplayName;
+                var binding = presentation.Resolve(action);
+                keycap.text = binding.Text;
+                glyph.image = binding.Glyph;
+                glyph.style.display = binding.Glyph ? DisplayStyle.Flex : DisplayStyle.None;
+                keycap.style.display = binding.Glyph ? DisplayStyle.None : DisplayStyle.Flex;
             }
-            glyph.image = texture;
-            glyph.style.display = texture ? DisplayStyle.Flex : DisplayStyle.None;
-            keycap.style.display = texture ? DisplayStyle.None : DisplayStyle.Flex;
             verb.text = interaction.Target.ActionText;
             tooltip.style.display = DisplayStyle.Flex;
             var anchor = interaction.Target.TooltipAnchor;
@@ -60,17 +52,6 @@ namespace TwoBirds
                 PositionAtPoint(interaction.ViewCamera, anchor.position);
             else
                 Position(interaction.ViewCamera, interaction.TargetCollider.bounds);
-        }
-
-        private static InputControl FindControl(InputAction action, InputDevice device)
-        {
-            if (action == null || !action.enabled) return null;
-            foreach (var control in action.controls)
-            {
-                if (device is Gamepad ? control.device == device : control.device is Keyboard || control.device is Mouse)
-                    return control;
-            }
-            return null;
         }
 
         private void Position(Camera camera, Bounds bounds)
@@ -134,20 +115,11 @@ namespace TwoBirds
 
         public void Hide() => tooltip.style.display = DisplayStyle.None;
 
-        private void OnActionChange(object obj, InputActionChange change)
-        {
-            if (change == InputActionChange.BoundControlsChanged) bindingDirty = true;
-        }
-
-        private void OnDeviceChange(InputDevice device, InputDeviceChange change)
-        {
-            if (change == InputDeviceChange.ConfigurationChanged) bindingDirty = true;
-        }
+        private void PresentationChanged() => bindingDirty = true;
 
         public void Dispose()
         {
-            InputSystem.onActionChange -= OnActionChange;
-            InputSystem.onDeviceChange -= OnDeviceChange;
+            presentation.Changed -= PresentationChanged;
             Hide();
         }
     }

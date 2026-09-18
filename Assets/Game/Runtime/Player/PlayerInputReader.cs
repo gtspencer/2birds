@@ -31,7 +31,7 @@ namespace TwoBirds
             get => inventoryOpen;
             set
             {
-                if (value) ClearContext();
+                ClearContext();
                 inventoryOpen = value;
             }
         }
@@ -40,7 +40,9 @@ namespace TwoBirds
         public bool Handbrake => GameplayActive && !seating.TransitionPending && jump.IsPressed();
         public bool InteractPressed => GameplayActive && !seating.TransitionPending && !interactBlocked &&
             suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame();
-        public InputDevice ActiveDevice { get; private set; }
+        private InputPresentation presentation;
+        private InputDevice previousDevice;
+        public InputDevice ActiveDevice => presentation?.ActiveDevice;
 
         public override void OnStartClient()
         {
@@ -60,8 +62,9 @@ namespace TwoBirds
             seating = GetComponent<PlayerSeating>();
             inventory = GetComponent<PlayerInventory>();
             equipment = GetComponent<PlayerEquipment>();
-            ActiveDevice = Keyboard.current;
-            InputSystem.onEvent += TrackDevice;
+            presentation = SessionController.Instance.InputPresentation;
+            previousDevice = presentation.ActiveDevice;
+            presentation.Changed += PresentationChanged;
             InputSystem.onAfterUpdate += ReadInput;
             SetGameplay(false);
             SessionController.Instance.PlayerReady(GetComponent<PlayerMotor>());
@@ -82,7 +85,6 @@ namespace TwoBirds
 
         private void ReadInput()
         {
-            if (ActiveDevice != null && !ActiveDevice.added) { ClearContext(); ActiveDevice = Keyboard.current; }
             if (!IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
             bool blocked = useBlocked;
             if (useBlocked && !UseButtonHeld()) useBlocked = false;
@@ -125,6 +127,12 @@ namespace TwoBirds
             return ButtonHeld(use);
         }
 
+        private void PresentationChanged()
+        {
+            if (previousDevice != null && !previousDevice.added) ClearContext();
+            previousDevice = presentation.ActiveDevice;
+        }
+
         private static bool ButtonHeld(InputAction action)
         {
             if (action == null) return false;
@@ -137,24 +145,6 @@ namespace TwoBirds
         {
             useBlocked = UseButtonHeld();
             equipment?.CancelUse();
-        }
-
-        private void TrackDevice(InputEventPtr evt, InputDevice device)
-        {
-            if (!GameplayActive || !IsOwner || (evt.type != StateEvent.Type && evt.type != DeltaStateEvent.Type)) return;
-            if (device is not Keyboard && device is not Mouse && device is not Gamepad) return;
-            foreach (var control in evt.EnumerateChangedControls(device, 0.25f))
-            {
-                if (device is Mouse mouse && control != mouse.leftButton && control != mouse.rightButton &&
-                    control != mouse.middleButton && control != mouse.forwardButton && control != mouse.backButton)
-                {
-                    bool moved = mouse.delta.ReadValueFromEvent(evt, out var delta) && delta.sqrMagnitude >= 4f;
-                    bool scrolled = mouse.scroll.ReadValueFromEvent(evt, out var scroll) && scroll.sqrMagnitude >= 1f;
-                    if (!moved && !scrolled) continue;
-                }
-                ActiveDevice = device;
-                break;
-            }
         }
 
         public MoveInput Consume()
@@ -193,7 +183,9 @@ namespace TwoBirds
         {
             CancelUse();
             InputSystem.onAfterUpdate -= ReadInput;
-            InputSystem.onEvent -= TrackDevice;
+            if (presentation != null) presentation.Changed -= PresentationChanged;
+            presentation = null;
+            previousDevice = null;
             if (actions != null) SetGameplay(false);
             actions = null;
             use = null;

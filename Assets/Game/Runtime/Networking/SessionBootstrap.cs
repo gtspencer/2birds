@@ -15,6 +15,7 @@ namespace TwoBirds
         [SerializeField] private GameObject sessionPrefab;
         private void Awake()
         {
+            if (!SessionController.Instance) InputBindings.Load(InputSystem.actions);
             InputSystem.actions.FindActionMap("Player").Disable();
             InputSystem.actions.FindActionMap("UI").Enable();
             if (SessionController.Instance == null) Instantiate(sessionPrefab);

@@ -1,0 +1,28 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="settings-page" style="display: none;">
+        <ui:Label text="Settings" class="heading" />
+        <ui:VisualElement name="settings-tabs" class="settings-tabs">
+            <ui:Button name="graphics-tab" text="Graphics" />
+            <ui:Button name="controls-tab" text="Controls" />
+        </ui:VisualElement>
+        <ui:VisualElement name="graphics-settings">
+            <ui:DropdownField name="frame-cap" label="Frame rate" />
+            <ui:Label text="V-sync is disabled so your selected frame-rate cap can take effect." class="hint" />
+        </ui:VisualElement>
+        <ui:VisualElement name="controls-settings" style="display: none;">
+            <ui:VisualElement name="controls-options">
+                <ui:DropdownField name="controls-device" label="Device" />
+                <ui:ScrollView name="binding-list" class="binding-list" />
+                <ui:Button name="bindings-restore" text="Restore Defaults for This Device" />
+            </ui:VisualElement>
+            <ui:VisualElement name="binding-feedback" style="display: none;">
+                <ui:Label name="binding-prompt" class="hint" />
+                <ui:VisualElement class="settings-tabs">
+                    <ui:Button name="binding-accept" text="Use Anyway" style="display: none;" />
+                    <ui:Button name="binding-cancel" text="Cancel · Escape / Start" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:Button name="settings-back" text="Back" />
+    </ui:VisualElement>
+</ui:UXML>

@@ -30,7 +30,15 @@ namespace TwoBirds
         private bool inventoryOpen;
         private int dragFromSlot = -1;
         private VisualElement dragGhost;
-        private SteamInputGlyphs glyphs;
+        private InputPresentation presentation;
+        private InventoryInputHandler inventoryInput;
+        private InputAction inventoryAction;
+        private readonly InputAction[] slotActions = new InputAction[PlayerInventory.HotbarSize];
+        private readonly Label[] hotbarKeys = new Label[PlayerInventory.HotbarSize];
+        private readonly Label[] inventoryKeys = new Label[PlayerInventory.HotbarSize];
+        private readonly Image[] hotbarGlyphs = new Image[PlayerInventory.HotbarSize];
+        private readonly Image[] inventoryGlyphs = new Image[PlayerInventory.HotbarSize];
+        private Label inventoryShortcut;
         private InteractionTooltip interactionTooltip;
         private ControlsHintPanel controlsHint;
         private PlayerInteraction interaction;
@@ -45,6 +53,7 @@ namespace TwoBirds
         private int rewardTotal, rewardBonus;
 
         public bool InventoryOpen => inventoryOpen;
+        public int InventoryInputFrame { get; private set; } = -1;
 
         private void OnEnable()
         {
@@ -70,11 +79,24 @@ namespace TwoBirds
             chargeTrack = root.Q("charge-track");
             chargeFill = root.Q("charge-fill");
             HideCharge();
-            glyphs = new SteamInputGlyphs();
-            interactionTooltip = new InteractionTooltip(root, glyphs);
-            controlsHint = new ControlsHintPanel(root, glyphs);
+            var session = SessionController.Instance;
+            presentation = session.InputPresentation;
+            inventoryInput = new InventoryInputHandler(session, ToggleInventory);
+            inventoryAction = InputSystem.actions.FindAction("Player/Inventory");
+            for (int i = 0; i < slotActions.Length; i++)
+                slotActions[i] = InputSystem.actions.FindAction($"Player/Hotbar{i + 1}");
+            interactionTooltip = new InteractionTooltip(root, presentation);
+            controlsHint = new ControlsHintPanel(root, presentation);
             BuildHotbar();
             BuildInventoryGrid();
+            inventoryShortcut = inventoryPanel.Q<Label>("inventory-shortcut");
+            if (inventoryShortcut == null)
+            {
+                inventoryShortcut = new Label { name = "inventory-shortcut" };
+                inventoryPanel.Add(inventoryShortcut);
+            }
+            presentation.Changed += RefreshBindings;
+            RefreshBindings();
         }
 
         private void BuildHotbar()
@@ -85,9 +107,7 @@ namespace TwoBirds
             {
                 int idx = i;
                 var slot = MakeSlot(i);
-                var key = new Label((i + 1).ToString());
-                key.AddToClassList("slot-key");
-                slot.Add(key);
+                AddShortcut(slot, out hotbarKeys[i], out hotbarGlyphs[i]);
                 slot.RegisterCallback<ClickEvent>(_ => OnHotbarClick(idx));
                 hotbar.Add(slot);
                 hotbarSlots[i] = slot;
@@ -103,9 +123,7 @@ namespace TwoBirds
                 var slot = MakeSlot(i);
                 if (i < PlayerInventory.HotbarSize)
                 {
-                    var key = new Label((i + 1).ToString());
-                    key.AddToClassList("slot-key");
-                    slot.Add(key);
+                    AddShortcut(slot, out inventoryKeys[i], out inventoryGlyphs[i]);
                 }
                 slot.RegisterCallback<PointerDownEvent>(OnSlotPointerDown);
                 slot.RegisterCallback<PointerMoveEvent>(OnSlotPointerMove);
@@ -113,6 +131,36 @@ namespace TwoBirds
                 inventoryGrid.Add(slot);
                 inventorySlots[i] = slot;
             }
+        }
+
+        private static void AddShortcut(VisualElement slot, out Label key, out Image glyph)
+        {
+            key = new Label { pickingMode = PickingMode.Ignore };
+            key.AddToClassList("slot-key");
+            glyph = new Image { pickingMode = PickingMode.Ignore };
+            glyph.AddToClassList("slot-binding-glyph");
+            slot.Add(key);
+            slot.Add(glyph);
+        }
+
+        private void RefreshBindings()
+        {
+            for (int i = 0; i < slotActions.Length; i++)
+            {
+                var binding = presentation.Resolve(slotActions[i]);
+                SetShortcut(hotbarKeys[i], hotbarGlyphs[i], binding);
+                SetShortcut(inventoryKeys[i], inventoryGlyphs[i], binding);
+            }
+            inventoryShortcut.text = $"{presentation.Resolve(inventoryAction).Text} ? Close Inventory";
+        }
+
+        private static void SetShortcut(Label key, Image glyph, (string Text, Texture2D Glyph) binding)
+        {
+            key.text = binding.Text;
+            key.tooltip = binding.Text;
+            key.style.display = binding.Glyph ? DisplayStyle.None : DisplayStyle.Flex;
+            glyph.image = binding.Glyph;
+            glyph.style.display = binding.Glyph ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         private static VisualElement MakeSlot(int index)
@@ -206,12 +254,14 @@ namespace TwoBirds
         {
             HideCharge();
             if (inventory) inventory.InventoryChanged -= Refresh;
+            if (!inv) CloseInventory();
             inventory = inv;
             playerState = state;
             equipment = inv ? inv.Equipment : null;
             interaction = inv ? inv.GetComponent<PlayerInteraction>() : null;
             inputReader = inv ? inv.GetComponent<PlayerInputReader>() : null;
             seating = inv ? inv.GetComponent<PlayerSeating>() : null;
+            inventoryInput?.Bind(inv, inputReader);
             if (inventory) inventory.InventoryChanged += Refresh;
             EnsureCartHints();
             EnsurePassengerHints();
@@ -229,42 +279,6 @@ namespace TwoBirds
             }
             if (!inventory || inventory.gameObject != player.gameObject)
                 Bind(player.GetComponent<PlayerInventory>(), player.GetComponent<PlayerNetworkState>());
-            if (!inventory.IsOwner) return;
-
-            var session = SessionController.Instance;
-            if (!session || session.Phase != SessionPhase.InGame || session.PanelOpen || session.ConsoleOpen) return;
-
-            var keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.tabKey.wasPressedThisFrame)
-                ToggleInventory();
-
-            var gamepad = Gamepad.current;
-            if (gamepad != null && gamepad.selectButton.wasPressedThisFrame)
-                ToggleInventory();
-
-            if (!inventoryOpen && inventory.CanEquip)
-            {
-                if (keyboard != null)
-                {
-                    for (int i = 0; i < PlayerInventory.HotbarSize; i++)
-                        if (keyboard[Key.Digit1 + i].wasPressedThisFrame)
-                        { inventory.SelectSlot((sbyte)i); break; }
-                }
-                if (gamepad != null)
-                {
-                    if (gamepad.leftShoulder.wasPressedThisFrame) CycleHotbar(-1);
-                    if (gamepad.rightShoulder.wasPressedThisFrame) CycleHotbar(1);
-                }
-            }
-        }
-
-        private void CycleHotbar(int direction)
-        {
-            sbyte current = inventory.SelectedSlot;
-            sbyte next = current < 0
-                ? (sbyte)(direction > 0 ? 0 : PlayerInventory.HotbarSize - 1)
-                : (sbyte)((current + direction + PlayerInventory.HotbarSize) % PlayerInventory.HotbarSize);
-            inventory.SelectSlot(next);
         }
 
         private void LateUpdate()
@@ -286,9 +300,9 @@ namespace TwoBirds
                 chargeFill.style.width = Length.Percent(equipment.Charge01 * 100f);
             }
             else HideCharge();
-            interactionTooltip.Update(interaction, inputReader.ActiveDevice);
+            interactionTooltip.Update(interaction);
             if (seating && seating.Seated && !seating.TransitionPending)
-                controlsHint.Show(seating.IsDriver ? cartDriverHints : cartPassengerHints, inputReader.ActiveDevice);
+                controlsHint.Show(seating.IsDriver ? cartDriverHints : cartPassengerHints);
             else controlsHint.Hide();
         }
 
@@ -326,6 +340,9 @@ namespace TwoBirds
 
         private void ToggleInventory()
         {
+            if (InventoryInputFrame == Time.frameCount) return;
+            InventoryInputFrame = Time.frameCount;
+            inventoryInput?.SuppressInput();
             if (inventoryOpen) CloseInventory(); else OpenInventory();
         }
 
@@ -344,12 +361,16 @@ namespace TwoBirds
         public void CloseInventory()
         {
             if (!inventoryOpen) return;
+            InventoryInputFrame = Time.frameCount;
+            inventoryInput?.SuppressInput();
             inventoryOpen = false;
             inventoryPanel.style.display = DisplayStyle.None;
             if (crosshair != null) crosshair.style.display = DisplayStyle.Flex;
             if (inputReader != null) inputReader.InventoryOpen = false;
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            var session = SessionController.Instance;
+            bool gameplay = session && session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen;
+            Cursor.lockState = gameplay ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !gameplay;
         }
 
         private void Refresh()
@@ -443,7 +464,9 @@ namespace TwoBirds
             HideCharge();
             interactionTooltip?.Dispose();
             controlsHint?.Dispose();
-            glyphs?.Dispose();
+            if (presentation != null) presentation.Changed -= RefreshBindings;
+            inventoryInput?.Dispose();
+            inventoryInput = null;
             Bind(null, null);
         }
     }
