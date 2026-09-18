@@ -16,6 +16,11 @@ namespace TwoBirds
         public float RaycastHeight = 50f;
         public LayerMask GroundLayer = ~0;
 
+        private void Reset()
+        {
+            GroundLayer = LayerMask.GetMask("Environment", "Ground");
+        }
+
         private void OnDrawGizmosSelected()
         {
             Gizmos.color = new Color(0.2f, 0.8f, 0.3f, 0.25f);

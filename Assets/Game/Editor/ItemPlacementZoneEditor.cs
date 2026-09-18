@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
 namespace TwoBirds.Editor
@@ -7,6 +8,29 @@ namespace TwoBirds.Editor
     [CustomEditor(typeof(ItemPlacementZone))]
     public sealed class ItemPlacementZoneEditor : UnityEditor.Editor
     {
+        [MenuItem("GameObject/Two Birds/Placement Zone/Generic", false, 10)]
+        private static void CreatePlacementZone()
+        {
+            var go = new GameObject("Placement Zone");
+            var placementZone = go.AddComponent<ItemPlacementZone>();
+            placementZone.Registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>("Assets/Game/ScriptableObjects/ItemRegistry.asset");
+            GameObjectUtility.SetParentAndAlign(go, Selection.activeGameObject);
+            Undo.RegisterCreatedObjectUndo(go, "Create Placement Zone");
+            Selection.activeGameObject = go;
+        }
+
+        [MenuItem("GameObject/Two Birds/Placement Zone/Rock", false, 10)]
+        private static void CreateRockPlacementZone()
+        {
+            var go = new GameObject("Rock Placement Zone");
+            var placementZone = go.AddComponent<ItemPlacementZone>();
+            placementZone.Item = AssetDatabase.LoadAssetAtPath<ItemDefinition>("Assets/Game/ScriptableObjects/Items/Rock.asset");
+            placementZone.Registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>("Assets/Game/ScriptableObjects/ItemRegistry.asset");
+            GameObjectUtility.SetParentAndAlign(go, Selection.activeGameObject);
+            Undo.RegisterCreatedObjectUndo(go, "Create Rock Placement Zone");
+            Selection.activeGameObject = go;
+        }
+
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
@@ -120,22 +144,46 @@ namespace TwoBirds.Editor
             Undo.CollapseUndoOperations(group);
         }
 
+        private readonly BoxBoundsHandle _boxHandle = new();
+        private readonly SphereBoundsHandle _sphereHandle = new();
+
         private void OnSceneGUI()
         {
             var zone = (ItemPlacementZone)target;
+            var color = new Color(0.2f, 0.8f, 0.3f, 0.6f);
             if (zone.Shape == ZoneShape.Sphere)
             {
-                Handles.color = new Color(0.2f, 0.8f, 0.3f, 0.12f);
-                Handles.DrawSolidDisc(zone.transform.position, Vector3.up, zone.Radius);
-                Handles.color = new Color(0.2f, 0.8f, 0.3f, 0.6f);
-                Handles.DrawWireDisc(zone.transform.position, Vector3.up, zone.Radius);
+                _sphereHandle.center = zone.transform.position;
+                _sphereHandle.radius = zone.Radius;
+                _sphereHandle.handleColor = color;
+                _sphereHandle.wireframeColor = color;
+                EditorGUI.BeginChangeCheck();
+                _sphereHandle.DrawHandle();
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(zone, "Edit Zone Radius");
+                    Undo.RecordObject(zone.transform, "Move Zone");
+                    zone.transform.position = _sphereHandle.center;
+                    zone.Radius = _sphereHandle.radius;
+                }
             }
             else
             {
-                Handles.color = new Color(0.2f, 0.8f, 0.3f, 0.6f);
                 var matrix = Handles.matrix;
                 Handles.matrix = zone.transform.localToWorldMatrix;
-                Handles.DrawWireCube(Vector3.zero, new Vector3(zone.BoxSize.x, 0.01f, zone.BoxSize.z));
+                _boxHandle.center = Vector3.zero;
+                _boxHandle.size = zone.BoxSize;
+                _boxHandle.handleColor = color;
+                _boxHandle.wireframeColor = color;
+                EditorGUI.BeginChangeCheck();
+                _boxHandle.DrawHandle();
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(zone, "Edit Zone Size");
+                    Undo.RecordObject(zone.transform, "Move Zone");
+                    zone.transform.position = zone.transform.TransformPoint(_boxHandle.center);
+                    zone.BoxSize = _boxHandle.size;
+                }
                 Handles.matrix = matrix;
             }
         }

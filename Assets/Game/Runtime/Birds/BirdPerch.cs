@@ -4,9 +4,9 @@ namespace TwoBirds
 {
     public sealed class BirdPerch : MonoBehaviour
     {
-        [Min(1)] public ushort Id, Biome = 1;
+        public ushort Id, Biome = 1;
         public BirdPerchKind Kind;
-        [Min(0.01f)] public float Clearance = 0.5f;
+        public float Clearance = 0.5f;
         public BirdPerchVolume GeneratedBy;
         public Vector3 Position(BirdSpecies species) => transform.position + transform.up * species.LandingOffset;
         private void OnDrawGizmos()

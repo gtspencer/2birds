@@ -62,12 +62,6 @@ namespace TwoBirds.Editor
             }
 
             var pickups = Object.FindObjectsByType<BakedPickup>();
-            if (pickups.Length == 0)
-            {
-                log.Add(("No BakedPickup components found in scene.", MessageType.Info));
-                Repaint();
-                return;
-            }
 
             var seenIds = new HashSet<uint>();
             var duplicates = new List<BakedPickup>();
@@ -131,11 +125,111 @@ namespace TwoBirds.Editor
                 }
             }
 
-            if (assigned > 0 || duplicates.Count > 0)
+            bool sceneDirty = assigned > 0 || duplicates.Count > 0;
+
+            var perches = Object.FindObjectsByType<BirdPerch>();
+            var seenPerchIds = new HashSet<ushort>();
+            var perchDuplicates = new List<BirdPerch>();
+            ushort maxPerchId = 0;
+
+            foreach (var p in perches)
+            {
+                if (p.Id == 0) continue;
+                if (p.Id > maxPerchId) maxPerchId = p.Id;
+                if (!seenPerchIds.Add(p.Id))
+                    perchDuplicates.Add(p);
+            }
+
+            foreach (var p in perchDuplicates)
+            {
+                ushort oldId = p.Id;
+                if (maxPerchId >= ushort.MaxValue)
+                {
+                    log.Add(($"BirdPerch duplicate Id {oldId} on '{HierarchyPath(p.transform)}': cannot reassign, Id capacity exceeded.", MessageType.Error));
+                    errors++;
+                    continue;
+                }
+                p.Id = ++maxPerchId;
+                seenPerchIds.Add(p.Id);
+                EditorUtility.SetDirty(p);
+                log.Add(($"BirdPerch duplicate Id {oldId} on '{HierarchyPath(p.transform)}' — reassigned to {p.Id}.", MessageType.Warning));
+                sceneDirty = true;
+            }
+
+            int perchesAssigned = 0;
+            foreach (var p in perches)
+            {
+                if (p.Id != 0) continue;
+                if (maxPerchId >= ushort.MaxValue)
+                {
+                    log.Add(($"BirdPerch '{HierarchyPath(p.transform)}': cannot assign Id, capacity exceeded.", MessageType.Error));
+                    errors++;
+                    continue;
+                }
+                p.Id = ++maxPerchId;
+                perchesAssigned++;
+                EditorUtility.SetDirty(p);
+                sceneDirty = true;
+            }
+
+            foreach (var p in perches)
+            {
+                if (p.Biome == 0)
+                {
+                    log.Add(($"BirdPerch '{HierarchyPath(p.transform)}': Biome is 0.", MessageType.Error));
+                    errors++;
+                }
+            }
+
+            var spawnZones = Object.FindObjectsByType<BirdSpawnZone>();
+            var seenZoneIds = new HashSet<ushort>();
+            foreach (var z in spawnZones)
+            {
+                if (z.Id == 0)
+                {
+                    log.Add(($"BirdSpawnZone '{HierarchyPath(z.transform)}': Id is 0.", MessageType.Error));
+                    errors++;
+                }
+                else if (!seenZoneIds.Add(z.Id))
+                {
+                    log.Add(($"BirdSpawnZone '{HierarchyPath(z.transform)}': duplicate Id {z.Id}.", MessageType.Error));
+                    errors++;
+                }
+                if (z.Biome == 0)
+                {
+                    log.Add(($"BirdSpawnZone '{HierarchyPath(z.transform)}': Biome is 0.", MessageType.Error));
+                    errors++;
+                }
+            }
+
+            var habitatVolumes = Object.FindObjectsByType<BirdHabitatVolume>();
+            var seenHabitatIds = new HashSet<ushort>();
+            foreach (var h in habitatVolumes)
+            {
+                if (h.Id == 0)
+                {
+                    log.Add(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': Id is 0.", MessageType.Error));
+                    errors++;
+                }
+                else if (!seenHabitatIds.Add(h.Id))
+                {
+                    log.Add(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': duplicate Id {h.Id}.", MessageType.Error));
+                    errors++;
+                }
+                if (h.Biome == 0)
+                {
+                    log.Add(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': Biome is 0.", MessageType.Error));
+                    errors++;
+                }
+            }
+
+            if (sceneDirty)
                 EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
 
             log.Insert(0, (
-                $"Bake complete: {pickups.Length} pickups, {assigned} new IDs assigned, {duplicates.Count} duplicates fixed, {errors} error(s).",
+                $"Bake complete: {pickups.Length} pickups ({assigned} new, {duplicates.Count} dupes)" +
+                $" · {perches.Length} perches ({perchesAssigned} new, {perchDuplicates.Count} dupes)" +
+                $" · {spawnZones.Length} zones · {habitatVolumes.Length} habitats · {errors} error(s).",
                 errors > 0 ? MessageType.Warning : MessageType.Info));
 
             Repaint();

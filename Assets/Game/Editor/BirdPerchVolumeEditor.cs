@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
 namespace TwoBirds.Editor
@@ -7,6 +8,26 @@ namespace TwoBirds.Editor
     [CustomEditor(typeof(BirdPerchVolume))]
     public sealed class BirdPerchVolumeEditor : UnityEditor.Editor
     {
+        [MenuItem("GameObject/Two Birds/Perch/Volume", false, 10)]
+        private static void CreatePerchVolume()
+        {
+            var go = new GameObject("Bird Perch Volume");
+            var perchVolume = go.AddComponent<BirdPerchVolume>();
+            GameObjectUtility.SetParentAndAlign(go, Selection.activeGameObject);
+            Undo.RegisterCreatedObjectUndo(go, "Create Bird Perch Volume");
+            Selection.activeGameObject = go;
+        }
+        
+        [MenuItem("GameObject/Two Birds/Perch/Spot", false, 10)]
+        private static void CreatePerchSpot()
+        {
+            var go = new GameObject("Bird Perch Spot");
+            var perchSpot = go.AddComponent<BirdPerch>();
+            GameObjectUtility.SetParentAndAlign(go, Selection.activeGameObject);
+            Undo.RegisterCreatedObjectUndo(go, "Create Bird Perch Spot");
+            Selection.activeGameObject = go;
+        }
+        
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
@@ -41,13 +62,25 @@ namespace TwoBirds.Editor
             int made = 0, nextId = 1;
             for (int attempt = 0; attempt < volume.Count * 30 && made < volume.Count; attempt++)
             {
-                Vector3 point = volume.transform.TransformPoint(Vector3.Scale(volume.Size,
-                    new Vector3((float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f)));
+                Vector3 point;
+                if (volume.Shape == ZoneShape.Sphere)
+                {
+                    var dir = new Vector3((float)random.NextDouble() * 2f - 1f,
+                        (float)random.NextDouble() * 2f - 1f, (float)random.NextDouble() * 2f - 1f);
+                    if (dir.sqrMagnitude > 1f) continue;
+                    point = volume.transform.position + dir * volume.Radius;
+                }
+                else
+                {
+                    point = volume.transform.TransformPoint(Vector3.Scale(volume.Size,
+                        new Vector3((float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f)));
+                }
                 Vector3 normal = Vector3.up;
+                float rayHeight = volume.Shape == ZoneShape.Sphere ? volume.Radius : volume.Size.y;
                 if (volume.Kind == BirdPerchKind.Ground)
                 {
-                    if (!Physics.Raycast(point + Vector3.up * volume.Size.y, Vector3.down, out var hit,
-                        volume.Size.y * 2f, volume.GroundMask, QueryTriggerInteraction.Ignore) ||
+                    if (!Physics.Raycast(point + Vector3.up * rayHeight, Vector3.down, out var hit,
+                        rayHeight * 2f, volume.GroundMask, QueryTriggerInteraction.Ignore) ||
                         Vector3.Angle(hit.normal, Vector3.up) > volume.MaximumSlope) continue;
                     point = hit.point;
                     normal = hit.normal;
@@ -77,6 +110,50 @@ namespace TwoBirds.Editor
             }
             Undo.CollapseUndoOperations(group);
             if (made < volume.Count) Debug.LogWarning($"Only {made}/{volume.Count} suitable perches fit this volume.", volume);
+        }
+
+        private readonly BoxBoundsHandle _boxHandle = new();
+        private readonly SphereBoundsHandle _sphereHandle = new();
+
+        private void OnSceneGUI()
+        {
+            var volume = (BirdPerchVolume)target;
+            var color = new Color(0f, 1f, 0f, 0.6f);
+            if (volume.Shape == ZoneShape.Sphere)
+            {
+                _sphereHandle.center = volume.transform.position;
+                _sphereHandle.radius = volume.Radius;
+                _sphereHandle.handleColor = color;
+                _sphereHandle.wireframeColor = color;
+                EditorGUI.BeginChangeCheck();
+                _sphereHandle.DrawHandle();
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(volume, "Edit Volume Radius");
+                    Undo.RecordObject(volume.transform, "Move Volume");
+                    volume.transform.position = _sphereHandle.center;
+                    volume.Radius = _sphereHandle.radius;
+                }
+            }
+            else
+            {
+                var matrix = Handles.matrix;
+                Handles.matrix = volume.transform.localToWorldMatrix;
+                _boxHandle.center = Vector3.zero;
+                _boxHandle.size = volume.Size;
+                _boxHandle.handleColor = color;
+                _boxHandle.wireframeColor = color;
+                EditorGUI.BeginChangeCheck();
+                _boxHandle.DrawHandle();
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(volume, "Edit Volume Size");
+                    Undo.RecordObject(volume.transform, "Move Volume");
+                    volume.transform.position = volume.transform.TransformPoint(_boxHandle.center);
+                    volume.Size = _boxHandle.size;
+                }
+                Handles.matrix = matrix;
+            }
         }
     }
 }

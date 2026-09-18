@@ -8,16 +8,27 @@ namespace TwoBirds
     public sealed class BirdSpawnZone : MonoBehaviour
     {
         [Min(1)] public ushort Id, Biome = 1;
+        public ZoneShape Shape = ZoneShape.Box;
         public Vector3 Size = new(20f, 10f, 20f);
+        public float Radius = 10f;
         [Min(0)] public int Minimum = 5, Maximum = 10;
         public Vector2 ReplacementSeconds = new(3f, 8f);
         public BirdWeight[] Species = Array.Empty<BirdWeight>();
-        public bool Contains(Vector3 point) => new Bounds(Vector3.zero, Size).Contains(transform.InverseTransformPoint(point));
+        public bool Contains(Vector3 point) => Shape == ZoneShape.Sphere
+            ? (point - transform.position).sqrMagnitude <= Radius * Radius
+            : new Bounds(Vector3.zero, Size).Contains(transform.InverseTransformPoint(point));
         private void OnDrawGizmosSelected()
         {
             Gizmos.color = Color.yellow;
-            Gizmos.matrix = transform.localToWorldMatrix;
-            Gizmos.DrawWireCube(Vector3.zero, Size);
+            if (Shape == ZoneShape.Sphere)
+            {
+                Gizmos.DrawWireSphere(transform.position, Radius);
+            }
+            else
+            {
+                Gizmos.matrix = transform.localToWorldMatrix;
+                Gizmos.DrawWireCube(Vector3.zero, Size);
+            }
         }
     }
 }
