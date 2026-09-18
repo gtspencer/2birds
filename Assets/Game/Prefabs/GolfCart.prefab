@@ -1375,6 +1375,37 @@ MonoBehaviour:
   eye: {fileID: 8688068362228964178}
   exit: {fileID: 5197190297193483863}
   tooltipAnchor: {fileID: 8111306134002006951}
+--- !u!1 &4396868169198689531
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7675656107702494765}
+  m_Layer: 11
+  m_Name: Anchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7675656107702494765
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4396868169198689531}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 905857532983853515}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4610384430751543206
 GameObject:
   m_ObjectHideFlags: 0
@@ -1680,7 +1711,8 @@ Transform:
   m_LocalPosition: {x: -0, y: 0.21955466, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 7675656107702494765}
   m_Father: {fileID: 6317065950882595392}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &779155817977962660
@@ -1774,7 +1806,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4b752b0a07793094eabd449fd2539508, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.SteeringWheelHorn
-  tooltipAnchor: {fileID: 0}
+  tooltipAnchor: {fileID: 7675656107702494765}
 --- !u!1 &5244491559305264343
 GameObject:
   m_ObjectHideFlags: 0
@@ -2589,7 +2621,7 @@ MonoBehaviour:
   - {fileID: 324023744048051289}
   - {fileID: 8934435016832417794}
   hornSource: {fileID: 2337957549060366033}
-  hornSfx: {fileID: 0}
+  hornSfx: {fileID: 11400000, guid: a18a104a4615a3b44b966aab67466ea8, type: 2}
   gasPedalAngle: {x: 30, y: 0, z: 0}
   brakePedalAngle: {x: 20, y: 0, z: 0}
   pedalSpeed: 8

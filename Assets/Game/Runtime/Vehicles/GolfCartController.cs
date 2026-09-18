@@ -25,7 +25,7 @@ namespace TwoBirds
         private Vector3 prePosition;
         private Quaternion preRotation;
         private float heading;
-        private int supportMask, clearanceMask;
+        private int supportMask, clearanceMask, playerLayer;
         public Rigidbody Body { get; private set; }
         public GolfCartSettings Settings => settings;
         internal BoxCollider[] Chassis => chassis;
@@ -37,7 +37,8 @@ namespace TwoBirds
             network = GetComponent<GolfCartNetwork>();
             Body.mass = settings.Mass;
             Body.centerOfMass = settings.CenterOfMass;
-            Body.excludeLayers |= LayerMask.GetMask("Player", "PlayerItemHitbox", "CartSeat");
+            Body.excludeLayers |= LayerMask.GetMask("PlayerItemHitbox", "CartSeat");
+            playerLayer = LayerMask.NameToLayer("Player");
             supportMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("GolfCart", "CartSeat", "Player", "PlayerItemHitbox", "ItemHeld", "ItemWorld", "BirdBody", "BirdQuery");
             clearanceMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("CartSeat", "ItemHeld", "PlayerItemHitbox", "BirdBody", "BirdQuery");
             heading = transform.eulerAngles.y;
@@ -178,7 +179,7 @@ namespace TwoBirds
         private void AccumulateCollision(Collision collision)
         {
             if (!network.Simulating || network.PredictionManager.IsReconciling) return;
-            // Sum contact-pair impulse magnitudes within this physics step.
+            if (collision.gameObject.layer == playerLayer) return;
             collisionSeverity += collision.impulse.magnitude / Body.mass;
         }
 
