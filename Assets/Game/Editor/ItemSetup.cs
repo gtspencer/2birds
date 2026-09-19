@@ -1,0 +1,210 @@
+using System.IO;
+using FishNet.Component.Prediction;
+using UnityEditor;
+using UnityEngine;
+
+namespace TwoBirds.Editor
+{
+    public sealed class ItemSetup : EditorWindow
+    {
+        private const string PrefabFolder = "Assets/Game/Prefabs/Items";
+        private const string DefinitionFolder = "Assets/Game/ScriptableObjects/Items";
+        private const string RegistryPath = "Assets/Game/ScriptableObjects/ItemRegistry.asset";
+        private const string IconFolder = "Assets/Game/UI/Icons";
+
+        private GameObject source;
+        private string itemName;
+        private bool addThrowable = true;
+        private bool captureIcon = true;
+        private int iconResolution = 128;
+
+        [MenuItem("Two Birds/Item Setup")]
+        public static void ShowWindow() => GetWindow<ItemSetup>("Item Setup");
+
+        private void OnGUI()
+        {
+            EditorGUILayout.HelpBox("Drop a scene object or project prefab here.", MessageType.Info);
+            source = (GameObject)EditorGUILayout.ObjectField("Source", source, typeof(GameObject), true);
+
+            if (source != null && string.IsNullOrEmpty(itemName)) itemName = source.name;
+            itemName = EditorGUILayout.TextField("Item Name", itemName);
+            addThrowable = EditorGUILayout.Toggle("Add ThrowableItemUse", addThrowable);
+            captureIcon = EditorGUILayout.Toggle("Capture Screenshot Icon", captureIcon);
+            if (captureIcon)
+                iconResolution = EditorGUILayout.IntPopup("Icon Resolution", iconResolution,
+                    new[] { "64", "128", "256", "512" }, new[] { 64, 128, 256, 512 });
+
+            EditorGUILayout.Space(6);
+            EditorGUI.BeginDisabledGroup(source == null || string.IsNullOrWhiteSpace(itemName));
+            if (GUILayout.Button("Create Item", GUILayout.Height(28))) CreateItem();
+            EditorGUI.EndDisabledGroup();
+        }
+
+        private void CreateItem()
+        {
+            EnsureFolder(PrefabFolder);
+            EnsureFolder(DefinitionFolder);
+            EnsureFolder(IconFolder);
+
+            string safeName = MakeAssetName(itemName);
+            string definitionPath = AssetDatabase.GenerateUniqueAssetPath($"{DefinitionFolder}/{safeName}.asset");
+            var definition = CreateInstance<ItemDefinition>();
+            definition.name = safeName;
+            definition.ItemName = itemName;
+            definition.ItemId = GetNextItemId();
+            AssetDatabase.CreateAsset(definition, definitionPath);
+            EditorUtility.SetDirty(definition);
+
+            AddToRegistry(definition);
+            var root = InstantiateSource(source);
+            root.name = safeName;
+            PrepareVisualRoot(root);
+            AddComponents(root, definition, addThrowable);
+            root.hideFlags = HideFlags.None;
+
+            string prefabPath = AssetDatabase.GenerateUniqueAssetPath($"{PrefabFolder}/{safeName}.prefab");
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            DestroyImmediate(root);
+
+            definition.WorldPrefab = prefab;
+            EditorUtility.SetDirty(definition);
+            AssetDatabase.SaveAssets();
+
+            if (captureIcon)
+            {
+                IconCaptureWindow.CaptureAndSave(prefab, iconResolution, IconFolder,
+                    new Color(0.15f, 0.15f, 0.15f, 0f), 0.1f, new Vector2(25f, -135f), definition);
+                EditorUtility.SetDirty(definition);
+                AssetDatabase.SaveAssets();
+            }
+
+            Selection.activeObject = prefab;
+            EditorGUIUtility.PingObject(prefab);
+        }
+
+        private static GameObject InstantiateSource(GameObject source)
+        {
+            var root = PrefabUtility.IsPartOfPrefabAsset(source)
+                ? (GameObject)PrefabUtility.InstantiatePrefab(source)
+                : Object.Instantiate(source);
+            root.hideFlags = HideFlags.HideInHierarchy;
+            return root;
+        }
+
+        private static void PrepareVisualRoot(GameObject root)
+        {
+            var visual = root.transform.Find("VisualRoot");
+            if (visual == null)
+            {
+                visual = new GameObject("VisualRoot").transform;
+                visual.SetParent(root.transform, false);
+                CopyVisualComponent<MeshFilter>(root, visual.gameObject);
+                CopyVisualComponent<MeshRenderer>(root, visual.gameObject);
+                CopyVisualComponent<SkinnedMeshRenderer>(root, visual.gameObject);
+            }
+
+            for (int i = root.transform.childCount - 1; i >= 0; i--)
+            {
+                var child = root.transform.GetChild(i);
+                if (child != visual && child.GetComponentInChildren<Collider>(true) == null)
+                    child.SetParent(visual, true);
+            }
+        }
+
+        private static void CopyVisualComponent<T>(GameObject source, GameObject destination) where T : Component
+        {
+            var component = source.GetComponent<T>();
+            if (component == null) return;
+            var copy = destination.AddComponent<T>();
+            EditorUtility.CopySerialized(component, copy);
+            DestroyImmediate(component);
+        }
+
+        private static void AddComponents(GameObject root, ItemDefinition definition, bool addThrowable)
+        {
+            foreach (var child in root.GetComponentsInChildren<Transform>(true)) child.gameObject.layer = 9;
+
+            var pickup = root.GetComponent<BakedPickup>() ?? root.AddComponent<BakedPickup>();
+            pickup.Item = definition;
+
+            if (root.GetComponent<Collider>() == null)
+            {
+                var bounds = CalculateBounds(root);
+                if (bounds.size != Vector3.zero)
+                {
+                    var collider = root.AddComponent<BoxCollider>();
+                    collider.center = root.transform.InverseTransformPoint(bounds.center);
+                    collider.size = bounds.size;
+                }
+            }
+
+            var body = root.GetComponent<Rigidbody>();
+            if (!body) body = root.AddComponent<Rigidbody>();
+            if (!body)
+            {
+                Debug.LogError($"Item Setup could not add a Rigidbody to '{root.name}'.");
+                return;
+            }
+            body.mass = definition.Mass;
+            body.linearDamping = definition.LinearDamping;
+            body.angularDamping = definition.AngularDamping;
+            body.collisionDetectionMode = definition.CollisionDetection;
+            body.isKinematic = false;
+
+            if (root.GetComponent<OfflineRigidbody>() == null) root.AddComponent<OfflineRigidbody>();
+            var item = root.GetComponent<WorldItem>() ?? root.AddComponent<WorldItem>();
+            var serialized = new SerializedObject(item);
+            serialized.FindProperty("visualRoot").objectReferenceValue = root.transform.Find("VisualRoot");
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            var throwable = root.GetComponent<ThrowableItemUse>();
+            if (addThrowable && throwable == null) root.AddComponent<ThrowableItemUse>();
+            if (!addThrowable && throwable) DestroyImmediate(throwable);
+        }
+
+        private static byte GetNextItemId()
+        {
+            var registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>(RegistryPath);
+            if (registry == null) return 1;
+            byte max = 0;
+            foreach (var item in registry.Items)
+                if (item && item.ItemId > max) max = item.ItemId;
+            return (byte)(max + 1);
+        }
+
+        private static void AddToRegistry(ItemDefinition definition)
+        {
+            var registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>(RegistryPath);
+            if (registry == null) return;
+
+            var items = registry.Items;
+            var updated = new ItemDefinition[items.Length + 1];
+            items.CopyTo(updated, 0);
+            updated[^1] = definition;
+            registry.Items = updated;
+            EditorUtility.SetDirty(registry);
+        }
+
+        private static Bounds CalculateBounds(GameObject root)
+        {
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) return new Bounds();
+            var bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            return bounds;
+        }
+
+        private static void EnsureFolder(string path)
+        {
+            if (AssetDatabase.IsValidFolder(path)) return;
+            Directory.CreateDirectory(path);
+            AssetDatabase.Refresh();
+        }
+
+        private static string MakeAssetName(string value)
+        {
+            foreach (char character in Path.GetInvalidFileNameChars()) value = value.Replace(character, '_');
+            return value.Trim();
+        }
+    }
+}

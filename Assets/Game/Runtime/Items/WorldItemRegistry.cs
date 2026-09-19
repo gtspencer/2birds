@@ -105,10 +105,26 @@ namespace TwoBirds
                     DefinitionId = seed.ItemId, State = WorldItemState.World,
                     Holder = -1, Releaser = -1, Simulator = -1
                 };
+                var definition = itemRegistry.Get(record.DefinitionId);
+                if (!definition && seed.Item)
+                {
+                    byte itemId = itemRegistry.GetId(seed.Item);
+                    if (itemId != 0)
+                    {
+                        record.DefinitionId = itemId;
+                        definition = seed.Item;
+                    }
+                }
+                if (!definition)
+                {
+                    Debug.LogError($"'{seed.name}' has no valid ItemDefinition.", seed);
+                    seed.gameObject.SetActive(false);
+                    continue;
+                }
                 var item = seed.GetComponent<WorldItem>();
                 items.Add(record.Motion.Id, item);
                 records.Add(record.Motion.Id, record);
-                item.Initialize(this, itemRegistry.Get(record.DefinitionId), record, false);
+                item.Initialize(this, definition, record, false);
             }
             SessionController.Instance.WorldReady(sessionId, epoch);
         }

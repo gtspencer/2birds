@@ -9,15 +9,12 @@ namespace TwoBirds
 
         public ItemDefinition Get(byte id)
         {
-            if (id == 0 || id > Items.Length) return null;
-            return Items[id - 1];
+            if (id == 0) return null;
+            foreach (var item in Items)
+                if (item && item.ItemId == id) return item;
+            return null;
         }
 
-        public byte GetId(ItemDefinition definition)
-        {
-            for (int i = 0; i < Items.Length; i++)
-                if (Items[i] == definition) return (byte)(i + 1);
-            return 0;
-        }
+        public byte GetId(ItemDefinition definition) => definition ? definition.ItemId : (byte)0;
     }
 }

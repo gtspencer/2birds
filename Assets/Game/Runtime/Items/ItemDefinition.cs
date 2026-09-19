@@ -22,6 +22,7 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/Item Definition")]
     public sealed class ItemDefinition : ScriptableObject
     {
+        [Range(1, 255)] public byte ItemId;
         [Tooltip("Display name shown in the inventory HUD and drag ghost.")]
         public string ItemName = "";
         [Tooltip("Sprite shown in inventory slots (set via the Icon Capture Window).")]

@@ -10,6 +10,7 @@ namespace TwoBirds.Editor
     {
         private Vector2 scroll;
         private readonly List<(string message, MessageType type)> log = new();
+        private readonly Dictionary<string, Object> logTargets = new();
 
         [MenuItem("Two Birds/Bake World")]
         public static void ShowWindow()
@@ -25,19 +26,31 @@ namespace TwoBirds.Editor
             EditorGUILayout.Space();
             scroll = EditorGUILayout.BeginScrollView(scroll);
             foreach (var (message, type) in log)
-                EditorGUILayout.HelpBox(message, type);
+            {
+                float height = EditorStyles.helpBox.CalcHeight(new GUIContent(message), position.width - 30f);
+                var rect = GUILayoutUtility.GetRect(position.width - 30f, height);
+                EditorGUI.HelpBox(rect, message, type);
+                if (logTargets.TryGetValue(message, out var target) && target && GUI.Button(rect, GUIContent.none, GUIStyle.none))
+                {
+                    Selection.activeObject = target;
+                    EditorGUIUtility.PingObject(target);
+                    if (target is Component || target is GameObject)
+                        SceneView.lastActiveSceneView?.FrameSelected();
+                }
+            }
             EditorGUILayout.EndScrollView();
         }
 
         private void Bake()
         {
             log.Clear();
+            logTargets.Clear();
 
             int errors = 0;
             var registry = FindItemRegistry();
             if (registry == null)
             {
-                log.Add(("No ItemRegistry asset found — ItemIds will not be resolved.", MessageType.Error));
+                AddLog(("No ItemRegistry asset found — ItemIds will not be resolved.", MessageType.Error));
                 errors++;
             }
             else
@@ -47,13 +60,13 @@ namespace TwoBirds.Editor
                     var definition = registry.Items[i];
                     if (definition == null)
                     {
-                        log.Add(($"ItemRegistry ID {i + 1}: no ItemDefinition assigned.", MessageType.Error));
+                        AddLog(($"ItemRegistry ID {i + 1}: no ItemDefinition assigned.", MessageType.Error), registry);
                         errors++;
                         continue;
                     }
                     if (definition.WorldPrefab == null)
                     {
-                        log.Add(($"ItemDefinition '{definition.name}': no WorldPrefab assigned.", MessageType.Error));
+                        AddLog(($"ItemDefinition '{definition.name}': no WorldPrefab assigned.", MessageType.Error), definition);
                         errors++;
                         continue;
                     }
@@ -81,7 +94,7 @@ namespace TwoBirds.Editor
                 p.BakedId = ++maxId;
                 seenIds.Add(p.BakedId);
                 EditorUtility.SetDirty(p);
-                log.Add(($"Duplicate BakedId {oldId} on '{HierarchyPath(p.transform)}' — reassigned to {p.BakedId}.", MessageType.Warning));
+                AddLog(($"Duplicate BakedId {oldId} on '{HierarchyPath(p.transform)}' — reassigned to {p.BakedId}.", MessageType.Warning), p);
             }
 
             int assigned = 0;
@@ -96,31 +109,21 @@ namespace TwoBirds.Editor
 
             foreach (var p in pickups)
             {
-                if (p.Item != null && registry != null)
-                {
-                    byte id = registry.GetId(p.Item);
-                    if (id != 0 && p.ItemId != id)
-                    {
-                        p.ItemId = id;
-                        EditorUtility.SetDirty(p);
-                    }
-                }
-
                 string path = HierarchyPath(p.transform);
                 errors += ValidateWorldItem(p.gameObject, path);
 
                 if (p.Item == null)
                 {
-                    log.Add(($"'{path}': no ItemDefinition assigned.", MessageType.Warning));
+                    AddLog(($"'{path}': no ItemDefinition assigned.", MessageType.Warning), p);
                 }
                 else if (registry != null && registry.GetId(p.Item) == 0)
                 {
-                    log.Add(($"'{path}': ItemDefinition '{p.Item.name}' not found in ItemRegistry.", MessageType.Error));
+                    AddLog(($"'{path}': ItemDefinition '{p.Item.name}' not found in ItemRegistry.", MessageType.Error), p);
                     errors++;
                 }
                 if (registry != null && registry.Get(p.ItemId) == null)
                 {
-                    log.Add(($"'{path}': ItemId {p.ItemId} does not resolve to an ItemDefinition.", MessageType.Error));
+                    AddLog(($"'{path}': ItemId {p.ItemId} does not resolve to an ItemDefinition.", MessageType.Error), p);
                     errors++;
                 }
             }
@@ -145,14 +148,14 @@ namespace TwoBirds.Editor
                 ushort oldId = p.Id;
                 if (maxPerchId >= ushort.MaxValue)
                 {
-                    log.Add(($"BirdPerch duplicate Id {oldId} on '{HierarchyPath(p.transform)}': cannot reassign, Id capacity exceeded.", MessageType.Error));
+                    AddLog(($"BirdPerch duplicate Id {oldId} on '{HierarchyPath(p.transform)}': cannot reassign, Id capacity exceeded.", MessageType.Error), p);
                     errors++;
                     continue;
                 }
                 p.Id = ++maxPerchId;
                 seenPerchIds.Add(p.Id);
                 EditorUtility.SetDirty(p);
-                log.Add(($"BirdPerch duplicate Id {oldId} on '{HierarchyPath(p.transform)}' — reassigned to {p.Id}.", MessageType.Warning));
+                AddLog(($"BirdPerch duplicate Id {oldId} on '{HierarchyPath(p.transform)}' — reassigned to {p.Id}.", MessageType.Warning), p);
                 sceneDirty = true;
             }
 
@@ -162,7 +165,7 @@ namespace TwoBirds.Editor
                 if (p.Id != 0) continue;
                 if (maxPerchId >= ushort.MaxValue)
                 {
-                    log.Add(($"BirdPerch '{HierarchyPath(p.transform)}': cannot assign Id, capacity exceeded.", MessageType.Error));
+                    AddLog(($"BirdPerch '{HierarchyPath(p.transform)}': cannot assign Id, capacity exceeded.", MessageType.Error), p);
                     errors++;
                     continue;
                 }
@@ -176,7 +179,7 @@ namespace TwoBirds.Editor
             {
                 if (p.Biome == 0)
                 {
-                    log.Add(($"BirdPerch '{HierarchyPath(p.transform)}': Biome is 0.", MessageType.Error));
+                    AddLog(($"BirdPerch '{HierarchyPath(p.transform)}': Biome is 0.", MessageType.Error), p);
                     errors++;
                 }
             }
@@ -187,17 +190,17 @@ namespace TwoBirds.Editor
             {
                 if (z.Id == 0)
                 {
-                    log.Add(($"BirdSpawnZone '{HierarchyPath(z.transform)}': Id is 0.", MessageType.Error));
+                    AddLog(($"BirdSpawnZone '{HierarchyPath(z.transform)}': Id is 0.", MessageType.Error), z);
                     errors++;
                 }
                 else if (!seenZoneIds.Add(z.Id))
                 {
-                    log.Add(($"BirdSpawnZone '{HierarchyPath(z.transform)}': duplicate Id {z.Id}.", MessageType.Error));
+                    AddLog(($"BirdSpawnZone '{HierarchyPath(z.transform)}': duplicate Id {z.Id}.", MessageType.Error), z);
                     errors++;
                 }
                 if (z.Biome == 0)
                 {
-                    log.Add(($"BirdSpawnZone '{HierarchyPath(z.transform)}': Biome is 0.", MessageType.Error));
+                    AddLog(($"BirdSpawnZone '{HierarchyPath(z.transform)}': Biome is 0.", MessageType.Error), z);
                     errors++;
                 }
             }
@@ -208,17 +211,17 @@ namespace TwoBirds.Editor
             {
                 if (h.Id == 0)
                 {
-                    log.Add(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': Id is 0.", MessageType.Error));
+                    AddLog(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': Id is 0.", MessageType.Error), h);
                     errors++;
                 }
                 else if (!seenHabitatIds.Add(h.Id))
                 {
-                    log.Add(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': duplicate Id {h.Id}.", MessageType.Error));
+                    AddLog(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': duplicate Id {h.Id}.", MessageType.Error), h);
                     errors++;
                 }
                 if (h.Biome == 0)
                 {
-                    log.Add(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': Biome is 0.", MessageType.Error));
+                    AddLog(($"BirdHabitatVolume '{HierarchyPath(h.transform)}': Biome is 0.", MessageType.Error), h);
                     errors++;
                 }
             }
@@ -240,34 +243,40 @@ namespace TwoBirds.Editor
             int errors = 0;
             if (root.GetComponent<Rigidbody>() == null)
             {
-                log.Add(($"'{path}': no Rigidbody on the root.", MessageType.Error));
+                AddLog(($"'{path}': no Rigidbody on the root.", MessageType.Error), root);
                 errors++;
             }
             if (root.GetComponent<OfflineRigidbody>() == null)
             {
-                log.Add(($"'{path}': no OfflineRigidbody on the root.", MessageType.Error));
+                AddLog(($"'{path}': no OfflineRigidbody on the root.", MessageType.Error), root);
                 errors++;
             }
             var item = root.GetComponent<WorldItem>();
             if (item == null)
             {
-                log.Add(($"'{path}': no WorldItem on the root.", MessageType.Error));
+                AddLog(($"'{path}': no WorldItem on the root.", MessageType.Error), root);
                 errors++;
             }
             else if (new SerializedObject(item).FindProperty("visualRoot").objectReferenceValue == null)
             {
-                log.Add(($"'{path}': WorldItem has no VisualRoot reference.", MessageType.Error));
+                AddLog(($"'{path}': WorldItem has no VisualRoot reference.", MessageType.Error), root);
                 errors++;
             }
             if (root.GetComponentInChildren<Collider>(true) == null)
             {
-                log.Add(($"'{path}': no Collider — raycasts will not detect this pickup.", MessageType.Error));
+                AddLog(($"'{path}': no Collider — raycasts will not detect this pickup.", MessageType.Error), root);
                 errors++;
             }
             if (root.GetComponentInChildren<MeshRenderer>(true) == null
                 && root.GetComponentInChildren<SkinnedMeshRenderer>(true) == null)
-                log.Add(($"'{path}': no Renderer — pickup will be invisible.", MessageType.Warning));
+                AddLog(($"'{path}': no Renderer — pickup will be invisible.", MessageType.Warning), root);
             return errors;
+        }
+
+        private void AddLog((string message, MessageType type) entry, Object target = null)
+        {
+            log.Add(entry);
+            if (target) logTargets[entry.message] = target;
         }
 
         private static string HierarchyPath(Transform t)

@@ -1,4 +1,5 @@
 using System.IO;
+using FishNet.Component.Prediction;
 using UnityEditor;
 using UnityEngine;
 
@@ -70,7 +71,11 @@ namespace TwoBirds.Editor
             Repaint();
         }
 
-        private Texture2D Render(GameObject source, int res)
+        private Texture2D Render(GameObject source, int res) =>
+            Render(source, res, backgroundColor, padding, cameraAngle);
+
+        private static Texture2D Render(GameObject source, int res, Color backgroundColor,
+            float padding, Vector2 cameraAngle)
         {
             var scene = EditorSceneManager_Utility.NewPreviewScene();
             var instance = Instantiate(source, Vector3.zero, Quaternion.identity);
@@ -133,23 +138,34 @@ namespace TwoBirds.Editor
 
         private void CaptureAndSave()
         {
-            var tex = Render(target, resolution);
+            var sprite = CaptureAndSave(target, resolution, savePath, backgroundColor, padding, cameraAngle);
+            if (sprite == null) return;
+
+            if (preview != null)
+                DestroyImmediate(preview);
+            preview = Render(target, resolution);
+
+            EditorGUIUtility.PingObject(sprite);
+        }
+
+        public static Sprite CaptureAndSave(GameObject target, int resolution, string savePath,
+            Color backgroundColor, float padding, Vector2 cameraAngle, ItemDefinition definition = null)
+        {
+            if (target == null) return null;
+
+            var tex = Render(target, resolution, backgroundColor, padding, cameraAngle);
             if (tex == null)
             {
                 Debug.LogWarning("Icon Capture: no renderable geometry found on target.");
-                return;
+                return null;
             }
 
-            if (!Directory.Exists(savePath))
-                Directory.CreateDirectory(savePath);
-
-            string filename = $"{target.name}_icon.png";
-            string fullPath = Path.Combine(savePath, filename);
+            if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
+            string fullPath = Path.Combine(savePath, $"{target.name}_icon.png").Replace('\\', '/');
             File.WriteAllBytes(fullPath, tex.EncodeToPNG());
             DestroyImmediate(tex);
 
             AssetDatabase.Refresh();
-
             var importer = AssetImporter.GetAtPath(fullPath) as TextureImporter;
             if (importer != null)
             {
@@ -162,47 +178,35 @@ namespace TwoBirds.Editor
             }
 
             var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(fullPath);
-            TryAssignToItemDefinition(sprite);
-
-            if (preview != null)
-                DestroyImmediate(preview);
-            preview = Render(target, resolution);
-
-            Debug.Log($"Icon saved: {fullPath}");
-            EditorGUIUtility.PingObject(AssetDatabase.LoadAssetAtPath<Object>(fullPath));
-        }
-
-        private void TryAssignToItemDefinition(Sprite sprite)
-        {
-            if (sprite == null || target == null) return;
-
-            string prefabPath = AssetDatabase.GetAssetPath(target);
-            if (string.IsNullOrEmpty(prefabPath)) return;
-
-            var guids = AssetDatabase.FindAssets("t:ItemDefinition");
-            foreach (string guid in guids)
+            if (definition != null && sprite != null)
             {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
-                if (item != null && item.WorldPrefab == target)
-                {
-                    Undo.RecordObject(item, "Assign Icon");
-                    item.Icon = sprite;
-                    EditorUtility.SetDirty(item);
-                    Debug.Log($"Assigned icon to ItemDefinition '{item.name}'.");
-                    break;
-                }
+                Undo.RecordObject(definition, "Assign Item Icon");
+                definition.Icon = sprite;
+                EditorUtility.SetDirty(definition);
             }
+            Debug.Log($"Icon saved: {fullPath}");
+            return sprite;
         }
 
         private static void StripNonVisual(GameObject go)
         {
+            DestroyComponents<ItemUseBehaviour>(go);
+            DestroyComponents<WorldItem>(go);
+            DestroyComponents<OfflineRigidbody>(go);
+            DestroyComponents<BakedPickup>(go);
+
             foreach (var c in go.GetComponentsInChildren<Component>(true))
             {
                 if (c == null) continue;
                 if (c is Transform or MeshFilter or MeshRenderer or SkinnedMeshRenderer) continue;
                 DestroyImmediate(c);
             }
+        }
+
+        private static void DestroyComponents<T>(GameObject go) where T : Component
+        {
+            foreach (var component in go.GetComponentsInChildren<T>(true))
+                if (component) DestroyImmediate(component);
         }
 
         private static Bounds CalculateBounds(GameObject go)

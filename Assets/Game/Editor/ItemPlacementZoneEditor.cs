@@ -49,10 +49,6 @@ namespace TwoBirds.Editor
                 return;
             }
 
-            byte itemId = 0;
-            if (zone.Registry != null)
-                itemId = zone.Registry.GetId(zone.Item);
-
             var positions = GeneratePositions(zone);
             Undo.SetCurrentGroupName("Place Items");
             int group = Undo.GetCurrentGroup();
@@ -68,8 +64,6 @@ namespace TwoBirds.Editor
                 if (pickup == null)
                     pickup = Undo.AddComponent<BakedPickup>(go);
                 pickup.Item = zone.Item;
-                if (itemId != 0)
-                    pickup.ItemId = itemId;
             }
 
             Undo.CollapseUndoOperations(group);
