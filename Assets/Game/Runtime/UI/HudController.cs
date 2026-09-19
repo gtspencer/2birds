@@ -37,11 +37,6 @@ namespace TwoBirds
         private InputPresentation presentation;
         private InventoryInputHandler inventoryInput;
         private InputAction inventoryAction;
-        private readonly InputAction[] slotActions = new InputAction[PlayerInventory.HotbarSize];
-        private readonly Label[] hotbarKeys = new Label[PlayerInventory.HotbarSize];
-        private readonly Label[] inventoryKeys = new Label[PlayerInventory.HotbarSize];
-        private readonly Image[] hotbarGlyphs = new Image[PlayerInventory.HotbarSize];
-        private readonly Image[] inventoryGlyphs = new Image[PlayerInventory.HotbarSize];
         private Label inventoryShortcut;
         private InteractionTooltip interactionTooltip;
         private ControlsHintPanel controlsHint;
@@ -87,8 +82,6 @@ namespace TwoBirds
             presentation = session.InputPresentation;
             inventoryInput = new InventoryInputHandler(session, ToggleInventory);
             inventoryAction = InputSystem.actions.FindAction("Player/Inventory");
-            for (int i = 0; i < slotActions.Length; i++)
-                slotActions[i] = InputSystem.actions.FindAction($"Player/Hotbar{i + 1}");
             interactionTooltip = new InteractionTooltip(root, presentation);
             controlsHint = new ControlsHintPanel(root, presentation);
             BuildHotbar();
@@ -115,7 +108,7 @@ namespace TwoBirds
             {
                 int idx = i;
                 var slot = MakeSlot(i);
-                AddShortcut(slot, out hotbarKeys[i], out hotbarGlyphs[i]);
+                AddShortcut(slot, i + 1);
                 slot.RegisterCallback<ClickEvent>(_ => OnHotbarClick(idx));
                 hotbar.Add(slot);
                 hotbarSlots[i] = slot;
@@ -140,7 +133,7 @@ namespace TwoBirds
                 slot.RegisterCallback<NavigationMoveEvent>(evt => MoveFocus(evt, index));
                 if (i < PlayerInventory.HotbarSize)
                 {
-                    AddShortcut(slot, out inventoryKeys[i], out inventoryGlyphs[i]);
+                    AddShortcut(slot, i + 1);
                 }
                 slot.RegisterCallback<PointerDownEvent>(OnSlotPointerDown);
                 slot.RegisterCallback<PointerMoveEvent>(OnSlotPointerMove);
@@ -150,12 +143,13 @@ namespace TwoBirds
             }
         }
 
-        private static void AddShortcut(VisualElement slot, out Label key, out Image glyph)
+        private static void AddShortcut(VisualElement slot, int number)
         {
-            key = new Label { pickingMode = PickingMode.Ignore };
+            var key = new Label { text = number.ToString(), pickingMode = PickingMode.Ignore };
             key.AddToClassList("slot-key");
-            glyph = new Image { pickingMode = PickingMode.Ignore };
+            var glyph = new Image { pickingMode = PickingMode.Ignore };
             glyph.AddToClassList("slot-binding-glyph");
+            glyph.style.display = DisplayStyle.None;
             slot.Add(key);
             slot.Add(glyph);
         }
@@ -163,25 +157,10 @@ namespace TwoBirds
         private void RefreshBindings()
         {
             if (presentation.ActiveDevice is Gamepad) CancelDrag();
-            for (int i = 0; i < slotActions.Length; i++)
-            {
-                var binding = presentation.Resolve(slotActions[i]);
-                SetShortcut(hotbarKeys[i], hotbarGlyphs[i], binding);
-                SetShortcut(inventoryKeys[i], inventoryGlyphs[i], binding);
-            }
             inventoryShortcut.text = $"{presentation.Label("UI/Submit")} {(moveSource < 0 ? "Select item" : "Move item")}   " +
                 $"{presentation.Label("UI/Cancel")} {(moveSource < 0 ? "Close" : "Cancel move")}   {presentation.Label("UI/Pause")} Close";
             if (presentation.ActiveDevice is not Gamepad)
                 inventoryShortcut.text += $"   {presentation.Resolve(inventoryAction).Text} Close";
-        }
-
-        private static void SetShortcut(Label key, Image glyph, (string Text, Texture2D Glyph) binding)
-        {
-            key.text = binding.Text;
-            key.tooltip = binding.Text;
-            key.style.display = binding.Glyph ? DisplayStyle.None : DisplayStyle.Flex;
-            glyph.image = binding.Glyph;
-            glyph.style.display = binding.Glyph ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         private static VisualElement MakeSlot(int index)
