@@ -71,6 +71,7 @@ namespace TwoBirds
             Click("host-back", Back);
             Click("join-back", Back);
             Click("settings", () => Show("settings"));
+            Click("quit", Application.Quit);
             settings = new SettingsPanel(root, session, Back);
             settings.Changed += PresentationChanged;
             Click("start-host", () => { if (Validate(hostPort)) session.StartSession(SessionMode.Host, portText: hostPort.value); });
@@ -80,7 +81,6 @@ namespace TwoBirds
             Click("invite", () => { if (lobby) lobby.InviteFriends(); });
             Click("lobby-leave", () => session.Leave());
             Click("cancel", () => session.Leave());
-            root.Q<Button>("quit").SetEnabled(false);
             root.Q("local-join").style.display = session.LocalNetworking ? DisplayStyle.Flex : DisplayStyle.None;
             root.Q("steam-join").style.display = session.LocalNetworking ? DisplayStyle.None : DisplayStyle.Flex;
             var slots = root.Q("roster");

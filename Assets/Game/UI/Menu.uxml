@@ -10,7 +10,7 @@
                 <ui:Button name="host" text="Host" />
                 <ui:Button name="join" text="Join" />
                 <ui:Button name="settings" text="Settings" />
-                <ui:Button name="quit" text="Quit · coming later" />
+                <ui:Button name="quit" text="Quit" />
             </ui:VisualElement>
             <ui:VisualElement name="host-page" style="display: none;">
                 <ui:Label text="Host a local session" class="heading" />
