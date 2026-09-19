@@ -12,7 +12,7 @@ namespace TwoBirds
         private VisualElement panel, pausePage, settingsPage;
         private Button settingsButton;
         private SettingsPanel settings;
-        private InputAction pause;
+        private InputAction pause, cancel;
         private MenuNavigation navigation;
         private Button resume, leave, invite;
         private Label status, footer;
@@ -40,7 +40,9 @@ namespace TwoBirds
             invite.clicked += Invite;
             session.Changed += Render;
             pause = InputSystem.actions.FindAction("UI/Pause");
+            cancel = InputSystem.actions.FindAction("UI/Cancel");
             pause.performed += Pause;
+            cancel.performed += CancelInput;
             root.RegisterCallback<NavigationCancelEvent>(Cancel);
             navigation = new MenuNavigation(root, session.InputPresentation,
                 () => panel.style.display == DisplayStyle.None ? null : settings.IsOpen ? settingsPage : pausePage,
@@ -62,15 +64,21 @@ namespace TwoBirds
             if (hud && hud.InventoryOpen) { hud.CloseInventory(); return; }
             if (session.Phase == SessionPhase.InGame) session.SetPanel(!session.PanelOpen);
         }
+        private void CancelInput(InputAction.CallbackContext context) => HandleCancel();
         private void Cancel(NavigationCancelEvent evt)
         {
-            if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput || session.ConsoleOpen || handledFrame == Time.frameCount) return;
+            if (!HandleCancel()) return;
+            evt.StopPropagation();
+        }
+        private bool HandleCancel()
+        {
+            if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput || session.ConsoleOpen || handledFrame == Time.frameCount) return false;
             if (settings.IsOpen) CloseSettings();
             else if (session.PanelOpen && session.Phase == SessionPhase.InGame) session.SetPanel(false);
             else if (session.Phase is SessionPhase.LoadingGame or SessionPhase.Connecting) session.Leave();
-            else return;
+            else return false;
             handledFrame = Time.frameCount;
-            evt.StopPropagation();
+            return true;
         }
         private void PresentationChanged()
         {
@@ -127,6 +135,7 @@ namespace TwoBirds
             navigation?.Dispose();
             if (session) { session.Changed -= Render; session.InputPresentation.Changed -= PresentationChanged; }
             if (pause != null) pause.performed -= Pause;
+            if (cancel != null) cancel.performed -= CancelInput;
             root?.UnregisterCallback<NavigationCancelEvent>(Cancel);
             if (root == null) return;
             resume.clicked -= Resume;
