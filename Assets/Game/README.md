@@ -8,6 +8,14 @@ The root `steam_appid.txt` is the development App ID configuration. Windows deve
 
 Controls: WASD / left stick to move, mouse / right stick to orbit, Space / gamepad south button to jump, Escape / gamepad cancel to open the session panel. Resume restores gameplay input; Leave Session returns to the menu. Settings persists a 60, 90, or 120 FPS rendering cap with v-sync disabled; simulation remains at 60 Hz. Quit remains an unwired placeholder.
 
+## AI reproduction logs
+
+Editor Play sessions and development players record structured JSON Lines. Editor output is `<project>/Logs/AI/<UTC-start>-<run-id>/`; development-player output is `<Application.persistentDataPath>/AILogs/<UTC-start>-<run-id>/`. The development console prints the run directory at startup. Release builds omit logging calls and capture services.
+
+Targeted investigations can temporarily wire the existing marker/screenshot service and call `AILogger` directly. Markers request a five-second state-sampling burst; screenshots capture the completed game view, including UI. PNGs live under the run's `screenshots/` directory. Follow `screenshot.saved` for the actual capture frame/time and relative image path; throttled or unavailable requests have explicit outcomes.
+
+AI logging is available automatically in Editor Play Mode and development players; no launch flag is required. Add `-aiLogDir "C:\absolute\directory"` only to select an output root. Targeted gameplay diagnostics should call `AILogger` directly and be removed after the reproduction. Supply the complete host run folder and each relevant client run folder for multiplayer diagnosis, plus the marker number or screenshot capture ID and which peer you controlled. Keep `run.json`, retained `events-*.jsonl`, screenshots, and any `summary.json` together. See [the event catalog and streaming examples](../../Specs/AI_Logging_Events.md) for identity, sampling, and retention rules.
+
 ## Ownership and responsibilities
 
 - `SessionController` owns admission, lobby roster, connection attempts, deadlines, scene transitions, readiness, cancellation, and shutdown. `SteamLifetime` owns Steam and Steam Input throughout menus and gameplay; `SteamLobby` handles discovery and invitations. `SessionAuthenticator` reserves the host identity before admitting guests. Gameplay waits for the local player and item baseline; host departure ends the session.

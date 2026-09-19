@@ -1,14 +1,12 @@
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
 using System.Diagnostics;
 using UnityEngine;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
 using System;
 using System.IO;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine.SceneManagement;
-#endif
-
 namespace TwoBirds
 {
     public enum AILogLevel { Info, Warning, Error }
@@ -26,7 +24,6 @@ namespace TwoBirds
     {
         internal static float[] V(Vector3 value) => new[] { value.x, value.y, value.z };
         internal static float[] Q(Quaternion value) => new[] { value.x, value.y, value.z, value.w };
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
         private static AILogWriter writer;
         private static JObject session = new();
         private static int mainThread;
@@ -52,7 +49,6 @@ namespace TwoBirds
         private static void Start()
         {
             string[] args = Environment.GetCommandLineArgs();
-            if (Array.IndexOf(args, "-aiLogOff") >= 0) return;
             try
             {
                 string root = Application.isEditor ? Path.Combine(Application.dataPath, "..", "Logs", "AI") :
@@ -168,9 +164,6 @@ namespace TwoBirds
             writer = null;
             run?.Close();
         }
-#else
-        public static bool Enabled => false;
-#endif
 
         [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
         public static void Log(string eventName, object data, AILogContext context = default,
@@ -215,3 +208,4 @@ namespace TwoBirds
         }
     }
 }
+#endif

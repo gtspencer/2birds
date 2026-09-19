@@ -40,6 +40,11 @@ namespace TwoBirds
 
         private void LateUpdate()
         {
+            RefreshTarget();
+        }
+
+        private void RefreshTarget()
+        {
             ClearTarget();
             var session = SessionController.Instance;
             if (!IsOwner || inputReader == null || !inputReader.GameplayActive || session == null ||

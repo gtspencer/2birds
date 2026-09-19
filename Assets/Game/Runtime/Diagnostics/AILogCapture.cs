@@ -152,7 +152,7 @@ namespace TwoBirds
                 target_subject = target ? "item:" + target.Record.Motion.Id : null,
                 held_subject = held ? "item:" + held.Record.Motion.Id : null,
                 console_open = host.ConsoleOpen, session_panel_open = host.PanelOpen, items
-            }, player ? player.AIContext("client") : default);
+            }, default);
         }
 
         private void Select(WorldItem item)

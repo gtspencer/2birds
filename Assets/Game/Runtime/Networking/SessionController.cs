@@ -112,7 +112,6 @@ namespace TwoBirds
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (!Application.isBatchMode) {
                 gameObject.AddComponent<DevConsole>();
-                gameObject.AddComponent<LogMarkerService>();
             }
 #endif
         }

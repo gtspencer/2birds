@@ -40,6 +40,7 @@ namespace TwoBirds
         private uint epoch;
         private uint sessionId;
         private bool worldReady;
+        internal uint AIEpoch => epoch;
         private Scene worldScene;
 
         public bool IsHost => network.IsServerStarted;

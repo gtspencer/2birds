@@ -769,5 +769,21 @@ namespace TwoBirds
             if (registry && Simulating && !registry.Replaying && other.TryGetComponent<ItemKillVolume>(out _))
                 RemovalPending = true;
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        internal object AISnapshot() => new
+        {
+            subject = "item:" + Record.Motion.Id, epoch = registry.AIEpoch, revision = Record.Motion.Revision,
+            sequence = Record.Motion.Sequence, path = Record.Motion.Path, motion_tick = Record.Motion.Tick,
+            local_tick = registry.LocalTick, server_tick = registry.ServerTick,
+            releaser = Record.Releaser, operation = Record.Operation, launch_tick = Record.LaunchTick,
+            simulator = Record.Simulator, simulating = Simulating, predicted = Predicted, holder = Record.Holder,
+            state = Record.State.ToString(), sleeping = Record.Sleeping, equipped = Record.Equipped,
+            body_position = AILogger.V(Body.position), body_rotation = AILogger.Q(Body.rotation),
+            graphics_position = AILogger.V(visualRoot.position), graphics_rotation = AILogger.Q(visualRoot.rotation),
+            body_velocity = AILogger.V(Body.linearVelocity), motion_velocity = AILogger.V(Record.Motion.Velocity),
+            angular_velocity = AILogger.V(Body.angularVelocity), kinematic = Body.isKinematic
+        };
+#endif
     }
 }

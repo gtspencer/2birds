@@ -513,6 +513,19 @@ namespace TwoBirds
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        internal object AISnapshot() => new
+        {
+            subject = "player:" + ObjectId, generation = impactGeneration,
+            owner = OwnerId, is_owner = IsOwner, local_tick = TimeManager.LocalTick, movement_tick = movementTick, server_tick = TimeManager.Tick,
+            body_position = AILogger.V(Body.position), body_rotation = AILogger.Q(Body.rotation),
+            graphics_position = AILogger.V(presentation.Graphics.position), graphics_rotation = AILogger.Q(presentation.Graphics.rotation),
+            velocity = AILogger.V(Body.linearVelocity), pending = AILogger.V(pendingVelocityChange),
+            mode = Mode.ToString(), grounded = Grounded, seated = Seated, reset_revision = resetRevision,
+            sequence = lastImpactSequence, request_id = lastOwnerRequestId
+        };
+#endif
+
         [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
         internal void TraceImpact(string detail)
         {

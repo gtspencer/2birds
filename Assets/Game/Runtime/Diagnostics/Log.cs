@@ -38,7 +38,5 @@ public static class Log
     public static void Marker()
     {
         UnityEngine.Debug.Log($"MARKER ({++_markerCount})");
-        if (TwoBirds.AILogger.Enabled) TwoBirds.AILogger.Log("marker", new { number = _markerCount });
-        TwoBirds.AILogger.Burst("marker");
     }
 }
