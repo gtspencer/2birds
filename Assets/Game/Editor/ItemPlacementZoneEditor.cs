@@ -8,6 +8,8 @@ namespace TwoBirds.Editor
     [CustomEditor(typeof(ItemPlacementZone))]
     public sealed class ItemPlacementZoneEditor : UnityEditor.Editor
     {
+        private const int GroundPreviewResolution = 40;
+
         [MenuItem("GameObject/Two Birds/Placement Zone/Generic", false, 10)]
         private static void CreatePlacementZone()
         {
@@ -116,20 +118,16 @@ namespace TwoBirds.Editor
                 }
                 if (tooClose) continue;
 
-                if (Physics.Raycast(
+                if (!TryGetGroundHit(
                     new Vector3(candidate.x, zone.transform.position.y + zone.RaycastHeight, candidate.z),
-                    Vector3.down, out var hit, zone.RaycastHeight * 2f, zone.GroundLayer))
-                {
-                    results.Add(hit.point + (zone.UsePlacementYOffset ? Vector3.up * zone.PlacementYOffset : Vector3.zero));
-                }
-                else
-                {
-                    results.Add(candidate + (zone.UsePlacementYOffset ? Vector3.up * zone.PlacementYOffset : Vector3.zero));
-                }
+                    zone.RaycastHeight * 2f, zone.GroundLayer, out var hit))
+                    continue;
+
+                results.Add(hit.point + (zone.UsePlacementYOffset ? Vector3.up * zone.PlacementYOffset : Vector3.zero));
             }
 
             if (results.Count < zone.Count)
-                Debug.LogWarning($"Could only place {results.Count}/{zone.Count} items (spacing too tight for zone size).");
+                Debug.LogWarning($"Could only place {results.Count}/{zone.Count} requested items. Some candidates were blocked, had no valid ground, or were too close together.");
 
             return results;
         }
@@ -174,6 +172,7 @@ namespace TwoBirds.Editor
         private void OnSceneGUI()
         {
             var zone = (ItemPlacementZone)target;
+            DrawGroundPreview(zone);
             var color = new Color(0.2f, 0.8f, 0.3f, 0.6f);
             if (zone.Shape == ZoneShape.Sphere)
             {
@@ -210,6 +209,61 @@ namespace TwoBirds.Editor
                 }
                 Handles.matrix = matrix;
             }
+        }
+
+        private static void DrawGroundPreview(ItemPlacementZone zone)
+        {
+            float width = zone.Shape == ZoneShape.Sphere ? zone.Radius * 2f : zone.BoxSize.x;
+            float depth = zone.Shape == ZoneShape.Sphere ? zone.Radius * 2f : zone.BoxSize.z;
+            float stepX = width / GroundPreviewResolution;
+            float stepZ = depth / GroundPreviewResolution;
+            var hitPoints = new Vector3[GroundPreviewResolution + 1, GroundPreviewResolution + 1];
+            var hit = new bool[GroundPreviewResolution + 1, GroundPreviewResolution + 1];
+            var color = new Color(0.2f, 0.8f, 0.3f, 0.22f);
+
+            for (int z = 0; z <= GroundPreviewResolution; z++)
+            {
+                for (int x = 0; x <= GroundPreviewResolution; x++)
+                {
+                    float localX = x * stepX - width * 0.5f;
+                    float localZ = z * stepZ - depth * 0.5f;
+                    if (zone.Shape == ZoneShape.Sphere && new Vector2(localX, localZ).sqrMagnitude > zone.Radius * zone.Radius)
+                        continue;
+
+                    Vector3 point = zone.Shape == ZoneShape.Sphere
+                        ? zone.transform.position + new Vector3(localX, 0f, localZ)
+                        : zone.transform.TransformPoint(new Vector3(localX, 0f, localZ));
+                    Vector3 origin = new(point.x, zone.transform.position.y + zone.RaycastHeight, point.z);
+                    if (TryGetGroundHit(origin, zone.RaycastHeight * 2f, zone.GroundLayer, out var raycastHit))
+                    {
+                        hitPoints[x, z] = raycastHit.point + (zone.UsePlacementYOffset ? Vector3.up * zone.PlacementYOffset : Vector3.zero);
+                        hit[x, z] = true;
+                    }
+                }
+            }
+
+            Handles.color = color;
+            for (int z = 0; z < GroundPreviewResolution; z++)
+            {
+                for (int x = 0; x < GroundPreviewResolution; x++)
+                {
+                    if (!hit[x, z] || !hit[x + 1, z] || !hit[x, z + 1] || !hit[x + 1, z + 1])
+                        continue;
+
+                    Handles.DrawAAConvexPolygon(
+                        hitPoints[x, z], hitPoints[x + 1, z], hitPoints[x + 1, z + 1]);
+                    Handles.DrawAAConvexPolygon(
+                        hitPoints[x, z], hitPoints[x + 1, z + 1], hitPoints[x, z + 1]);
+                }
+            }
+        }
+
+        private static bool TryGetGroundHit(Vector3 origin, float distance, LayerMask groundLayer, out RaycastHit hit)
+        {
+            if (!Physics.Raycast(origin, Vector3.down, out hit, distance, ~0))
+                return false;
+
+            return (groundLayer.value & (1 << hit.collider.gameObject.layer)) != 0;
         }
     }
 }
