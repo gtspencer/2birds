@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace TwoBirds
@@ -7,7 +8,7 @@ namespace TwoBirds
     {
         private readonly SessionController session;
         private readonly Action toggle;
-        private readonly InputAction inventoryAction, previous, next;
+        private readonly InputAction inventoryAction, previous, next, scroll;
         private readonly InputAction[] slots = new InputAction[PlayerInventory.HotbarSize];
         private readonly InputAction[] uiNavigation;
         private PlayerInventory inventory;
@@ -24,9 +25,11 @@ namespace TwoBirds
             inventoryAction = map.FindAction("Inventory");
             previous = map.FindAction("Previous");
             next = map.FindAction("Next");
+            scroll = InputSystem.actions.FindAction("UI/ScrollWheel");
             inventoryAction.performed += Toggle;
             previous.performed += Cycle;
             next.performed += Cycle;
+            scroll.performed += Scroll;
             for (int i = 0; i < slots.Length; i++)
             {
                 slots[i] = map.FindAction($"Hotbar{i + 1}");
@@ -64,7 +67,18 @@ namespace TwoBirds
         private void Cycle(InputAction.CallbackContext context)
         {
             if (!CanSelect) return;
-            int direction = context.action == previous ? -1 : 1;
+            Cycle(context.action == previous ? -1 : 1);
+        }
+
+        private void Scroll(InputAction.CallbackContext context)
+        {
+            Vector2 value = context.ReadValue<Vector2>();
+            if (value.y != 0) Cycle(value.y > 0 ? -1 : 1);
+        }
+
+        private void Cycle(int direction)
+        {
+            if (!CanSelect) return;
             sbyte current = inventory.SelectedSlot;
             sbyte selected = current < 0
                 ? (sbyte)(direction > 0 ? 0 : PlayerInventory.HotbarSize - 1)
@@ -77,6 +91,7 @@ namespace TwoBirds
             inventoryAction.performed -= Toggle;
             previous.performed -= Cycle;
             next.performed -= Cycle;
+            scroll.performed -= Scroll;
             foreach (var slot in slots) slot.performed -= Select;
             Bind(null, null);
         }
