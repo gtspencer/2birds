@@ -38,6 +38,7 @@ namespace TwoBirds
         {
             this.asset = asset;
             Add("Move", "Move");
+            Add("Sprint", "Sprint");
             Add("Interact", "Interact");
             Add("Use", "Use");
             Add("Drop", "Drop");

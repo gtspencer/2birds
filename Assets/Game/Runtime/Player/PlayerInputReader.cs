@@ -10,7 +10,7 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump, drop, use, exit, interact, lights, horn;
+        private InputAction move, look, jump, sprint, drop, use, exit, interact, lights, horn;
         private PlayerSeating seating;
         private SessionController session;
         private bool exitBlocked, interactBlocked;
@@ -63,6 +63,7 @@ namespace TwoBirds
             interact = actions.FindAction("Interact");
             lights = actions.FindAction("Lights");
             horn = actions.FindAction("Horn");
+            sprint = actions.FindAction("Sprint");
             seating = GetComponent<PlayerSeating>();
             inventory = GetComponent<PlayerInventory>();
             equipment = GetComponent<PlayerEquipment>();
@@ -156,7 +157,8 @@ namespace TwoBirds
 #endif
             if (!gameplay || InventoryOpen || seating.Seated || seating.TransitionPending || seating.PlacementPending) return default;
             Vector3 direction = Quaternion.Euler(0f, Yaw, 0f) * new Vector3(movement.x, 0f, movement.y);
-            var result = new MoveInput(new Vector2(direction.x, direction.z), Yaw, jumpPending);
+            var result = new MoveInput(new Vector2(direction.x, direction.z), Yaw, jumpPending,
+                sprint != null && sprint.IsPressed() && movement.sqrMagnitude > 0.0001f);
             jumpPending = false;
             return result;
         }

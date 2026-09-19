@@ -6,6 +6,11 @@ namespace TwoBirds
     public sealed class GameSettings : ScriptableObject
     {
         [Min(0)] public float WalkSpeed = 5f;
+        [Min(0)] public float SprintSpeed = 8f;
+        [Min(0)] public float MaximumStamina = 5f;
+        [Min(0)] public float StaminaDrainRate = 1f;
+        [Min(0)] public float StaminaRecoveryRate = 1.5f;
+        [Min(0)] public float StaminaRecoveryDelay = 1f;
         [Min(0)] public float GroundAcceleration = 25f;
         [Min(0)] public float Braking = 25f;
         [Min(0)] public float AirAcceleration = 4f;

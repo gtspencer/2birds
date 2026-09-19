@@ -35,9 +35,10 @@ namespace TwoBirds
         public Vector2 Direction;
         public float Facing;
         public bool Jump;
+        public bool Sprint;
         public uint SeatingRevision;
         private uint tick;
-        public MoveInput(Vector2 direction, float facing, bool jump) { Direction = direction; Facing = facing; Jump = jump; SeatingRevision = 0; tick = 0; }
+        public MoveInput(Vector2 direction, float facing, bool jump, bool sprint = false) { Direction = direction; Facing = facing; Jump = jump; Sprint = sprint; SeatingRevision = 0; tick = 0; }
         public uint GetTick() => tick;
         public void SetTick(uint value) => tick = value;
         public void Dispose() { }
@@ -100,6 +101,8 @@ namespace TwoBirds
         private uint lastApplicationOwnerTick;
         private uint recoveryTicks;
         private uint historyTicks;
+        private float stamina;
+        private float staminaRecoveryDelay;
         private bool generationReady;
         private bool rejectReplay;
         private CapsuleCollider capsule;
@@ -109,6 +112,7 @@ namespace TwoBirds
         public Rigidbody Body { get; private set; }
         public MovementMode Mode { get; private set; } = MovementMode.Airborne;
         public bool Grounded => Mode == MovementMode.Walking;
+        public float Stamina01 => settings && settings.MaximumStamina > 0f ? stamina / settings.MaximumStamina : 0f;
         public uint ResetRevision => resetRevision;
         internal uint ImpactGeneration => impactGeneration;
         public event System.Action<uint, uint, Vector3> Reconciled;
@@ -132,6 +136,7 @@ namespace TwoBirds
             input = GetComponent<PlayerInputReader>();
             presentation = GetComponent<PlayerPresentation>();
             spawnPoint = transform.position;
+            stamina = settings ? settings.MaximumStamina : 0f;
         }
 
         public override void OnStartNetwork()
@@ -353,6 +358,7 @@ namespace TwoBirds
             if (IsOwner) BeforeOwnerMove?.Invoke();
             if (Seated) return;
             var data = IsOwner ? input.Consume() : default;
+            if (IsOwner) UpdateStamina(ref data);
             data.SeatingRevision = SeatingRevision;
             ReplicateMove(data);
         }
@@ -433,7 +439,7 @@ namespace TwoBirds
             ApplyImpacts();
             if (!Finite(data.Direction.x) || !Finite(data.Direction.y) || !Finite(data.Facing)) data = default;
             // Missing inputs apply no new intent; jump edges are never extrapolated.
-            if (!state.ContainsCreated()) { data.Direction = default; data.Jump = false; }
+            if (!state.ContainsCreated()) { data.Direction = default; data.Jump = false; data.Sprint = false; }
             if (jumpCooldown > 0) jumpCooldown--;
             bool grounded = Physics.SphereCast(Body.position + Vector3.down * 0.45f, 0.45f, Vector3.down,
                 out _, 0.17f, settings.GroundLayers, QueryTriggerInteraction.Ignore) && Body.linearVelocity.y <= 0.5f;
@@ -441,7 +447,8 @@ namespace TwoBirds
             {
                 Mode = grounded ? MovementMode.Walking : MovementMode.Airborne;
                 Vector2 direction = Vector2.ClampMagnitude(data.Direction, 1f);
-                Vector3 target = new Vector3(direction.x, 0f, direction.y) * settings.WalkSpeed;
+                float speed = data.Sprint ? settings.SprintSpeed : settings.WalkSpeed;
+                Vector3 target = new Vector3(direction.x, 0f, direction.y) * speed;
                 Vector3 horizontal = new Vector3(Body.linearVelocity.x, 0f, Body.linearVelocity.z);
                 float acceleration = grounded ? (direction.sqrMagnitude > 0f ? settings.GroundAcceleration : settings.Braking) : settings.AirAcceleration;
                 if (recoveryTicks > 0) acceleration = 0f;
@@ -474,6 +481,33 @@ namespace TwoBirds
                 ObserversGeneration(impactGeneration, OwnerId);
             }
             predictedBody.Simulate();
+        }
+
+        private void UpdateStamina(ref MoveInput data)
+        {
+            if (!settings || settings.MaximumStamina <= 0f)
+            {
+                data.Sprint = false;
+                return;
+            }
+
+            bool sprinting = data.Sprint && data.Direction.sqrMagnitude > 0.0001f && stamina > 0f;
+            data.Sprint = sprinting;
+            if (sprinting)
+            {
+                stamina = Mathf.Max(0f, stamina - settings.StaminaDrainRate * (float)TimeManager.TickDelta);
+                staminaRecoveryDelay = settings.StaminaRecoveryDelay;
+                return;
+            }
+
+            if (staminaRecoveryDelay > 0f)
+            {
+                staminaRecoveryDelay = Mathf.Max(0f, staminaRecoveryDelay - (float)TimeManager.TickDelta);
+                return;
+            }
+
+            stamina = Mathf.Min(settings.MaximumStamina,
+                stamina + settings.StaminaRecoveryRate * (float)TimeManager.TickDelta);
         }
 
         [Reconcile]

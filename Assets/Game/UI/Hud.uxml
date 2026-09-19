@@ -20,6 +20,11 @@
             </ui:VisualElement>
             <ui:Label name="health-text" class="health-text" text="100" />
         </ui:VisualElement>
+        <ui:VisualElement class="stamina-container" picking-mode="Ignore">
+            <ui:VisualElement class="stamina-bar-bg">
+                <ui:VisualElement name="stamina-fill" class="stamina-fill" />
+            </ui:VisualElement>
+        </ui:VisualElement>
         <ui:VisualElement name="equipped-preview" class="equipped-preview" style="display:none;">
             <ui:Image name="equipped-icon" class="equipped-icon" />
             <!-- Uncomment to show equipped item name below the icon: -->

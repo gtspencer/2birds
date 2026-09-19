@@ -13,6 +13,11 @@ MonoBehaviour:
   m_Name: GameSettings
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.GameSettings
   WalkSpeed: 5
+  SprintSpeed: 8
+  MaximumStamina: 5
+  StaminaDrainRate: 1
+  StaminaRecoveryRate: 1.5
+  StaminaRecoveryDelay: 1
   GroundAcceleration: 25
   Braking: 25
   AirAcceleration: 4

@@ -17,6 +17,7 @@ namespace TwoBirds
         private VisualElement inventoryPanel;
         private VisualElement inventoryGrid;
         private VisualElement healthFill;
+        private VisualElement staminaFill;
         private Label healthText;
         private VisualElement equippedPreview;
         private Image equippedIcon;
@@ -42,6 +43,7 @@ namespace TwoBirds
         private ControlsHintPanel controlsHint;
         private PlayerInteraction interaction;
         private PlayerInputReader inputReader;
+        private PlayerMotor playerMotor;
         private PlayerSeating seating;
         private ControlHint[] cartDriverHints;
         private ControlHint[] cartPassengerHints;
@@ -70,6 +72,7 @@ namespace TwoBirds
             inventoryPanel = root.Q("inventory-panel");
             inventoryGrid = root.Q("inventory-grid");
             healthFill = root.Q("health-fill");
+            staminaFill = root.Q("stamina-fill");
             healthText = root.Q<Label>("health-text");
             equippedPreview = root.Q("equipped-preview");
             equippedIcon = root.Q<Image>("equipped-icon");
@@ -330,6 +333,7 @@ namespace TwoBirds
             equipment = inv ? inv.Equipment : null;
             interaction = inv ? inv.GetComponent<PlayerInteraction>() : null;
             inputReader = inv ? inv.GetComponent<PlayerInputReader>() : null;
+            playerMotor = inv ? inv.GetComponent<PlayerMotor>() : null;
             seating = inv ? inv.GetComponent<PlayerSeating>() : null;
             inventoryInput?.Bind(inv, inputReader);
             if (inventory) inventory.InventoryChanged += Refresh;
@@ -364,6 +368,8 @@ namespace TwoBirds
                 controlsHint.Hide();
                 return;
             }
+            if (staminaFill != null && playerMotor)
+                staminaFill.style.width = Length.Percent(playerMotor.Stamina01 * 100f);
             if (equipment != null && equipment.IsCharging)
             {
                 chargeTrack.style.display = DisplayStyle.Flex;
