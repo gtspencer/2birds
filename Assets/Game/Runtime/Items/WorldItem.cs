@@ -16,6 +16,8 @@ namespace TwoBirds
         }
 
         [SerializeField] private Transform visualRoot;
+        [SerializeField, Tooltip("Replaces the default hover tooltip text when set.")] private string tooltipTextOverride;
+        [SerializeField, Tooltip("Show only the interaction glyph in the hover tooltip.")] private bool hideTooltipText;
         private readonly ItemMotion[] history = new ItemMotion[128];
         private readonly ItemMotion[] samples = new ItemMotion[16];
         private Collider[] colliders;
@@ -78,6 +80,8 @@ namespace TwoBirds
         public bool IsCharging => useBehaviour != null && useBehaviour.IsCharging;
         public float Charge01 => useBehaviour != null ? useBehaviour.Charge01 : 0f;
         public string ActionText => "Pick up";
+        public string TooltipTextOverride => tooltipTextOverride;
+        public bool HideTooltipText => hideTooltipText;
         public string InputActionPath => "Player/Interact";
         public bool CanInteract => registry != null && Record.State == WorldItemState.World &&
                                    !optimisticPickup && Record.Motion.Id != 0 &&

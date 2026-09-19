@@ -45,7 +45,9 @@ namespace TwoBirds
                 glyph.style.display = binding.Glyph ? DisplayStyle.Flex : DisplayStyle.None;
                 keycap.style.display = binding.Glyph ? DisplayStyle.None : DisplayStyle.Flex;
             }
-            verb.text = interaction.Target.ActionText;
+            verb.text = interaction.Target.HideTooltipText ? string.Empty :
+                string.IsNullOrWhiteSpace(interaction.Target.TooltipTextOverride) ?
+                interaction.Target.ActionText : interaction.Target.TooltipTextOverride;
             tooltip.style.display = DisplayStyle.Flex;
             var anchor = interaction.Target.TooltipAnchor;
             if (anchor != null)
