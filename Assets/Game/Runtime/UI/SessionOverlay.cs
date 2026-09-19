@@ -64,7 +64,7 @@ namespace TwoBirds
         }
         private void Cancel(NavigationCancelEvent evt)
         {
-            if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput || session.ConsoleOpen) return;
+            if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput || session.ConsoleOpen || handledFrame == Time.frameCount) return;
             if (settings.IsOpen) CloseSettings();
             else if (session.PanelOpen && session.Phase == SessionPhase.InGame) session.SetPanel(false);
             else if (session.Phase is SessionPhase.LoadingGame or SessionPhase.Connecting) session.Leave();
