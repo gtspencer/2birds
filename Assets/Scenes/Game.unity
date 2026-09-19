@@ -365,7 +365,7 @@ GameObject:
   - component: {fileID: 157321261}
   - component: {fileID: 157321260}
   m_Layer: 0
-  m_Name: GameObject
+  m_Name: Rock Placement Zone
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
