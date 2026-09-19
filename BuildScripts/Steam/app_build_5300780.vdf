@@ -1,0 +1,13 @@
+"AppBuild"
+{
+	"AppID" "5300780"
+	"Desc" "Development Steam build"
+
+	"BuildOutput" "../../Build/SteamPipeOutput"
+	"ContentRoot" "../../Build/Development-Steam"
+
+	"Depots"
+	{
+		"5300781" "depot_build_5300781.vdf"
+	}
+}

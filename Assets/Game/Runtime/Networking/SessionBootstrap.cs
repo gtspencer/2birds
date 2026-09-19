@@ -9,6 +9,8 @@ namespace TwoBirds
         public static bool LocalNetworking => localNetworking ??=
 #if UNITY_EDITOR
             UnityEditor.EditorPrefs.GetBool("TwoBirds.LocalNetworking", false) ||
+#elif TWO_BIRDS_LOCAL_NETWORKING
+            true ||
 #endif
             System.Array.Exists(System.Environment.GetCommandLineArgs(),
                 argument => argument.Equals("-localNetworking", System.StringComparison.OrdinalIgnoreCase));
