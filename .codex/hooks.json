@@ -6,8 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -File .hooks/.agentignore.hook.ps1",
-            "commandWindows": "powershell -NoProfile -File .hooks/.agentignore.hook.ps1",
+            "command": "powershell -NoProfile -File \"$(git rev-parse --show-toplevel)/.hooks/.agentignore.codex.hook.ps1\"",
+            "commandWindows": "powershell -NoProfile -File \"$(git rev-parse --show-toplevel)/.hooks/.agentignore.codex.hook.ps1\"",
             "timeout": 10,
             "statusMessage": "Checking .agentignore"
           }

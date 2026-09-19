@@ -404,7 +404,11 @@ namespace TwoBirds
             if (map == null) return;
             cartDriverHints = new[]
             {
-                new ControlHint { Action = map.FindAction("Move"), Label = "Drive / Steer" },
+                new ControlHint
+                {
+                    Action = map.FindAction("Move"), Label = "Drive / Steer",
+                    TextOverride = group => group == InputBindings.KeyboardMouse ? "WASD" : null
+                },
                 new ControlHint { Action = map.FindAction("Jump"), Label = "Handbrake" },
                 new ControlHint { Action = map.FindAction("Lights"), Label = "Lights" },
                 new ControlHint { Action = map.FindAction("Horn"), Label = "Horn" },

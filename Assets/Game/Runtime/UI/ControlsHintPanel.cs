@@ -8,6 +8,7 @@ namespace TwoBirds
     {
         public InputAction Action;
         public string Label;
+        public Func<string, string> TextOverride;
     }
 
     internal sealed class ControlsHintPanel : IDisposable
@@ -42,6 +43,8 @@ namespace TwoBirds
             {
                 var hint = hints[i];
                 var binding = presentation.Resolve(hint.Action);
+                string textOverride = hint.TextOverride?.Invoke(presentation.ActiveGroup);
+                if (textOverride != null) binding = (textOverride, null);
                 var row = new VisualElement();
                 row.AddToClassList("controls-row");
                 row.pickingMode = PickingMode.Ignore;
