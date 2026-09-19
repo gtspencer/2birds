@@ -1,3 +1,32 @@
+:root {
+    --bg-deep: rgb(12, 16, 24);
+    --bg-base: rgb(20, 28, 36);
+    --bg-surface: rgb(28, 38, 50);
+    --bg-elevated: rgb(42, 58, 72);
+    --bg-hover: rgb(54, 74, 88);
+    --bg-focus: rgb(58, 80, 96);
+
+    --border-subtle: rgba(110, 140, 165, 0.16);
+    --border-default: rgba(110, 140, 165, 0.28);
+    --border-accent: rgb(155, 218, 196);
+
+    --text-primary: rgb(232, 238, 244);
+    --text-secondary: rgb(168, 184, 198);
+    --text-muted: rgb(118, 136, 150);
+
+    --accent: rgb(155, 218, 196);
+    --warning: rgb(255, 200, 145);
+    --focus-ring: rgb(255, 238, 168);
+
+    --health: rgb(72, 175, 88);
+    --stamina: rgb(240, 195, 50);
+    --reward: rgb(245, 215, 120);
+
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+}
+
 .hud-root { flex-grow: 1; }
 
 .interaction-tooltip {
@@ -5,11 +34,13 @@
     position: absolute;
     flex-direction: row;
     align-items: center;
-    padding: 6px 10px;
-    border-radius: 6px;
-    background-color: rgba(20, 28, 36, 0.92);
-    color: rgb(231, 237, 241);
+    padding: 8px 12px;
+    border-radius: var(--radius-lg);
+    background-color: rgba(12, 16, 24, 0.92);
+    color: var(--text-primary);
     font-size: 16px;
+    border-width: 1px;
+    border-color: var(--border-subtle);
 }
 
 .interaction-glyph {
@@ -23,10 +54,10 @@
     min-width: 28px;
     min-height: 28px;
     margin: 0 6px;
-    padding: 2px 6px;
+    padding: 2px 8px;
     border-width: 1px;
-    border-color: rgb(179, 195, 205);
-    border-radius: 4px;
+    border-color: var(--text-secondary);
+    border-radius: 5px;
     -unity-text-align: middle-center;
 }
 
@@ -56,35 +87,36 @@
     height: 5px;
     margin-left: -30px;
     margin-top: 14px;
-    border-radius: 2px;
+    border-radius: 3px;
     overflow: hidden;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(0, 0, 0, 0.55);
 }
 
 .charge-fill {
     width: 0%;
     height: 100%;
-    background-color: rgb(165, 225, 204);
+    background-color: var(--accent);
+    border-radius: 3px;
 }
 
 .health-container {
     position: absolute;
-    bottom: 20px;
-    left: 20px;
+    bottom: 24px;
+    left: 24px;
     flex-direction: row;
     align-items: center;
 }
 
 .stamina-container {
     position: absolute;
-    bottom: 45px;
-    left: 20px;
+    bottom: 50px;
+    left: 24px;
 }
 
 .stamina-bar-bg {
     width: 200px;
-    height: 8px;
-    background-color: rgba(0, 0, 0, 0.6);
+    height: 6px;
+    background-color: rgba(0, 0, 0, 0.5);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -92,32 +124,34 @@
 .stamina-fill {
     height: 100%;
     width: 100%;
-    background-color: rgb(255, 204, 0);
+    background-color: var(--stamina);
+    border-radius: 3px;
 }
 
 .health-bar-bg {
     width: 200px;
-    height: 20px;
-    background-color: rgba(0, 0, 0, 0.6);
-    border-radius: 3px;
+    height: 18px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: var(--radius-sm);
     overflow: hidden;
 }
 
 .health-fill {
     height: 100%;
     width: 100%;
-    background-color: rgb(76, 175, 80);
+    background-color: var(--health);
+    border-radius: var(--radius-sm);
 }
 
 .health-text {
     color: white;
-    font-size: 16px;
-    margin-left: 8px;
+    font-size: 15px;
+    margin-left: 10px;
 }
 
 .hotbar {
     position: absolute;
-    bottom: 20px;
+    bottom: 24px;
     left: 0;
     right: 0;
     flex-direction: row;
@@ -128,22 +162,24 @@
     width: 56px;
     height: 56px;
     margin: 2px;
-    background-color: rgba(20, 28, 36, 0.75);
+    background-color: rgba(12, 16, 24, 0.7);
     border-width: 2px;
-    border-color: rgba(92, 113, 125, 0.6);
-    border-radius: 4px;
+    border-color: rgba(110, 140, 165, 0.18);
+    border-radius: var(--radius-md);
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    transition-property: background-color, border-color;
+    transition-duration: 80ms;
 }
 
 .slot.selected {
-    border-color: rgb(165, 225, 204);
-    border-width: 3px;
-    background-color: rgba(34, 45, 56, 0.9);
+    border-color: var(--accent);
+    border-width: 2px;
+    background-color: rgba(28, 38, 50, 0.9);
 }
 
-.slot.filled { background-color: rgba(34, 45, 56, 0.85); }
+.slot.filled { background-color: rgba(28, 38, 50, 0.85); }
 
 .slot-icon {
     width: 40px;
@@ -152,7 +188,6 @@
     -unity-background-scale-mode: scale-to-fit;
 }
 
-/* Hidden by default. To show item names, also uncomment the label in MakeSlot/UpdateSlotVisual. */
 .slot-label {
     display: none;
     position: absolute;
@@ -160,7 +195,7 @@
     left: 0;
     right: 0;
     font-size: 9px;
-    color: rgb(231, 237, 241);
+    color: var(--text-primary);
     -unity-text-align: lower-center;
     white-space: nowrap;
     overflow: hidden;
@@ -171,7 +206,7 @@
     bottom: 2px;
     right: 4px;
     font-size: 12px;
-    color: rgb(179, 195, 205);
+    color: var(--text-secondary);
 }
 
 .slot-key {
@@ -179,18 +214,22 @@
     top: 1px;
     left: 3px;
     font-size: 10px;
-    color: rgba(179, 195, 205, 0.5);
+    color: rgba(168, 184, 198, 0.45);
+    max-width: 58px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .equipped-preview {
     position: absolute;
-    bottom: 20px;
-    right: 20px;
+    bottom: 24px;
+    right: 24px;
     padding: 10px 14px;
-    background-color: rgba(20, 28, 36, 0.75);
-    border-radius: 6px;
+    background-color: rgba(12, 16, 24, 0.7);
+    border-radius: var(--radius-lg);
     border-width: 1px;
-    border-color: rgba(92, 113, 125, 0.5);
+    border-color: var(--border-subtle);
 }
 
 .equipped-icon {
@@ -199,11 +238,10 @@
     -unity-background-scale-mode: scale-to-fit;
 }
 
-/* Hidden by default. Uncomment the label in Hud.uxml to show equipped item name. */
 .equipped-label {
     display: none;
     font-size: 12px;
-    color: rgb(231, 237, 241);
+    color: var(--text-primary);
     -unity-text-align: upper-center;
     margin-top: 4px;
 }
@@ -212,17 +250,17 @@
     position: absolute;
     align-self: center;
     top: 25%;
-    padding: 20px;
-    background-color: rgba(20, 28, 36, 0.92);
-    border-radius: 10px;
+    padding: 24px;
+    background-color: rgba(12, 16, 24, 0.94);
+    border-radius: 14px;
     border-width: 1px;
-    border-color: rgba(92, 113, 125, 0.6);
+    border-color: var(--border-subtle);
 }
 
 .inventory-title {
     font-size: 20px;
-    color: rgb(231, 237, 241);
-    margin-bottom: 12px;
+    color: var(--text-primary);
+    margin-bottom: 14px;
     -unity-text-align: upper-center;
 }
 
@@ -236,23 +274,23 @@
     position: absolute;
     width: 50px;
     height: 50px;
-    background-color: rgba(165, 225, 204, 0.4);
-    border-radius: 4px;
+    background-color: rgba(155, 218, 196, 0.35);
+    border-radius: var(--radius-md);
     border-width: 1px;
-    border-color: rgb(165, 225, 204);
+    border-color: var(--accent);
     align-items: center;
     justify-content: center;
 }
 
 .controls-hint {
     position: absolute;
-    bottom: 20px;
-    right: 20px;
-    padding: 8px 12px;
-    background-color: rgba(20, 28, 36, 0.75);
-    border-radius: 6px;
+    bottom: 24px;
+    right: 24px;
+    padding: 10px 14px;
+    background-color: rgba(12, 16, 24, 0.7);
+    border-radius: var(--radius-lg);
     border-width: 1px;
-    border-color: rgba(92, 113, 125, 0.5);
+    border-color: var(--border-subtle);
 }
 
 .controls-row {
@@ -266,9 +304,9 @@
     padding: 2px 6px;
     margin-right: 8px;
     border-width: 1px;
-    border-color: rgb(179, 195, 205);
-    border-radius: 4px;
-    color: rgb(231, 237, 241);
+    border-color: var(--text-secondary);
+    border-radius: 5px;
+    color: var(--text-primary);
     font-size: 12px;
     -unity-text-align: middle-center;
     flex-shrink: 0;
@@ -282,7 +320,7 @@
 }
 
 .controls-label {
-    color: rgb(179, 195, 205);
+    color: var(--text-secondary);
     font-size: 13px;
 }
 
@@ -297,22 +335,37 @@
 
 #bird-reward {
     font-size: 15px;
-    color: rgb(245, 215, 120);
+    color: var(--reward);
 }
 
 .slot-binding-glyph { position: absolute; top: 2px; left: 4px; width: 22px; height: 22px; }
-.slot-key { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#inventory-shortcut { font-size: 14px; color: rgb(179, 195, 205); margin-top: 8px; }
 
-.inventory-grid .slot:hover { background-color: rgb(74, 99, 109); }
-.controller-navigation .inventory-grid .slot:hover { background-color: rgb(34, 45, 56); }
-.inventory-grid .slot.selected { border-bottom-width: 6px; border-bottom-color: rgb(165, 225, 204); }
-.inventory-grid .slot.move-source { background-color: rgb(103, 71, 37); border-left-width: 7px; border-left-color: rgb(255, 177, 74); }
-.inventory-grid .slot:focus, .controller-navigation .inventory-grid .slot:focus {
-    background-color: rgb(91, 119, 130); border-top-width: 3px; border-right-width: 3px;
-    border-top-color: rgb(255, 240, 170); border-right-color: rgb(255, 240, 170);
-    border-bottom-color: rgb(255, 240, 170); border-left-color: rgb(255, 240, 170);
+#inventory-shortcut {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 10px;
+    max-width: 480px;
+    white-space: normal;
 }
-.inventory-grid .slot.move-source:focus { border-left-color: rgb(255, 177, 74); }
-.inventory-grid .slot.selected:focus { border-bottom-color: rgb(165, 225, 204); }
-#inventory-shortcut { max-width: 480px; white-space: normal; }
+
+.inventory-grid .slot:hover { background-color: var(--bg-hover); }
+.controller-navigation .inventory-grid .slot:hover { background-color: var(--bg-surface); }
+
+.inventory-grid .slot.selected {
+    border-bottom-width: 5px;
+    border-bottom-color: var(--accent);
+}
+
+.inventory-grid .slot.move-source {
+    background-color: rgb(95, 65, 32);
+    border-left-width: 6px;
+    border-left-color: rgb(245, 170, 70);
+}
+
+.inventory-grid .slot:focus, .controller-navigation .inventory-grid .slot:focus {
+    background-color: var(--bg-focus);
+    border-color: var(--focus-ring);
+}
+
+.inventory-grid .slot.move-source:focus { border-left-color: rgb(245, 170, 70); }
+.inventory-grid .slot.selected:focus { border-bottom-color: var(--accent); }

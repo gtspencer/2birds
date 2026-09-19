@@ -1,23 +1,150 @@
-:root { color: rgb(231, 237, 241); font-size: 18px; }
-.screen { flex-grow: 1; align-items: center; justify-content: center; background-color: rgb(20, 28, 36); }
-.card { width: 500px; padding: 28px; background-color: rgb(34, 45, 56); border-radius: 12px; }
-.eyebrow { color: rgb(143, 192, 183); font-size: 14px; letter-spacing: 3px; }
-.title { font-size: 30px; margin-bottom: 20px; white-space: normal; }
-.heading { font-size: 24px; margin-bottom: 12px; }
-Button { height: 42px; margin-top: 5px; margin-bottom: 5px; background-color: rgb(58, 76, 88); color: rgb(245, 247, 249); border-width: 1px; border-color: rgb(92, 113, 125); border-radius: 5px; }
-Button:hover { background-color: rgb(74, 99, 109); }
-.controller-navigation Button:hover { background-color: rgb(58, 76, 88); }
-Button:focus, .controller-navigation Button:focus {
-    background-color: rgb(91, 119, 130); border-color: rgb(255, 240, 170); border-width: 3px;
+:root {
+    --bg-deep: rgb(12, 16, 24);
+    --bg-base: rgb(20, 28, 36);
+    --bg-surface: rgb(28, 38, 50);
+    --bg-elevated: rgb(42, 58, 72);
+    --bg-hover: rgb(54, 74, 88);
+    --bg-active: rgb(26, 42, 50);
+    --bg-focus: rgb(58, 80, 96);
+    --bg-disabled: rgb(30, 36, 44);
+
+    --border-subtle: rgba(110, 140, 165, 0.16);
+    --border-default: rgba(110, 140, 165, 0.28);
+    --border-hover: rgba(110, 140, 165, 0.4);
+    --border-accent: rgb(155, 218, 196);
+
+    --text-primary: rgb(232, 238, 244);
+    --text-secondary: rgb(168, 184, 198);
+    --text-muted: rgb(118, 136, 150);
+    --text-accent: rgb(140, 196, 180);
+
+    --accent: rgb(155, 218, 196);
+    --accent-soft: rgba(155, 218, 196, 0.1);
+    --warning: rgb(255, 200, 145);
+    --focus-ring: rgb(255, 238, 168);
+
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 16px;
+
+    color: var(--text-primary);
+    font-size: 18px;
 }
-Button:active, .controller-navigation Button:active { background-color: rgb(35, 60, 65); }
-Button:disabled { background-color: rgb(40, 48, 54); color: rgb(125, 137, 144); border-color: rgb(65, 75, 80); }
+
+.screen {
+    flex-grow: 1;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-deep);
+}
+
+.card {
+    width: 520px;
+    max-width: 95%;
+    max-height: 95%;
+    padding: 32px;
+    background-color: var(--bg-surface);
+    border-radius: var(--radius-xl);
+    border-width: 1px;
+    border-color: var(--border-subtle);
+}
+
+.eyebrow {
+    color: var(--text-accent);
+    font-size: 13px;
+    letter-spacing: 4px;
+    margin-bottom: 2px;
+}
+
+.title {
+    font-size: 28px;
+    margin-bottom: 24px;
+    white-space: normal;
+}
+
+.heading {
+    font-size: 22px;
+    margin-bottom: 14px;
+}
+
+Button {
+    height: 44px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+    border-width: 1px;
+    border-color: var(--border-default);
+    border-radius: var(--radius-lg);
+    transition-property: background-color, border-color;
+    transition-duration: 100ms;
+}
+
+Button:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--border-hover);
+}
+
+.controller-navigation Button:hover {
+    background-color: var(--bg-elevated);
+    border-color: var(--border-default);
+}
+
+Button:focus, .controller-navigation Button:focus {
+    background-color: var(--bg-focus);
+    border-color: var(--focus-ring);
+    border-width: 2px;
+}
+
+Button:active, .controller-navigation Button:active {
+    background-color: var(--bg-active);
+}
+
+Button:disabled {
+    background-color: var(--bg-disabled);
+    color: var(--text-muted);
+    border-color: rgba(80, 100, 120, 0.15);
+}
+
 TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
-.unity-base-field__input { background-color: rgb(20, 28, 36); color: rgb(231, 237, 241); border-color: rgb(92, 113, 125); }
-.unity-base-text-field__input, .unity-base-popup-field__input { background-color: rgb(20, 28, 36); color: rgb(231, 237, 241); padding-left: 10px; padding-right: 10px; min-height: 36px; }
-.unity-base-text-field__input:focus, .unity-base-popup-field__input:focus { border-color: rgb(165, 225, 204); }
-.hint { white-space: normal; color: rgb(179, 195, 205); font-size: 14px; margin-top: 8px; margin-bottom: 8px; }
-.status { white-space: normal; color: rgb(255, 204, 147); margin-top: 10px; }
+
+.unity-base-field__input {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    border-color: var(--border-default);
+    border-radius: var(--radius-md);
+}
+
+.unity-base-text-field__input, .unity-base-popup-field__input {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    padding-left: 12px;
+    padding-right: 12px;
+    min-height: 38px;
+    border-radius: var(--radius-md);
+    transition-property: border-color;
+    transition-duration: 100ms;
+}
+
+.unity-base-text-field__input:focus, .unity-base-popup-field__input:focus {
+    border-color: var(--border-accent);
+}
+
+.hint {
+    white-space: normal;
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+.status {
+    white-space: normal;
+    color: var(--warning);
+    margin-top: 12px;
+}
+
 .overlay { flex-grow: 1; }
 
 .pause { position: absolute; align-self: center; top: 28%; }
@@ -25,26 +152,72 @@ TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
 .pause.settings-card { top: 5%; }
 .shared-settings { flex-shrink: 1; min-height: 0; }
 #settings-page, #controls-settings, #controls-options { flex-shrink: 1; min-height: 0; }
-.settings-tabs { flex-direction: row; }
-.settings-tabs > Button { flex-grow: 1; flex-basis: 0; }
-.selected-tab { background-color: rgb(74, 99, 109); border-color: rgb(165, 225, 204); }
+
+.settings-tabs { flex-direction: row; margin-bottom: 6px; }
+
+.settings-tabs > Button {
+    flex-grow: 1;
+    flex-basis: 0;
+    margin-left: 2px;
+    margin-right: 2px;
+}
+
+.selected-tab, .controller-navigation .selected-tab:hover {
+    background-color: var(--accent-soft);
+    border-bottom-width: 3px;
+    border-bottom-color: var(--border-accent);
+}
+
+.selected-tab:focus, .controller-navigation .selected-tab:focus {
+    background-color: var(--bg-focus);
+    border-color: var(--focus-ring);
+}
+
 .binding-list { height: 330px; flex-shrink: 1; min-height: 100px; }
-.binding-row { flex-direction: row; align-items: center; }
-.binding-name { width: 205px; font-size: 16px; white-space: normal; }
-.binding-button { flex-grow: 1; flex-basis: 0; flex-direction: row; align-items: center; justify-content: center; }
-.binding-button > Label { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+
+.binding-row {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
+.binding-name {
+    width: 205px;
+    font-size: 15px;
+    white-space: normal;
+    color: var(--text-secondary);
+}
+
+.binding-button {
+    flex-grow: 1;
+    flex-basis: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.binding-button > Label { font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
 .binding-glyph { width: 28px; height: 28px; margin-right: 6px; }
-.binding-reset { width: 68px; font-size: 14px; }
-#binding-feedback { background-color: rgb(20, 28, 36); padding: 10px; }
+.binding-reset { width: 68px; font-size: 13px; }
+
+#binding-feedback {
+    background-color: var(--bg-base);
+    padding: 12px;
+    border-radius: var(--radius-lg);
+}
 
 TextField:focus, DropdownField:focus, .unity-base-text-field__input:focus, .unity-base-popup-field__input:focus,
 .unity-base-dropdown__item:focus, .unity-base-dropdown__item--checked:focus {
-    background-color: rgb(91, 119, 130); border-width: 3px; border-color: rgb(255, 240, 170);
+    background-color: var(--bg-focus);
+    border-width: 2px;
+    border-color: var(--focus-ring);
 }
-.selected-tab, .controller-navigation .selected-tab:hover { background-color: rgb(53, 82, 84); border-bottom-width: 4px; border-bottom-color: rgb(165, 225, 204); }
-.selected-tab:focus, .controller-navigation .selected-tab:focus { background-color: rgb(91, 119, 130); border-color: rgb(255, 240, 170); }
-.field-error { color: rgb(255, 204, 147); white-space: normal; font-size: 14px; }
+
+.field-error { color: var(--warning); white-space: normal; font-size: 13px; }
+
 .entry-keys { flex-direction: row; flex-wrap: wrap; }
 .entry-keys > Button { width: 30%; flex-grow: 1; }
-.binding-list .unity-scroll-view__content-container, #friends-list .unity-scroll-view__content-container { padding: 3px; }
-.card { max-width: 95%; max-height: 95%; }
+
+.binding-list .unity-scroll-view__content-container,
+#friends-list .unity-scroll-view__content-container { padding: 4px; }
