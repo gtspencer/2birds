@@ -6,6 +6,8 @@ using Object = UnityEngine.Object;
 public static class Log
 {
     private static int _markerCount = 0;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetMarkers() => _markerCount = 0;
     
     
     [HideInCallstack, Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
@@ -36,5 +38,7 @@ public static class Log
     public static void Marker()
     {
         UnityEngine.Debug.Log($"MARKER ({++_markerCount})");
+        if (TwoBirds.AILogger.Enabled) TwoBirds.AILogger.Log("marker", new { number = _markerCount });
+        TwoBirds.AILogger.Burst("marker");
     }
 }

@@ -87,6 +87,7 @@ namespace TwoBirds
             toggle.Enable();
             session.Changed += SessionChanged;
             Write("Type stats to toggle performance and network stats. Type help for commands.");
+            Write(AILogger.Enabled ? "AI logs: " + AILogger.OutputPath : "AI logging disabled.");
         }
 
         private void Toggle(InputAction.CallbackContext context) => SetOpen(!session.ConsoleOpen);

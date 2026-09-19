@@ -215,7 +215,8 @@ namespace TwoBirds
                 localTransport.SetPort(mode == SessionMode.Solo ? (ushort)0 : port);
                 localTransport.SetTimeout(settings.ConnectTimeout, true);
                 localTransport.SetTimeout(settings.ConnectTimeout, false);
-                ShareEndpoint = mode == SessionMode.Host ? $"127.0.0.1:{port}" : "";
+                var lan = EndpointUtility.Discover();
+                ShareEndpoint = mode == SessionMode.Host ? $"{(lan.Count > 0 ? lan[0].Address : "127.0.0.1")}:{port}" : "";
             }
             if (mode == SessionMode.Join) ConnectClient();
             else

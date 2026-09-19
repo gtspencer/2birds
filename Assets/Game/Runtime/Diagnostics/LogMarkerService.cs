@@ -7,6 +7,7 @@ namespace TwoBirds
     public sealed class LogMarkerService : MonoBehaviour
     {
         private InputAction marker;
+        private InputAction screenshot;
 
         private void Start()
         {
@@ -15,9 +16,16 @@ namespace TwoBirds
             marker.AddBinding("<Gamepad>/dpad/left");
             marker.performed += _ => Log.Marker();
             marker.Enable();
+            screenshot = new InputAction("AI screenshot", InputActionType.Button, "<Keyboard>/leftBracket");
+            screenshot.performed += _ => AILogger.Screenshot();
+            screenshot.Enable();
         }
 
-        private void OnDestroy() => marker?.Dispose();
+        private void OnDestroy()
+        {
+            marker?.Dispose();
+            screenshot?.Dispose();
+        }
     }
 }
 #endif
