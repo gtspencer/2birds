@@ -8,7 +8,7 @@ namespace TwoBirds.Editor
     {
         private GameObject target;
         private int resolution = 128;
-        private string savePath = "Assets/Game/Icons";
+        private string savePath = "Assets/Game/UI/Icons";
         private Color backgroundColor = new(0.15f, 0.15f, 0.15f, 0f);
         private float padding = 0.1f;
         private Texture2D preview;
