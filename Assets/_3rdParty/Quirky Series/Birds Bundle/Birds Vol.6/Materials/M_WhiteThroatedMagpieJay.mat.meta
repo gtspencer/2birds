@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: ee2e9ff880fd30546b36fe980b233868
+labels:
+- Bird
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 212504
+  packageName: Quirky Series - Birds Bundle
+  packageVersion: 1.5
+  assetPath: Assets/Quirky Series/Birds Bundle/Birds Vol.6/Materials/M_WhiteThroatedMagpieJay.mat
+  uploadId: 887504

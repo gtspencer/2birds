@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 17ec9b0f2c5353d4a92c3486b4bd5b78
+labels:
+- Bird
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 212504
+  packageName: Quirky Series - Birds Bundle
+  packageVersion: 1.5
+  assetPath: Assets/Quirky Series/Birds Bundle/Birds Vol.1/Animations/AC_Warbler.controller
+  uploadId: 887504

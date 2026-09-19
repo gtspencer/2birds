@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 25cf861894634994cafd63c6c98fd297
+labels:
+- Bird
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 212504
+  packageName: Quirky Series - Birds Bundle
+  packageVersion: 1.5
+  assetPath: Assets/Quirky Series/Birds Bundle/Birds Vol.5/Materials/M_GrayCrownedCrane.mat
+  uploadId: 887504

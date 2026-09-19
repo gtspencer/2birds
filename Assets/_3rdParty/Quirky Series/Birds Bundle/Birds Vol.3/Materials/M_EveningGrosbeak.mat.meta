@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 15505fb71cc053540ad8aa088b815456
+labels:
+- Bird
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 212504
+  packageName: Quirky Series - Birds Bundle
+  packageVersion: 1.5
+  assetPath: Assets/Quirky Series/Birds Bundle/Birds Vol.3/Materials/M_EveningGrosbeak.mat
+  uploadId: 887504
