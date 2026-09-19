@@ -33,7 +33,21 @@ namespace TwoBirds.Editor
 
         public override void OnInspectorGUI()
         {
-            DrawDefaultInspector();
+            serializedObject.Update();
+            DrawPropertiesExcluding(serializedObject,
+                "UsePlacementYOffset", "PlacementYOffset",
+                "RandomizeXRotation", "XRotationRange",
+                "RandomizeYRotation", "YRotationRange",
+                "RandomizeZRotation", "ZRotationRange",
+                "RandomizeScale", "ScaleRange");
+
+            DrawConditionalProperty("UsePlacementYOffset", "PlacementYOffset");
+            DrawConditionalProperty("RandomizeXRotation", "XRotationRange");
+            DrawConditionalProperty("RandomizeYRotation", "YRotationRange");
+            DrawConditionalProperty("RandomizeZRotation", "ZRotationRange");
+            DrawConditionalProperty("RandomizeScale", "ScaleRange");
+            serializedObject.ApplyModifiedProperties();
+
             EditorGUILayout.Space();
             if (GUILayout.Button("Place Items"))
                 PlaceItems((ItemPlacementZone)target);
@@ -58,7 +72,15 @@ namespace TwoBirds.Editor
                 var go = (GameObject)PrefabUtility.InstantiatePrefab(zone.Item.WorldPrefab, zone.transform);
                 Undo.RegisterCreatedObjectUndo(go, "Place Item");
                 go.transform.position = pos;
-                go.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+                go.transform.rotation = Quaternion.Euler(
+                    zone.RandomizeXRotation ? Random.Range(zone.XRotationRange.x, zone.XRotationRange.y) : 0f,
+                    zone.RandomizeYRotation ? Random.Range(zone.YRotationRange.x, zone.YRotationRange.y) : 0f,
+                    zone.RandomizeZRotation ? Random.Range(zone.ZRotationRange.x, zone.ZRotationRange.y) : 0f);
+                if (zone.RandomizeScale)
+                {
+                    float scale = Random.Range(zone.ScaleRange.x, zone.ScaleRange.y);
+                    go.transform.localScale = zone.Item.WorldPrefab.transform.localScale * scale;
+                }
 
                 var pickup = go.GetComponent<BakedPickup>();
                 if (pickup == null)
@@ -98,11 +120,11 @@ namespace TwoBirds.Editor
                     new Vector3(candidate.x, zone.transform.position.y + zone.RaycastHeight, candidate.z),
                     Vector3.down, out var hit, zone.RaycastHeight * 2f, zone.GroundLayer))
                 {
-                    results.Add(hit.point);
+                    results.Add(hit.point + (zone.UsePlacementYOffset ? Vector3.up * zone.PlacementYOffset : Vector3.zero));
                 }
                 else
                 {
-                    results.Add(candidate);
+                    results.Add(candidate + (zone.UsePlacementYOffset ? Vector3.up * zone.PlacementYOffset : Vector3.zero));
                 }
             }
 
@@ -136,6 +158,14 @@ namespace TwoBirds.Editor
             for (int i = zone.transform.childCount - 1; i >= 0; i--)
                 Undo.DestroyObjectImmediate(zone.transform.GetChild(i).gameObject);
             Undo.CollapseUndoOperations(group);
+        }
+
+        private void DrawConditionalProperty(string toggleName, string valueName)
+        {
+            var toggleProperty = serializedObject.FindProperty(toggleName);
+            EditorGUILayout.PropertyField(toggleProperty);
+            if (toggleProperty.boolValue)
+                EditorGUILayout.PropertyField(serializedObject.FindProperty(valueName));
         }
 
         private readonly BoxBoundsHandle _boxHandle = new();

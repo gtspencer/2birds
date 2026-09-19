@@ -33,7 +33,7 @@ namespace TwoBirds
         private Quaternion visualRotation = Quaternion.identity;
         private Vector3 cosmeticSpin;
         private float correctionRemaining;
-        private Vector3 prefabScale;
+        private Vector3 defaultScale;
         private bool optimisticPickup;
         private float interactableAfter;
         private int playerHitboxMask;
@@ -95,7 +95,7 @@ namespace TwoBirds
             if (impactSphere) birdColliderId = impactSphere.GetEntityId();
             renderers = GetComponentsInChildren<Renderer>(true);
             parts = GetComponentsInChildren<Transform>(true);
-            prefabScale = transform.localScale;
+            defaultScale = transform.localScale;
             foreach (var collider in colliders)
                 if (!collider.isTrigger) DropDiameter = Mathf.Max(DropDiameter,
                     2f * ((collider.bounds.center - transform.position).magnitude + collider.bounds.extents.magnitude));
@@ -143,9 +143,12 @@ namespace TwoBirds
 
         internal void Initialize(WorldItemRegistry owner, ItemDefinition definition, ItemRecord record, bool predicted)
         {
+            bool firstInitialization = Definition == null;
+            Vector3 initialScale = transform.localScale;
             InterruptUse();
             registry = owner;
             Definition = definition;
+            defaultScale = definition.WorldPrefab.transform.localScale;
             birdRegistry = BirdRegistry.Instance;
             birdRock = birdRegistry && birdRegistry.IsRock(definition);
             ResetPresentation();
@@ -161,6 +164,11 @@ namespace TwoBirds
             localLaunchTick = registry.LocalTick;
             historyStart = localLaunchTick;
             ApplyRecord(record);
+            if (firstInitialization && record.State == WorldItemState.World)
+            {
+                transform.localScale = initialScale;
+                CacheImpactSphere();
+            }
         }
 
         internal void ApplyRecord(ItemRecord record)
@@ -192,7 +200,7 @@ namespace TwoBirds
             }
 
             transform.SetParent(null, true);
-            transform.localScale = prefabScale;
+            transform.localScale = defaultScale;
             offlineRigidbody.SetPredictionManager(registry.PredictionManager);
             CacheImpactSphere();
             SetLayer(registry.WorldLayer);
@@ -231,7 +239,7 @@ namespace TwoBirds
             transform.SetParent(holder.Equipment.HeldTransform, false);
             transform.localPosition = Vector3.zero;
             transform.localRotation = Definition.WorldPrefab.transform.localRotation;
-            transform.localScale = prefabScale;
+            transform.localScale = defaultScale;
             ClearVisualOffset();
         }
 
@@ -285,7 +293,7 @@ namespace TwoBirds
             transform.SetParent(holder.Equipment.HeldTransform, false);
             transform.localPosition = Vector3.zero;
             transform.localRotation = Definition.WorldPrefab.transform.localRotation;
-            transform.localScale = prefabScale;
+            transform.localScale = defaultScale;
             ClearVisualOffset();
         }
 
@@ -547,7 +555,7 @@ namespace TwoBirds
             Record = default;
             Predicted = false;
             transform.SetParent(registry.transform, false);
-            transform.localScale = prefabScale;
+            transform.localScale = defaultScale;
             gameObject.SetActive(false);
         }
 
