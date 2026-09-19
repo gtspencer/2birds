@@ -23,6 +23,7 @@ namespace TwoBirds
         private ScrollView friendList;
         private Label friendStatus, status, footer, entryError;
         private Button start, invite, cancel, refresh;
+        private Label hostEndpoint, lobbyEndpoint;
         private TextField hostPort, joinIP, joinPort, entryValue, editing;
         private Button decimalKey;
         private int handledFrame = -1;
@@ -48,6 +49,8 @@ namespace TwoBirds
             BindField(hostPort, value => session.HostPort = value);
             BindField(joinIP, value => session.JoinAddress = value);
             BindField(joinPort, value => session.JoinPort = value);
+            hostEndpoint = root.Q<Label>("host-endpoint");
+            lobbyEndpoint = root.Q<Label>("lobby-endpoint");
             friendList = root.Q<ScrollView>("friends-list");
             friendStatus = root.Q<Label>("friends-status");
             status = root.Q<Label>("status");
@@ -308,6 +311,10 @@ namespace TwoBirds
                 var member = session.Roster[i];
                 roster[i].text = $"{i + 1}. {member.Name}{(member.Host ? " (Host)" : "")}{(member.Ready ? " ? In game" : "")}";
             }
+            string endpoint = session.LocalNetworking && session.ShareEndpoint.Length > 0 ? $"Others on your network can join at {session.ShareEndpoint}" : "";
+            hostEndpoint.text = session.LocalNetworking ? "Others on your network can join using this port." : "";
+            lobbyEndpoint.text = endpoint;
+            lobbyEndpoint.style.display = endpoint.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             start.style.display = session.Mode == SessionMode.Host ? DisplayStyle.Flex : DisplayStyle.None;
             start.SetEnabled(session.CanStart);
             invite.style.display = session.LocalNetworking ? DisplayStyle.None : DisplayStyle.Flex;

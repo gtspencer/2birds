@@ -43,6 +43,8 @@ namespace TwoBirds
             text.AppendLine($"{(session.DiagnosticTransport is GameTransport ? "UDP" : "Steam P2P")}  ·  Tick {network.TimeManager.TickRate} Hz");
             text.AppendLine($"RTT {(server ? "local" : network.TimeManager.RoundTripTime + " ms")}  ·  Players {session.Roster.Length}/{session.Capacity}");
             text.AppendLine($"Host: {session.DiagnosticEndpoint}");
+            if (session.LocalNetworking && session.ShareEndpoint.Length > 0)
+                text.AppendLine($"LAN: {session.ShareEndpoint}");
 
             long sent = 0, received = 0, sentDelta = 0, receivedDelta = 0;
             foreach (var peer in session.PayloadTraffic)

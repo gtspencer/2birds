@@ -16,7 +16,7 @@
                 <ui:Label text="Host a local session" class="heading" />
                 <ui:TextField name="host-port" label="UDP port" value="7770" max-length="5" />
                 <ui:Label name="host-port-error" class="field-error" />
-                <ui:Label text="Other local instances can connect to 127.0.0.1 using this port." class="hint" />
+                <ui:Label name="host-endpoint" class="hint" />
                 <ui:Button name="start-host" text="Create Lobby" />
                 <ui:Button name="host-back" text="Back" />
             </ui:VisualElement>
@@ -38,6 +38,7 @@
             </ui:VisualElement>
             <ui:VisualElement name="lobby-page" style="display: none;">
                 <ui:Label text="Session lobby" class="heading" />
+                <ui:Label name="lobby-endpoint" class="hint" />
                 <ui:VisualElement name="roster" />
                 <ui:Button name="start-game" text="Start Game" />
                 <ui:Button name="invite" text="Invite Steam Friends" />
