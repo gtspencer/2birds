@@ -97,18 +97,22 @@ namespace TwoBirds
                 }
                 if (device is Mouse mouse && control is not ButtonControl)
                 {
-                    bool moved = mouse.delta.ReadValueFromEvent(evt, out var delta) && delta.sqrMagnitude >= 16f && delta.sqrMagnitude < 250000f;
                     bool scrolled = mouse.scroll.ReadValueFromEvent(evt, out var scroll) && scroll.sqrMagnitude >= 1f;
-                    if (!scrolled && Time.frameCount <= ignorePointerThrough) continue;
-                    if (!moved && !scrolled) continue;
-                    if (!scrolled && gameplay && ActiveDevice is Gamepad)
+                    if (!gameplay && !scrolled) continue;
+                    if (gameplay)
                     {
-                        if (evt.time - lastMouse > 0.2) mouseSince = evt.time;
-                        lastMouse = evt.time;
-                        var pad = (Gamepad)ActiveDevice;
-                        if (pad.leftStick.ReadValue().sqrMagnitude >= 0.16f || pad.rightStick.ReadValue().sqrMagnitude >= 0.16f)
-                            lastController = evt.time;
-                        if (evt.time - lastController < 1.0 || evt.time - mouseSince < 0.4) continue;
+                        bool moved = mouse.delta.ReadValueFromEvent(evt, out var delta) && delta.sqrMagnitude >= 16f && delta.sqrMagnitude < 250000f;
+                        if (!scrolled && Time.frameCount <= ignorePointerThrough) continue;
+                        if (!moved && !scrolled) continue;
+                        if (!scrolled && ActiveDevice is Gamepad)
+                        {
+                            if (evt.time - lastMouse > 0.2) mouseSince = evt.time;
+                            lastMouse = evt.time;
+                            var pad = (Gamepad)ActiveDevice;
+                            if (pad.leftStick.ReadValue().sqrMagnitude >= 0.16f || pad.rightStick.ReadValue().sqrMagnitude >= 0.16f)
+                                lastController = evt.time;
+                            if (evt.time - lastController < 1.0 || evt.time - mouseSince < 0.4) continue;
+                        }
                     }
                 }
                 if (device is Gamepad) lastController = evt.time;

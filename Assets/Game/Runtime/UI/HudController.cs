@@ -429,7 +429,7 @@ namespace TwoBirds
             if (crosshair != null) crosshair.style.display = DisplayStyle.None;
             Refresh();
             if (focusedSlot < 0) focusedSlot = inventory.SelectedSlot >= 0 ? inventory.SelectedSlot : 0;
-            inventoryPanel.schedule.Execute(() => { if (inventoryOpen) inventorySlots[focusedSlot].Focus(); });
+            inventoryPanel.schedule.Execute(() => { if (inventoryOpen) navigation?.Repair(); });
         }
 
         public void CloseInventory()

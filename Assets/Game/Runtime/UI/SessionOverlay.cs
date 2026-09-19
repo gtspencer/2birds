@@ -94,7 +94,7 @@ namespace TwoBirds
         {
             settings.SetVisible(false);
             Render();
-            settingsButton.Focus();
+            if (session.InputPresentation.ActiveDevice is Gamepad) settingsButton.Focus();
         }
         private void Render()
         {

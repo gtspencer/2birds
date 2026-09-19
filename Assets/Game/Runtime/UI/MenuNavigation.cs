@@ -28,6 +28,7 @@ namespace TwoBirds
             this.initial = initial;
             root.RegisterCallback<FocusInEvent>(Focused);
             root.RegisterCallback<NavigationMoveEvent>(Move);
+            root.RegisterCallback<PointerDownEvent>(MouseDown, TrickleDown.TrickleDown);
             root.RegisterCallback<NavigationSubmitEvent>(Guard, TrickleDown.TrickleDown);
             root.RegisterCallback<NavigationCancelEvent>(Guard, TrickleDown.TrickleDown);
             root.RegisterCallback<NavigationMoveEvent>(Guard, TrickleDown.TrickleDown);
@@ -74,6 +75,7 @@ namespace TwoBirds
                 return;
             }
             if (preferred == null && Eligible(focused) && (area.Contains(focused) || !root.Contains(focused))) return;
+            if (presentation.ActiveDevice is not Gamepad) return;
             var target = Eligible(preferred) ? preferred : Eligible(remembered) && area.Contains(remembered) ? remembered : initial();
             if (!Eligible(target) || !area.Contains(target)) target = Controls(area).Find(Eligible);
             if (target == null && !Eligible(focused)) focused?.Blur();
@@ -95,6 +97,13 @@ namespace TwoBirds
             bool controller = presentation.ActiveDevice is Gamepad;
             root.EnableInClassList("controller-navigation", controller);
             if (!presentation.SuppressInput) Repair();
+        }
+
+        private void MouseDown(PointerDownEvent evt)
+        {
+            if (evt.pointerType != "mouse" || presentation.SuppressInput) return;
+            var focused = root.panel?.focusController.focusedElement as VisualElement;
+            if (focused != null && root.Contains(focused)) focused.Blur();
         }
 
         private void Guard(EventBase evt)
@@ -183,6 +192,7 @@ namespace TwoBirds
             presentation.Changed -= PresentationChanged;
             root.UnregisterCallback<FocusInEvent>(Focused);
             root.UnregisterCallback<NavigationMoveEvent>(Move);
+            root.UnregisterCallback<PointerDownEvent>(MouseDown, TrickleDown.TrickleDown);
             root.UnregisterCallback<NavigationSubmitEvent>(Guard, TrickleDown.TrickleDown);
             root.UnregisterCallback<NavigationCancelEvent>(Guard, TrickleDown.TrickleDown);
             root.UnregisterCallback<NavigationMoveEvent>(Guard, TrickleDown.TrickleDown);

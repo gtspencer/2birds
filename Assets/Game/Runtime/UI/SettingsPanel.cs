@@ -64,7 +64,6 @@ namespace TwoBirds
                 RefreshSensitivity();
             }
             page.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-            if (visible) SelectedTab.Focus();
         }
 
         private void ShowGraphics() => SelectTab(false);
