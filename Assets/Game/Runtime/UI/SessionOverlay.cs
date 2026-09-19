@@ -111,7 +111,6 @@ namespace TwoBirds
             bool wasSettings = settings.IsOpen;
             if (!session.PanelOpen || session.Phase != SessionPhase.InGame) settings.SetVisible(false);
             panel.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-            panel.EnableInClassList("settings-card", settings.IsOpen);
             pausePage.style.display = settings.IsOpen ? DisplayStyle.None : DisplayStyle.Flex;
             settingsButton.SetEnabled(session.Phase == SessionPhase.InGame);
             resume.SetEnabled(session.Phase == SessionPhase.InGame);

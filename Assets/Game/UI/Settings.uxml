@@ -14,12 +14,10 @@
             <ui:VisualElement name="controls-options">
                 <ui:DropdownField name="controls-device" label="Device" />
                 <ui:Slider name="mouse-sensitivity" label="Mouse sensitivity" low-value="0.01" high-value="0.5" value="0.12" />
-                <ui:Label name="mouse-sensitivity-value" class="hint" />
                 <ui:Slider name="controller-sensitivity" label="Controller sensitivity" low-value="50" high-value="300" value="150" />
-                <ui:Label name="controller-sensitivity-value" class="hint" />
-                <ui:Button name="sensitivity-reset" text="Restore Default Sensitivity" />
+                <ui:Button name="sensitivity-reset" text="Restore Default Sensitivity" class="settings-action" />
                 <ui:ScrollView name="binding-list" class="binding-list" />
-                <ui:Button name="bindings-restore" text="Restore Defaults for This Device" />
+                <ui:Button name="bindings-restore" text="Restore Defaults for This Device" class="settings-action" />
             </ui:VisualElement>
             <ui:VisualElement name="binding-feedback" style="display: none;">
                 <ui:Label name="binding-prompt" class="hint" />

@@ -147,11 +147,11 @@ TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
 
 .overlay { flex-grow: 1; }
 
-.pause { position: absolute; align-self: center; top: 28%; }
+.pause { position: absolute; align-self: center; top: 5%; width: 760px; height: 85%; }
 .settings-card { width: 760px; max-width: 95%; max-height: 95%; }
-.pause.settings-card { top: 5%; }
-.shared-settings { flex-shrink: 1; min-height: 0; }
-#settings-page, #controls-settings, #controls-options { flex-shrink: 1; min-height: 0; }
+.shared-settings { flex-grow: 1; flex-shrink: 1; min-height: 0; }
+#settings-page, #controls-settings, #controls-options { flex-grow: 1; flex-shrink: 1; min-height: 0; }
+#settings-back { margin-top: auto; }
 
 .settings-tabs { flex-direction: row; margin-bottom: 6px; }
 
@@ -173,7 +173,12 @@ TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
     border-color: var(--focus-ring);
 }
 
-.binding-list { height: 330px; flex-shrink: 1; min-height: 100px; }
+.binding-list { flex-grow: 1; flex-shrink: 1; min-height: 120px; }
+
+.settings-action { height: 30px; font-size: 13px; margin-top: 2px; margin-bottom: 2px; }
+
+#controls-options DropdownField { margin-top: 4px; margin-bottom: 4px; }
+#controls-options Slider { margin-top: 4px; margin-bottom: 6px; }
 
 .binding-row {
     flex-direction: row;

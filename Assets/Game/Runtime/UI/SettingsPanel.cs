@@ -13,7 +13,6 @@ namespace TwoBirds
         private readonly Button sensitivityReset;
         private readonly DropdownField displayMode, frameCap;
         private readonly Slider mouseSensitivity, controllerSensitivity;
-        private readonly Label mouseSensitivityValue, controllerSensitivityValue;
         private readonly ControlsRemapPanel controls;
         private readonly Action goBack;
         public bool IsOpen { get; private set; }
@@ -35,8 +34,6 @@ namespace TwoBirds
             frameCap = page.Q<DropdownField>("frame-cap");
             mouseSensitivity = page.Q<Slider>("mouse-sensitivity");
             controllerSensitivity = page.Q<Slider>("controller-sensitivity");
-            mouseSensitivityValue = page.Q<Label>("mouse-sensitivity-value");
-            controllerSensitivityValue = page.Q<Label>("controller-sensitivity-value");
             sensitivityReset = page.Q<Button>("sensitivity-reset");
             displayMode.choices = new List<string> { "Fullscreen", "Windowed", "Windowed Fullscreen" };
             displayMode.RegisterValueChangedCallback(DisplayModeChanged);
@@ -87,13 +84,13 @@ namespace TwoBirds
         private void MouseSensitivityChanged(ChangeEvent<float> evt)
         {
             session.SetMouseSensitivity(evt.newValue);
-            mouseSensitivityValue.text = evt.newValue.ToString("0.00");
+            mouseSensitivity.label = $"Mouse sensitivity: {evt.newValue:0.00}";
         }
 
         private void ControllerSensitivityChanged(ChangeEvent<float> evt)
         {
             session.SetControllerSensitivity(evt.newValue);
-            controllerSensitivityValue.text = evt.newValue.ToString("0");
+            controllerSensitivity.label = $"Controller sensitivity: {evt.newValue:0}";
         }
 
         private void ResetSensitivity()
@@ -106,8 +103,8 @@ namespace TwoBirds
         {
             mouseSensitivity.SetValueWithoutNotify(session.MouseSensitivity);
             controllerSensitivity.SetValueWithoutNotify(session.ControllerSensitivity);
-            mouseSensitivityValue.text = session.MouseSensitivity.ToString("0.00");
-            controllerSensitivityValue.text = session.ControllerSensitivity.ToString("0");
+            mouseSensitivity.label = $"Mouse sensitivity: {session.MouseSensitivity:0.00}";
+            controllerSensitivity.label = $"Controller sensitivity: {session.ControllerSensitivity:0}";
         }
 
         public void Dispose()
