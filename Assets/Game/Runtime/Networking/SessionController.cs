@@ -45,6 +45,7 @@ namespace TwoBirds
         public bool LocalNetworking => SessionBootstrap.LocalNetworking;
         public int Capacity => Mode == SessionMode.Solo ? 1 : MultiplayerCapacity;
         public int FrameCap { get; private set; }
+        public FullScreenMode DisplayMode { get; private set; }
         public bool CanStart => Mode == SessionMode.Host && Phase == SessionPhase.InLobby && admitted.Count > 0 && (UsingLocal || Lobby.HasLobby);
         public event Action Changed;
         internal int Attempt => attempt;
@@ -107,6 +108,7 @@ namespace TwoBirds
             Network.SceneManager.OnQueueStart += QueueStarted;
             Network.SceneManager.OnQueueEnd += QueueEnded;
             SetFrameCap(PlayerPrefs.GetInt("RenderingFrameCap", 60));
+            SetDisplayMode(PlayerPrefs.GetInt("DisplayMode", (int)FullScreenMode.ExclusiveFullScreen), false);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (!Application.isBatchMode) {
                 gameObject.AddComponent<DevConsole>();
@@ -128,6 +130,41 @@ namespace TwoBirds
             PlayerPrefs.SetInt("RenderingFrameCap", FrameCap);
             PlayerPrefs.Save();
         }
+
+        public void SetDisplayMode(int value) => SetDisplayMode(value switch
+        {
+            1 => FullScreenMode.Windowed,
+            2 => FullScreenMode.FullScreenWindow,
+            _ => FullScreenMode.ExclusiveFullScreen
+        }, true);
+
+        private void SetDisplayMode(int value, bool save)
+        {
+            SetDisplayMode(value switch
+            {
+                (int)FullScreenMode.Windowed => FullScreenMode.Windowed,
+                (int)FullScreenMode.FullScreenWindow => FullScreenMode.FullScreenWindow,
+                _ => FullScreenMode.ExclusiveFullScreen
+            }, save);
+        }
+
+        private void SetDisplayMode(FullScreenMode mode, bool save)
+        {
+            DisplayMode = mode;
+            Screen.fullScreenMode = DisplayMode;
+            if (save)
+            {
+                PlayerPrefs.SetInt("DisplayMode", (int)DisplayMode);
+                PlayerPrefs.Save();
+            }
+        }
+
+        public static string DisplayModeLabel(FullScreenMode mode) => mode switch
+        {
+            FullScreenMode.Windowed => "Windowed",
+            FullScreenMode.FullScreenWindow => "Windowed Fullscreen",
+            _ => "Fullscreen"
+        };
 
         private bool BeginAttempt(SessionMode mode)
         {

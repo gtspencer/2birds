@@ -10,7 +10,7 @@ namespace TwoBirds
         private readonly SessionController session;
         private readonly VisualElement page, graphics, controlsPage;
         private readonly Button graphicsTab, controlsTab, back;
-        private readonly DropdownField frameCap;
+        private readonly DropdownField displayMode, frameCap;
         private readonly ControlsRemapPanel controls;
         private readonly Action goBack;
         public bool IsOpen { get; private set; }
@@ -28,7 +28,10 @@ namespace TwoBirds
             graphicsTab = page.Q<Button>("graphics-tab");
             controlsTab = page.Q<Button>("controls-tab");
             back = page.Q<Button>("settings-back");
+            displayMode = page.Q<DropdownField>("display-mode");
             frameCap = page.Q<DropdownField>("frame-cap");
+            displayMode.choices = new List<string> { "Fullscreen", "Windowed", "Windowed Fullscreen" };
+            displayMode.RegisterValueChangedCallback(DisplayModeChanged);
             frameCap.choices = new List<string> { "60 FPS", "90 FPS", "120 FPS" };
             frameCap.RegisterValueChangedCallback(FrameCapChanged);
             graphicsTab.clicked += ShowGraphics;
@@ -43,7 +46,11 @@ namespace TwoBirds
             if (IsOpen == visible) return;
             IsOpen = visible;
             if (!visible) controls.Close();
-            else frameCap.SetValueWithoutNotify($"{PlayerPrefs.GetInt("RenderingFrameCap", 60)} FPS");
+            else
+            {
+                displayMode.SetValueWithoutNotify(SessionController.DisplayModeLabel(session.DisplayMode));
+                frameCap.SetValueWithoutNotify($"{PlayerPrefs.GetInt("RenderingFrameCap", 60)} FPS");
+            }
             page.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             if (visible) SelectedTab.Focus();
         }
@@ -64,12 +71,15 @@ namespace TwoBirds
         private void FrameCapChanged(ChangeEvent<string> evt) =>
             session.SetFrameCap(frameCap.index switch { 1 => 90, 2 => 120, _ => 60 });
 
+        private void DisplayModeChanged(ChangeEvent<string> evt) => session.SetDisplayMode(displayMode.index);
+
         public void Dispose()
         {
             controls.Dispose();
             page.style.display = DisplayStyle.None;
             IsOpen = false;
             frameCap.UnregisterValueChangedCallback(FrameCapChanged);
+            displayMode.UnregisterValueChangedCallback(DisplayModeChanged);
             graphicsTab.clicked -= ShowGraphics;
             controlsTab.clicked -= ShowControls;
             back.clicked -= goBack;

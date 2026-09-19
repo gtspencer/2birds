@@ -6,6 +6,7 @@
             <ui:Button name="controls-tab" text="Controls" />
         </ui:VisualElement>
         <ui:VisualElement name="graphics-settings">
+            <ui:DropdownField name="display-mode" label="Display mode" />
             <ui:DropdownField name="frame-cap" label="Frame rate" />
             <ui:Label text="V-sync is disabled so your selected frame-rate cap can take effect." class="hint" />
         </ui:VisualElement>
