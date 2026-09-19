@@ -18,6 +18,9 @@ namespace TwoBirds
         [SerializeField] private Transform brakePedal;
         [Header("Lights and Horn")]
         [SerializeField] private GameObject[] headlights;
+        [SerializeField] private Material litMaterial;
+        [SerializeField] private MeshRenderer headlightMesh;
+        private Material defaultMaterial;
         [SerializeField] private SfxSource hornSource;
         [SerializeField] private SoundEffect hornSfx;
         [SerializeField] private Vector3 gasPedalAngle = new(15f, 0f, 0f);
@@ -53,6 +56,8 @@ namespace TwoBirds
             blocks = new MaterialPropertyBlock[paintSlots.Length];
             for (int i = 0; i < blocks.Length; i++) blocks[i] = new MaterialPropertyBlock();
             previousPosition = transform.position;
+
+            defaultMaterial = headlightMesh.material;
             SetLights(false);
         }
 
@@ -71,12 +76,14 @@ namespace TwoBirds
         {
             if (headlights == null) return;
             foreach (var light in headlights)
-                if (light != null) light.SetActive(on);
+                if (light) light.SetActive(on);
+            
+            headlightMesh.material = on ? litMaterial : defaultMaterial;
         }
 
         internal void PlayHorn()
         {
-            if (hornSource != null) hornSource.Play(hornSfx);
+            if (hornSource) hornSource.Play(hornSfx);
         }
 
         private void LateUpdate()

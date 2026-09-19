@@ -2620,6 +2620,8 @@ MonoBehaviour:
   headlights:
   - {fileID: 324023744048051289}
   - {fileID: 8934435016832417794}
+  litMaterial: {fileID: 2100000, guid: 5f44ad8991edae746aa2a5afd2a93836, type: 2}
+  headlightMesh: {fileID: 702719700894667250}
   hornSource: {fileID: 2337957549060366033}
   hornSfx: {fileID: 11400000, guid: a18a104a4615a3b44b966aab67466ea8, type: 2}
   gasPedalAngle: {x: 30, y: 0, z: 0}
