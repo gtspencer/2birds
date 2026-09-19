@@ -10,7 +10,10 @@ namespace TwoBirds
         private readonly SessionController session;
         private readonly VisualElement page, graphics, controlsPage;
         private readonly Button graphicsTab, controlsTab, back;
+        private readonly Button sensitivityReset;
         private readonly DropdownField displayMode, frameCap;
+        private readonly Slider mouseSensitivity, controllerSensitivity;
+        private readonly Label mouseSensitivityValue, controllerSensitivityValue;
         private readonly ControlsRemapPanel controls;
         private readonly Action goBack;
         public bool IsOpen { get; private set; }
@@ -30,12 +33,20 @@ namespace TwoBirds
             back = page.Q<Button>("settings-back");
             displayMode = page.Q<DropdownField>("display-mode");
             frameCap = page.Q<DropdownField>("frame-cap");
+            mouseSensitivity = page.Q<Slider>("mouse-sensitivity");
+            controllerSensitivity = page.Q<Slider>("controller-sensitivity");
+            mouseSensitivityValue = page.Q<Label>("mouse-sensitivity-value");
+            controllerSensitivityValue = page.Q<Label>("controller-sensitivity-value");
+            sensitivityReset = page.Q<Button>("sensitivity-reset");
             displayMode.choices = new List<string> { "Fullscreen", "Windowed", "Windowed Fullscreen" };
             displayMode.RegisterValueChangedCallback(DisplayModeChanged);
             frameCap.choices = new List<string> { "60 FPS", "90 FPS", "120 FPS" };
             frameCap.RegisterValueChangedCallback(FrameCapChanged);
+            mouseSensitivity.RegisterValueChangedCallback(MouseSensitivityChanged);
+            controllerSensitivity.RegisterValueChangedCallback(ControllerSensitivityChanged);
             graphicsTab.clicked += ShowGraphics;
             controlsTab.clicked += ShowControls;
+            sensitivityReset.clicked += ResetSensitivity;
             back.clicked += goBack;
             controls = new ControlsRemapPanel(root, session.Bindings, session.InputPresentation);
             ShowGraphics();
@@ -50,6 +61,7 @@ namespace TwoBirds
             {
                 displayMode.SetValueWithoutNotify(SessionController.DisplayModeLabel(session.DisplayMode));
                 frameCap.SetValueWithoutNotify($"{PlayerPrefs.GetInt("RenderingFrameCap", 60)} FPS");
+                RefreshSensitivity();
             }
             page.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             if (visible) SelectedTab.Focus();
@@ -73,6 +85,32 @@ namespace TwoBirds
 
         private void DisplayModeChanged(ChangeEvent<string> evt) => session.SetDisplayMode(displayMode.index);
 
+        private void MouseSensitivityChanged(ChangeEvent<float> evt)
+        {
+            session.SetMouseSensitivity(evt.newValue);
+            mouseSensitivityValue.text = evt.newValue.ToString("0.00");
+        }
+
+        private void ControllerSensitivityChanged(ChangeEvent<float> evt)
+        {
+            session.SetControllerSensitivity(evt.newValue);
+            controllerSensitivityValue.text = evt.newValue.ToString("0");
+        }
+
+        private void ResetSensitivity()
+        {
+            session.ResetSensitivity();
+            RefreshSensitivity();
+        }
+
+        private void RefreshSensitivity()
+        {
+            mouseSensitivity.SetValueWithoutNotify(session.MouseSensitivity);
+            controllerSensitivity.SetValueWithoutNotify(session.ControllerSensitivity);
+            mouseSensitivityValue.text = session.MouseSensitivity.ToString("0.00");
+            controllerSensitivityValue.text = session.ControllerSensitivity.ToString("0");
+        }
+
         public void Dispose()
         {
             controls.Dispose();
@@ -80,8 +118,11 @@ namespace TwoBirds
             IsOpen = false;
             frameCap.UnregisterValueChangedCallback(FrameCapChanged);
             displayMode.UnregisterValueChangedCallback(DisplayModeChanged);
+            mouseSensitivity.UnregisterValueChangedCallback(MouseSensitivityChanged);
+            controllerSensitivity.UnregisterValueChangedCallback(ControllerSensitivityChanged);
             graphicsTab.clicked -= ShowGraphics;
             controlsTab.clicked -= ShowControls;
+            sensitivityReset.clicked -= ResetSensitivity;
             back.clicked -= goBack;
         }
     }

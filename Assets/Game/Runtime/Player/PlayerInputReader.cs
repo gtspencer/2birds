@@ -12,6 +12,7 @@ namespace TwoBirds
         private InputActionMap actions;
         private InputAction move, look, jump, drop, use, exit, interact, lights, horn;
         private PlayerSeating seating;
+        private SessionController session;
         private bool exitBlocked, interactBlocked;
         private int suppressedInteractionFrame = -1;
         private PlayerInventory inventory;
@@ -65,7 +66,8 @@ namespace TwoBirds
             seating = GetComponent<PlayerSeating>();
             inventory = GetComponent<PlayerInventory>();
             equipment = GetComponent<PlayerEquipment>();
-            presentation = SessionController.Instance.InputPresentation;
+            session = SessionController.Instance;
+            presentation = session.InputPresentation;
             InputSystem.onAfterUpdate += ReadInput;
             SetGameplay(false);
             SessionController.Instance.PlayerReady(GetComponent<PlayerMotor>());
@@ -100,7 +102,8 @@ namespace TwoBirds
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
             if (!blockJump && !seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
             Vector2 delta = look.ReadValue<Vector2>();
-            float sensitivity = look.activeControl?.device is Gamepad ? 150f * Time.unscaledDeltaTime : 0.12f;
+            float sensitivity = look.activeControl?.device is Gamepad ?
+                session.ControllerSensitivity * Time.unscaledDeltaTime : session.MouseSensitivity;
             if (seating.Seated) seating.AddLook(delta.x * sensitivity);
             else Yaw = Mathf.Repeat(Yaw + delta.x * sensitivity, 360f);
             Pitch = Mathf.Clamp(Pitch - delta.y * sensitivity, -89f, 89f);

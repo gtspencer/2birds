@@ -20,6 +20,8 @@ namespace TwoBirds
         public const int MultiplayerCapacity = 8;
         public const string GameId = "two-birds";
         public const string Protocol = "eight-player-birds-5";
+        public const float DefaultMouseSensitivity = 0.12f;
+        public const float DefaultControllerSensitivity = 150f;
         public static SessionController Instance { get; private set; }
         [SerializeField] private GameSettings settings;
         [SerializeField] private Multipass multipass;
@@ -46,6 +48,8 @@ namespace TwoBirds
         public int Capacity => Mode == SessionMode.Solo ? 1 : MultiplayerCapacity;
         public int FrameCap { get; private set; }
         public FullScreenMode DisplayMode { get; private set; }
+        public float MouseSensitivity { get; private set; }
+        public float ControllerSensitivity { get; private set; }
         public bool CanStart => Mode == SessionMode.Host && Phase == SessionPhase.InLobby && admitted.Count > 0 && (UsingLocal || Lobby.HasLobby);
         public event Action Changed;
         internal int Attempt => attempt;
@@ -88,6 +92,8 @@ namespace TwoBirds
             InputPresentation.Interrupted += InputInterrupted;
             DontDestroyOnLoad(gameObject);
             Application.runInBackground = true;
+            MouseSensitivity = PlayerPrefs.GetFloat("MouseSensitivity", DefaultMouseSensitivity);
+            ControllerSensitivity = PlayerPrefs.GetFloat("ControllerSensitivity", DefaultControllerSensitivity);
         }
 
         private void Start()
@@ -128,6 +134,26 @@ namespace TwoBirds
             }
             PlayerPrefs.SetInt("RenderingFrameCap", FrameCap);
             PlayerPrefs.Save();
+        }
+
+        public void SetMouseSensitivity(float value)
+        {
+            MouseSensitivity = Mathf.Clamp(value, 0.01f, 0.5f);
+            PlayerPrefs.SetFloat("MouseSensitivity", MouseSensitivity);
+            PlayerPrefs.Save();
+        }
+
+        public void SetControllerSensitivity(float value)
+        {
+            ControllerSensitivity = Mathf.Clamp(value, 50f, 300f);
+            PlayerPrefs.SetFloat("ControllerSensitivity", ControllerSensitivity);
+            PlayerPrefs.Save();
+        }
+
+        public void ResetSensitivity()
+        {
+            SetMouseSensitivity(DefaultMouseSensitivity);
+            SetControllerSensitivity(DefaultControllerSensitivity);
         }
 
         public void SetDisplayMode(int value) => SetDisplayMode(value switch
