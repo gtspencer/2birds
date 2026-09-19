@@ -283,3 +283,16 @@
 .slot-binding-glyph { position: absolute; top: 2px; left: 4px; width: 22px; height: 22px; }
 .slot-key { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #inventory-shortcut { font-size: 14px; color: rgb(179, 195, 205); margin-top: 8px; }
+
+.inventory-grid .slot:hover { background-color: rgb(74, 99, 109); }
+.controller-navigation .inventory-grid .slot:hover { background-color: rgb(34, 45, 56); }
+.inventory-grid .slot.selected { border-bottom-width: 6px; border-bottom-color: rgb(165, 225, 204); }
+.inventory-grid .slot.move-source { background-color: rgb(103, 71, 37); border-left-width: 7px; border-left-color: rgb(255, 177, 74); }
+.inventory-grid .slot:focus, .controller-navigation .inventory-grid .slot:focus {
+    background-color: rgb(91, 119, 130); border-top-width: 3px; border-right-width: 3px;
+    border-top-color: rgb(255, 240, 170); border-right-color: rgb(255, 240, 170);
+    border-bottom-color: rgb(255, 240, 170); border-left-color: rgb(255, 240, 170);
+}
+.inventory-grid .slot.move-source:focus { border-left-color: rgb(255, 177, 74); }
+.inventory-grid .slot.selected:focus { border-bottom-color: rgb(165, 225, 204); }
+#inventory-shortcut { max-width: 480px; white-space: normal; }

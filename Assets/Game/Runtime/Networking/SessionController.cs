@@ -29,6 +29,10 @@ namespace TwoBirds
         public SteamLobby Lobby { get; private set; }
         public InputBindings Bindings { get; private set; }
         public InputPresentation InputPresentation { get; private set; }
+        internal string MenuPage = "main", MenuSelection = "solo";
+        internal string HostPort = "7770", JoinAddress = "127.0.0.1", JoinPort = "7770";
+        internal string MenuFocus = "";
+        internal ulong FriendSelection;
         public SessionMode Mode { get; private set; }
         public SessionPhase Phase { get; private set; }
         public string Status { get; private set; } = "";
@@ -80,6 +84,7 @@ namespace TwoBirds
             Instance = this;
             Bindings = new InputBindings(UnityEngine.InputSystem.InputSystem.actions);
             InputPresentation = new InputPresentation(Bindings);
+            InputPresentation.Interrupted += InputInterrupted;
             DontDestroyOnLoad(gameObject);
             Application.runInBackground = true;
         }
@@ -377,9 +382,16 @@ namespace TwoBirds
 
         public void SetPanel(bool open)
         {
+            if (PanelOpen == open) return;
             PanelOpen = open;
             if (localInput) localInput.SetGameplay(!open && !ConsoleOpen && Phase == SessionPhase.InGame);
             Changed?.Invoke();
+        }
+
+        private void InputInterrupted()
+        {
+            if (localInput) localInput.ClearContext();
+            if (Phase == SessionPhase.InGame) SetPanel(true);
         }
 
         private void Update()
@@ -445,6 +457,7 @@ namespace TwoBirds
         {
             Phase = phase;
             Status = message;
+            if (phase != SessionPhase.InGame) InputPresentation.SetGameplay(false);
             Changed?.Invoke();
         }
 

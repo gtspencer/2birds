@@ -6,7 +6,12 @@
 .heading { font-size: 24px; margin-bottom: 12px; }
 Button { height: 42px; margin-top: 5px; margin-bottom: 5px; background-color: rgb(58, 76, 88); color: rgb(245, 247, 249); border-width: 1px; border-color: rgb(92, 113, 125); border-radius: 5px; }
 Button:hover { background-color: rgb(74, 99, 109); }
-Button:focus { border-color: rgb(165, 225, 204); border-width: 2px; }
+.controller-navigation Button:hover { background-color: rgb(58, 76, 88); }
+Button:focus, .controller-navigation Button:focus {
+    background-color: rgb(91, 119, 130); border-color: rgb(255, 240, 170); border-width: 3px;
+}
+Button:active, .controller-navigation Button:active { background-color: rgb(35, 60, 65); }
+Button:disabled { background-color: rgb(40, 48, 54); color: rgb(125, 137, 144); border-color: rgb(65, 75, 80); }
 TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
 .unity-base-field__input { background-color: rgb(20, 28, 36); color: rgb(231, 237, 241); border-color: rgb(92, 113, 125); }
 .unity-base-text-field__input, .unity-base-popup-field__input { background-color: rgb(20, 28, 36); color: rgb(231, 237, 241); padding-left: 10px; padding-right: 10px; min-height: 36px; }
@@ -31,3 +36,15 @@ TextField, DropdownField { margin-top: 10px; margin-bottom: 10px; }
 .binding-glyph { width: 28px; height: 28px; margin-right: 6px; }
 .binding-reset { width: 68px; font-size: 14px; }
 #binding-feedback { background-color: rgb(20, 28, 36); padding: 10px; }
+
+TextField:focus, DropdownField:focus, .unity-base-text-field__input:focus, .unity-base-popup-field__input:focus,
+.unity-base-dropdown__item:focus, .unity-base-dropdown__item--checked:focus {
+    background-color: rgb(91, 119, 130); border-width: 3px; border-color: rgb(255, 240, 170);
+}
+.selected-tab, .controller-navigation .selected-tab:hover { background-color: rgb(53, 82, 84); border-bottom-width: 4px; border-bottom-color: rgb(165, 225, 204); }
+.selected-tab:focus, .controller-navigation .selected-tab:focus { background-color: rgb(91, 119, 130); border-color: rgb(255, 240, 170); }
+.field-error { color: rgb(255, 204, 147); white-space: normal; font-size: 14px; }
+.entry-keys { flex-direction: row; flex-wrap: wrap; }
+.entry-keys > Button { width: 30%; flex-grow: 1; }
+.binding-list .unity-scroll-view__content-container, #friends-list .unity-scroll-view__content-container { padding: 3px; }
+.card { max-width: 95%; max-height: 95%; }

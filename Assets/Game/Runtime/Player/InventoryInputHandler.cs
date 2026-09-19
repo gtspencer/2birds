@@ -9,6 +9,7 @@ namespace TwoBirds
         private readonly Action toggle;
         private readonly InputAction inventoryAction, previous, next;
         private readonly InputAction[] slots = new InputAction[PlayerInventory.HotbarSize];
+        private readonly InputAction[] uiNavigation;
         private PlayerInventory inventory;
         private PlayerInputReader input;
         private int suppressedFrame = -1;
@@ -17,6 +18,8 @@ namespace TwoBirds
         {
             this.session = session;
             this.toggle = toggle;
+            uiNavigation = new[] { InputSystem.actions.FindAction("UI/Submit"), InputSystem.actions.FindAction("UI/Cancel"),
+                InputSystem.actions.FindAction("UI/Pause"), InputSystem.actions.FindAction("UI/Navigate") };
             var map = InputSystem.actions.FindActionMap("Player");
             inventoryAction = map.FindAction("Inventory");
             previous = map.FindAction("Previous");
@@ -38,11 +41,16 @@ namespace TwoBirds
 
         private bool Available => inventory && inventory.IsOwner && input && session &&
             session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen &&
+            !input.InputSuppressed && !ControlsRemapPanel.SuppressMenuInput &&
             suppressedFrame != UnityEngine.Time.frameCount;
         private bool CanSelect => Available && !input.InventoryOpen && inventory.CanEquip;
 
         private void Toggle(InputAction.CallbackContext context)
         {
+            if (input && input.InventoryOpen)
+                foreach (var action in uiNavigation)
+                    foreach (var control in action.controls)
+                        if (context.control == control || context.control.parent == control) return;
             if (Available) toggle();
         }
 

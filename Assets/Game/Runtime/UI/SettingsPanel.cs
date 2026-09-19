@@ -14,6 +14,9 @@ namespace TwoBirds
         private readonly ControlsRemapPanel controls;
         private readonly Action goBack;
         public bool IsOpen { get; private set; }
+        public event Action Changed;
+        private bool controlsSelected;
+        public Button SelectedTab => controlsSelected ? controlsTab : graphicsTab;
 
         public SettingsPanel(VisualElement root, SessionController session, Action goBack)
         {
@@ -42,18 +45,20 @@ namespace TwoBirds
             if (!visible) controls.Close();
             else frameCap.SetValueWithoutNotify($"{PlayerPrefs.GetInt("RenderingFrameCap", 60)} FPS");
             page.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-            if (visible) graphicsTab.Focus();
+            if (visible) SelectedTab.Focus();
         }
 
         private void ShowGraphics() => SelectTab(false);
         private void ShowControls() => SelectTab(true);
         private void SelectTab(bool showControls)
         {
+            controlsSelected = showControls;
             if (!showControls) controls.Close();
             graphics.style.display = showControls ? DisplayStyle.None : DisplayStyle.Flex;
             controlsPage.style.display = showControls ? DisplayStyle.Flex : DisplayStyle.None;
             graphicsTab.EnableInClassList("selected-tab", !showControls);
             controlsTab.EnableInClassList("selected-tab", showControls);
+            Changed?.Invoke();
         }
 
         private void FrameCapChanged(ChangeEvent<string> evt) =>

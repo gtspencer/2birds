@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
-using Cursor = UnityEngine.Cursor;
 
 namespace TwoBirds
 {
@@ -29,6 +28,11 @@ namespace TwoBirds
         private VisualElement[] inventorySlots;
         private bool inventoryOpen;
         private int dragFromSlot = -1;
+        private int dragPointer, moveSource = -1, focusedSlot = -1;
+        private uint moveItem;
+        private VisualElement dragElement;
+        private MenuNavigation navigation;
+        private SessionController session;
         private VisualElement dragGhost;
         private InputPresentation presentation;
         private InventoryInputHandler inventoryInput;
@@ -79,7 +83,7 @@ namespace TwoBirds
             chargeTrack = root.Q("charge-track");
             chargeFill = root.Q("charge-fill");
             HideCharge();
-            var session = SessionController.Instance;
+            session = SessionController.Instance;
             presentation = session.InputPresentation;
             inventoryInput = new InventoryInputHandler(session, ToggleInventory);
             inventoryAction = InputSystem.actions.FindAction("Player/Inventory");
@@ -96,6 +100,10 @@ namespace TwoBirds
                 inventoryPanel.Add(inventoryShortcut);
             }
             presentation.Changed += RefreshBindings;
+            presentation.Interrupted += CancelDrag;
+            navigation = new MenuNavigation(root, presentation, () => inventoryOpen ? inventoryPanel : null,
+                () => inventorySlots[focusedSlot < 0 ? 0 : focusedSlot]);
+            inventoryPanel.RegisterCallback<NavigationCancelEvent>(InventoryBack);
             RefreshBindings();
         }
 
@@ -120,7 +128,16 @@ namespace TwoBirds
             inventorySlots = new VisualElement[PlayerInventory.SlotCount];
             for (int i = 0; i < PlayerInventory.SlotCount; i++)
             {
+                int index = i;
                 var slot = MakeSlot(i);
+                slot.focusable = true;
+                slot.RegisterCallback<FocusInEvent>(_ => focusedSlot = index);
+                slot.RegisterCallback<NavigationSubmitEvent>(evt =>
+                {
+                    if (InventoryInputFrame != Time.frameCount) SelectDestination(index);
+                    evt.StopPropagation();
+                });
+                slot.RegisterCallback<NavigationMoveEvent>(evt => MoveFocus(evt, index));
                 if (i < PlayerInventory.HotbarSize)
                 {
                     AddShortcut(slot, out inventoryKeys[i], out inventoryGlyphs[i]);
@@ -145,13 +162,17 @@ namespace TwoBirds
 
         private void RefreshBindings()
         {
+            if (presentation.ActiveDevice is Gamepad) CancelDrag();
             for (int i = 0; i < slotActions.Length; i++)
             {
                 var binding = presentation.Resolve(slotActions[i]);
                 SetShortcut(hotbarKeys[i], hotbarGlyphs[i], binding);
                 SetShortcut(inventoryKeys[i], inventoryGlyphs[i], binding);
             }
-            inventoryShortcut.text = $"{presentation.Resolve(inventoryAction).Text} ? Close Inventory";
+            inventoryShortcut.text = $"{presentation.Label("UI/Submit")} {(moveSource < 0 ? "Select item" : "Move item")}   " +
+                $"{presentation.Label("UI/Cancel")} {(moveSource < 0 ? "Close" : "Cancel move")}   {presentation.Label("UI/Pause")} Close";
+            if (presentation.ActiveDevice is not Gamepad)
+                inventoryShortcut.text += $"   {presentation.Resolve(inventoryAction).Text} Close";
         }
 
         private static void SetShortcut(Label key, Image glyph, (string Text, Texture2D Glyph) binding)
@@ -183,17 +204,24 @@ namespace TwoBirds
 
         private void OnHotbarClick(int slot)
         {
-            if (inventory != null && inventory.IsOwner && inventory.CanEquip)
+            if (inventory && inventory.IsOwner && inventory.CanEquip && !inventoryOpen && session &&
+                session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen && !presentation.SuppressInput)
                 inventory.SelectSlot((sbyte)slot);
         }
 
         private void OnSlotPointerDown(PointerDownEvent evt)
         {
-            if (inventory == null || !inventory.IsOwner) return;
+            if (!CanMove || presentation.SuppressInput) return;
+            if (evt.button == 1) { ClearMove(); CancelDrag(); evt.StopPropagation(); return; }
+            if (evt.button != 0) return;
             var slot = evt.currentTarget as VisualElement;
             int index = (int)slot.userData;
+            slot.Focus();
+            if (moveSource >= 0) { SelectDestination(index); evt.StopPropagation(); return; }
             if (inventory.GetSlot(index).IsEmpty) return;
             dragFromSlot = index;
+            dragElement = slot;
+            dragPointer = evt.pointerId;
             slot.CapturePointer(evt.pointerId);
             EnsureDragGhost();
             dragGhost.style.display = DisplayStyle.Flex;
@@ -212,6 +240,7 @@ namespace TwoBirds
         private void OnSlotPointerUp(PointerUpEvent evt)
         {
             if (dragFromSlot < 0) return;
+            if (!CanMove || presentation.SuppressInput) { CancelDrag(); return; }
             (evt.currentTarget as VisualElement)?.ReleasePointer(evt.pointerId);
             if (dragGhost != null) dragGhost.style.display = DisplayStyle.None;
 
@@ -222,6 +251,68 @@ namespace TwoBirds
                 inventory.DropSlot(dragFromSlot);
 
             dragFromSlot = -1;
+            dragElement = null;
+        }
+
+        private bool CanMove => inventoryOpen && inventory && inventory.IsOwner && session &&
+            session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen;
+
+        private void MoveFocus(NavigationMoveEvent evt, int index)
+        {
+            int columns = PlayerInventory.HotbarSize;
+            int destination = evt.direction switch
+            {
+                NavigationMoveEvent.Direction.Left => index % columns > 0 ? index - 1 : index,
+                NavigationMoveEvent.Direction.Right => index % columns < columns - 1 ? index + 1 : index,
+                NavigationMoveEvent.Direction.Up => index - columns,
+                NavigationMoveEvent.Direction.Down => index + columns,
+                _ => index
+            };
+            if (destination >= 0 && destination < inventorySlots.Length) inventorySlots[destination].Focus();
+            evt.StopPropagation();
+        }
+
+        private void SelectDestination(int index)
+        {
+            if (!CanMove || presentation.SuppressInput) return;
+            if (moveSource < 0)
+            {
+                var item = inventory.GetSlot(index);
+                if (item.IsEmpty) return;
+                moveSource = index;
+                moveItem = item.WorldIds[0];
+            }
+            else
+            {
+                int source = moveSource;
+                ClearMove();
+                if (source != index) inventory.SwapSlots(source, index);
+            }
+            Refresh();
+            RefreshBindings();
+        }
+
+        private void ClearMove()
+        {
+            if (moveSource >= 0) inventorySlots[moveSource].RemoveFromClassList("move-source");
+            moveSource = -1;
+            moveItem = 0;
+            if (inventoryShortcut != null) RefreshBindings();
+        }
+
+        private void InventoryBack(NavigationCancelEvent evt)
+        {
+            if (!inventoryOpen || presentation.SuppressInput || InventoryInputFrame == Time.frameCount) return;
+            if (moveSource >= 0) ClearMove(); else CloseInventory();
+            evt.StopPropagation();
+        }
+
+        private void CancelDrag()
+        {
+            if (dragElement != null) dragElement.ReleasePointer(dragPointer);
+            dragElement = null;
+            dragFromSlot = -1;
+            if (dragGhost != null) dragGhost.style.display = DisplayStyle.None;
         }
 
         private int FindSlotAt(Vector3 pos)
@@ -354,8 +445,8 @@ namespace TwoBirds
             inventoryPanel.style.display = DisplayStyle.Flex;
             if (crosshair != null) crosshair.style.display = DisplayStyle.None;
             Refresh();
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            if (focusedSlot < 0) focusedSlot = inventory.SelectedSlot >= 0 ? inventory.SelectedSlot : 0;
+            inventoryPanel.schedule.Execute(() => { if (inventoryOpen) inventorySlots[focusedSlot].Focus(); });
         }
 
         public void CloseInventory()
@@ -364,18 +455,22 @@ namespace TwoBirds
             InventoryInputFrame = Time.frameCount;
             inventoryInput?.SuppressInput();
             inventoryOpen = false;
+            CancelDrag();
+            ClearMove();
             inventoryPanel.style.display = DisplayStyle.None;
+            navigation?.Repair();
             if (crosshair != null) crosshair.style.display = DisplayStyle.Flex;
             if (inputReader != null) inputReader.InventoryOpen = false;
-            var session = SessionController.Instance;
-            bool gameplay = session && session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen;
-            Cursor.lockState = gameplay ? CursorLockMode.Locked : CursorLockMode.None;
-            Cursor.visible = !gameplay;
         }
 
         private void Refresh()
         {
             if (inventory == null) return;
+            if (moveSource >= 0)
+            {
+                var source = inventory.GetSlot(moveSource);
+                if (source.IsEmpty || System.Array.IndexOf(source.WorldIds, moveItem) < 0) ClearMove();
+            }
             sbyte selected = inventory.SelectedSlot;
 
             for (int i = 0; i < PlayerInventory.HotbarSize && i < (hotbarSlots?.Length ?? 0); i++)
@@ -388,6 +483,7 @@ namespace TwoBirds
             {
                 UpdateSlotVisual(inventorySlots[i], inventory.GetSlot(i));
                 SetClass(inventorySlots[i], "selected", i < PlayerInventory.HotbarSize && selected == i);
+                SetClass(inventorySlots[i], "move-source", moveSource == i);
             }
 
             var equipped = inventory.GetEquipped();
@@ -465,6 +561,9 @@ namespace TwoBirds
             interactionTooltip?.Dispose();
             controlsHint?.Dispose();
             if (presentation != null) presentation.Changed -= RefreshBindings;
+            if (presentation != null) presentation.Interrupted -= CancelDrag;
+            navigation?.Dispose();
+            inventoryPanel.UnregisterCallback<NavigationCancelEvent>(InventoryBack);
             inventoryInput?.Dispose();
             inventoryInput = null;
             Bind(null, null);

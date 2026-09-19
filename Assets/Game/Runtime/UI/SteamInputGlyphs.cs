@@ -4,8 +4,6 @@ using System.IO;
 using Steamworks;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.DualShock;
-using UnityEngine.InputSystem.Switch;
 using UnityEngine.InputSystem.XInput;
 
 namespace TwoBirds
@@ -13,8 +11,28 @@ namespace TwoBirds
     internal sealed class SteamInputGlyphs : IDisposable
     {
         private readonly Dictionary<EInputActionOrigin, (Texture2D Texture, string Name)> glyphs = new();
-        private readonly InputHandle_t[] handles = new InputHandle_t[Constants.STEAM_INPUT_MAX_COUNT];
+        private readonly Dictionary<int, int> slots = new();
         private readonly SteamLifetime steam = SteamLifetime.Instance;
+        private readonly Callback<SteamInputDeviceConnected_t> connected;
+        private readonly Callback<SteamInputDeviceDisconnected_t> disconnected;
+        private readonly Callback<SteamInputConfigurationLoaded_t> configured;
+        private readonly Callback<SteamInputGamepadSlotChange_t> slotChanged;
+        public event Action Changed;
+        [Serializable] private sealed class XInputCapabilities { public int userIndex = -1; }
+
+        public void InvalidateAssociations() => slots.Clear();
+
+        public SteamInputGlyphs()
+        {
+            if (!steam || !steam.InputReady) return;
+            connected = Callback<SteamInputDeviceConnected_t>.Create(_ => AssociationChanged());
+            disconnected = Callback<SteamInputDeviceDisconnected_t>.Create(_ => AssociationChanged());
+            configured = Callback<SteamInputConfigurationLoaded_t>.Create(_ => AssociationChanged());
+            slotChanged = Callback<SteamInputGamepadSlotChange_t>.Create(_ => AssociationChanged());
+            SteamInput.EnableDeviceCallbacks();
+        }
+
+        private void AssociationChanged() { InvalidateAssociations(); Changed?.Invoke(); }
 
         private EInputActionOrigin ResolveOrigin(InputControl control)
         {
@@ -23,22 +41,19 @@ namespace TwoBirds
             if (button == EXboxOrigin.k_EXboxOrigin_Count) return EInputActionOrigin.k_EInputActionOrigin_None;
             if (!steam || !steam.InputReady) return EInputActionOrigin.k_EInputActionOrigin_None;
 
-            // The Xbox origin enums share the same button ordering.
-            var origin = EInputActionOrigin.k_EInputActionOrigin_XBoxOne_A + (int)button;
-            var type = gamepad switch
+            if (gamepad is not XInputController || gamepad.description.interfaceName != "XInput")
+                return EInputActionOrigin.k_EInputActionOrigin_None;
+            if (!slots.TryGetValue(gamepad.deviceId, out int slot))
             {
-                DualSenseGamepadHID _ => ESteamInputType.k_ESteamInputType_PS5Controller,
-                DualShockGamepad _ => ESteamInputType.k_ESteamInputType_PS4Controller,
-                SwitchProController _ => ESteamInputType.k_ESteamInputType_SwitchProController,
-                _ => ESteamInputType.k_ESteamInputType_XBoxOneController
-            };
-            if (gamepad is XInputController && Gamepad.all.Count == 1 && SteamInput.GetConnectedControllers(handles) == 1 &&
-                SteamInput.GetGamepadIndexForController(handles[0]) >= 0)
-                origin = SteamInput.GetActionOriginFromXboxOrigin(handles[0], button);
-            else if (type != ESteamInputType.k_ESteamInputType_XBoxOneController)
-                origin = SteamInput.TranslateActionOrigin(type, origin);
-
-            return origin;
+                var capabilities = new XInputCapabilities();
+                if (!string.IsNullOrEmpty(gamepad.description.capabilities))
+                    JsonUtility.FromJsonOverwrite(gamepad.description.capabilities, capabilities);
+                slots[gamepad.deviceId] = slot = capabilities.userIndex;
+            }
+            if (slot < 0 || slot > 3) return EInputActionOrigin.k_EInputActionOrigin_None;
+            var handle = SteamInput.GetControllerForGamepadIndex(slot);
+            return handle.m_InputHandle == 0 ? EInputActionOrigin.k_EInputActionOrigin_None :
+                SteamInput.GetActionOriginFromXboxOrigin(handle, button);
         }
 
         public Texture2D Get(InputControl control, out string name)
@@ -104,6 +119,11 @@ namespace TwoBirds
 
         public void Dispose()
         {
+            connected?.Dispose();
+            disconnected?.Dispose();
+            configured?.Dispose();
+            slotChanged?.Dispose();
+            slots.Clear();
             foreach (var glyph in glyphs.Values)
                 if (glyph.Texture) UnityEngine.Object.Destroy(glyph.Texture);
             glyphs.Clear();

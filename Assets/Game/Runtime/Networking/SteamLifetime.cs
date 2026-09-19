@@ -10,6 +10,8 @@ namespace TwoBirds
         public static SteamLifetime Instance { get; private set; }
         public bool Ready { get; private set; }
         public bool InputReady { get; private set; }
+        public event Action<bool> OverlayChanged;
+        private Callback<GameOverlayActivated_t> overlayCallback;
         public string Failure { get; private set; } = "Steam is unavailable. Start Steam and restart Two Birds.";
         public string DisplayName => Ready ? SteamFriends.GetPersonaName() : "";
         public ulong UserId => Ready ? SteamUser.GetSteamID().m_SteamID : 0;
@@ -23,6 +25,7 @@ namespace TwoBirds
             {
                 Ready = SteamAPI.Init();
                 InputReady = Ready && SteamInput.Init(false);
+                if (Ready) overlayCallback = Callback<GameOverlayActivated_t>.Create(value => OverlayChanged?.Invoke(value.m_bActive != 0));
             }
             catch (Exception e) when (e is DllNotFoundException || e is EntryPointNotFoundException || e is BadImageFormatException)
             {
@@ -37,6 +40,8 @@ namespace TwoBirds
 
         internal void Shutdown()
         {
+            overlayCallback?.Dispose();
+            overlayCallback = null;
             if (InputReady) SteamInput.Shutdown();
             if (Ready) SteamAPI.Shutdown();
             InputReady = Ready = false;

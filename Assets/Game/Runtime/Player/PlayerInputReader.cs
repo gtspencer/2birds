@@ -21,6 +21,7 @@ namespace TwoBirds
         private bool gameplay;
         private bool inventoryOpen;
         private bool useBlocked;
+        private bool jumpBlocked, dropBlocked, lightsBlocked, hornBlocked;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         internal System.Func<MoveInput> AutomatedInput;
 #endif
@@ -31,17 +32,19 @@ namespace TwoBirds
             get => inventoryOpen;
             set
             {
+                if (inventoryOpen == value) return;
                 ClearContext();
                 inventoryOpen = value;
+                presentation?.SetGameplay(GameplayActive);
             }
         }
         public bool GameplayActive => gameplay && !InventoryOpen;
         public Vector2 CartMove => GameplayActive && !seating.TransitionPending ? movement : default;
-        public bool Handbrake => GameplayActive && !seating.TransitionPending && jump.IsPressed();
+        internal bool InputSuppressed => presentation == null || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount;
+        public bool Handbrake => GameplayActive && !jumpBlocked && !seating.TransitionPending && jump.IsPressed();
         public bool InteractPressed => GameplayActive && !seating.TransitionPending && !interactBlocked &&
             suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame();
         private InputPresentation presentation;
-        private InputDevice previousDevice;
         public InputDevice ActiveDevice => presentation?.ActiveDevice;
 
         public override void OnStartClient()
@@ -63,8 +66,6 @@ namespace TwoBirds
             inventory = GetComponent<PlayerInventory>();
             equipment = GetComponent<PlayerEquipment>();
             presentation = SessionController.Instance.InputPresentation;
-            previousDevice = presentation.ActiveDevice;
-            presentation.Changed += PresentationChanged;
             InputSystem.onAfterUpdate += ReadInput;
             SetGameplay(false);
             SessionController.Instance.PlayerReady(GetComponent<PlayerMotor>());
@@ -79,8 +80,7 @@ namespace TwoBirds
             Clear();
             if (actions == null) return;
             if (gameplay) actions.Enable(); else actions.Disable();
-            Cursor.lockState = gameplay ? CursorLockMode.Locked : CursorLockMode.None;
-            Cursor.visible = !gameplay;
+            presentation?.SetGameplay(GameplayActive);
         }
 
         private void ReadInput()
@@ -91,9 +91,14 @@ namespace TwoBirds
             bool blockExit = exitBlocked;
             if (exitBlocked && !ButtonHeld(exit)) exitBlocked = false;
             if (interactBlocked && !ButtonHeld(interact)) interactBlocked = false;
-            if (!GameplayActive) return;
+            bool blockJump = jumpBlocked, blockDrop = dropBlocked, blockLights = lightsBlocked, blockHorn = hornBlocked;
+            if (jumpBlocked && !ButtonHeld(jump)) jumpBlocked = false;
+            if (dropBlocked && !ButtonHeld(drop)) dropBlocked = false;
+            if (lightsBlocked && !ButtonHeld(lights)) lightsBlocked = false;
+            if (hornBlocked && !ButtonHeld(horn)) hornBlocked = false;
+            if (!GameplayActive || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount) return;
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
-            if (!seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
+            if (!blockJump && !seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
             Vector2 delta = look.ReadValue<Vector2>();
             float sensitivity = look.activeControl?.device is Gamepad ? 150f * Time.unscaledDeltaTime : 0.12f;
             if (seating.Seated) seating.AddLook(delta.x * sensitivity);
@@ -108,10 +113,10 @@ namespace TwoBirds
             if (seating.TransitionPending || seating.PlacementPending) return;
             if (seating.IsDriver)
             {
-                if (lights.WasPressedThisFrame()) seating.Cart.ToggleLights();
-                if (horn.WasPressedThisFrame()) seating.Cart.Honk();
+                if (!blockLights && lights.WasPressedThisFrame()) seating.Cart.ToggleLights();
+                if (!blockHorn && horn.WasPressedThisFrame()) seating.Cart.Honk();
             }
-            if (drop.WasPressedThisFrame())
+            if (!blockDrop && drop.WasPressedThisFrame())
             {
                 CancelUse();
                 inventory.DropSelected();
@@ -125,12 +130,6 @@ namespace TwoBirds
         private bool UseButtonHeld()
         {
             return ButtonHeld(use);
-        }
-
-        private void PresentationChanged()
-        {
-            if (previousDevice != null && !previousDevice.added) ClearContext();
-            previousDevice = presentation.ActiveDevice;
         }
 
         private static bool ButtonHeld(InputAction action)
@@ -167,12 +166,11 @@ namespace TwoBirds
             CancelUse();
             exitBlocked = ButtonHeld(exit);
             interactBlocked = ButtonHeld(interact);
+            jumpBlocked = ButtonHeld(jump);
+            dropBlocked = ButtonHeld(drop);
+            lightsBlocked = ButtonHeld(lights);
+            hornBlocked = ButtonHeld(horn);
             suppressedInteractionFrame = Time.frameCount;
-        }
-        private void OnApplicationFocus(bool focus)
-        {
-            if (!focus) ClearContext();
-            if (!focus && IsOwner && SessionController.Instance != null) SessionController.Instance.SetPanel(true);
         }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
@@ -183,10 +181,8 @@ namespace TwoBirds
         {
             CancelUse();
             InputSystem.onAfterUpdate -= ReadInput;
-            if (presentation != null) presentation.Changed -= PresentationChanged;
-            presentation = null;
-            previousDevice = null;
             if (actions != null) SetGameplay(false);
+            presentation = null;
             actions = null;
             use = null;
         }

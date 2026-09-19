@@ -19,7 +19,7 @@
                 <ui:Label name="binding-prompt" class="hint" />
                 <ui:VisualElement class="settings-tabs">
                     <ui:Button name="binding-accept" text="Use Anyway" style="display: none;" />
-                    <ui:Button name="binding-cancel" text="Cancel · Escape / Start" />
+                    <ui:Button name="binding-cancel" text="Cancel" />
                 </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>

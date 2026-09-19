@@ -24,13 +24,13 @@ namespace TwoBirds
         private readonly List<(InputBindings.Entry Entry, Button Button, Label Text, Image Glyph)> rows = new();
         private readonly List<InputAction> enabledUi = new();
         private readonly InputActionMap ui;
-        private readonly InputAction uiCancel;
         private InputActionRebindingExtensions.RebindingOperation operation;
         private IVisualElementScheduledItem tick;
         private InputBindings.Entry target;
         private Button returnFocus;
         private CaptureState state;
         private string group = InputBindings.KeyboardMouse, candidate;
+        private string conflictNames;
         private bool targetEnabled;
         private float deadline;
         private int releaseFrame;
@@ -64,9 +64,8 @@ namespace TwoBirds
             accept.clicked += Accept;
             restore.clicked += Restore;
             ui = InputSystem.actions.FindActionMap("UI");
-            uiCancel = ui.FindAction("Cancel");
-            uiCancel.performed += ContextCancel;
             presentation.Changed += Refresh;
+            presentation.Interrupted += Interrupted;
             Application.focusChanged += FocusChanged;
             root.RegisterCallback<NavigationSubmitEvent>(GuardSubmit, TrickleDown.TrickleDown);
             root.RegisterCallback<NavigationMoveEvent>(GuardMove, TrickleDown.TrickleDown);
@@ -117,6 +116,8 @@ namespace TwoBirds
 
         private void Refresh()
         {
+            cancel.text = $"Cancel · {CancelHint}";
+            RefreshPrompt();
             foreach (var row in rows)
             {
                 var value = presentation.Resolve(row.Entry.Action, group, row.Entry.Id);
@@ -138,7 +139,7 @@ namespace TwoBirds
             targetEnabled = entry.Action.enabled;
             entry.Action.Disable();
             enabledUi.Clear();
-            foreach (string name in new[] { "Navigate", "Submit", "Cancel", "Pause" })
+            foreach (string name in new[] { "Navigate", "Submit", "Cancel", "Pause", "Scroll" })
             {
                 var action = ui.FindAction(name);
                 if (action.enabled) enabledUi.Add(action);
@@ -149,8 +150,8 @@ namespace TwoBirds
             back.SetEnabled(false);
             feedback.style.display = DisplayStyle.Flex;
             accept.style.display = DisplayStyle.None;
-            prompt.text = $"Release the button, then choose a binding for {entry.Name}. Escape / Start cancels (15 seconds).";
             state = CaptureState.Waiting;
+            RefreshPrompt();
             deadline = Time.realtimeSinceStartup + 15f;
             releaseFrame = Time.frameCount + 1;
             InputSystem.onEvent += CaptureCancel;
@@ -189,7 +190,7 @@ namespace TwoBirds
         private void Listen()
         {
             state = CaptureState.Listening;
-            prompt.text = $"Press a button for {target.Name}. Escape / Start cancels (15 seconds).";
+            RefreshPrompt();
             operation = target.Action.PerformInteractiveRebinding(target.Index)
                 .WithExpectedControlType<ButtonControl>()
                 .WithControlsExcluding("<Keyboard>/escape")
@@ -215,8 +216,9 @@ namespace TwoBirds
             operation = null;
             completed.Dispose();
             if (conflicts.Count == 0) { bindings.Apply(target, candidate); Finish(); return; }
-            prompt.text = $"Already assigned to {string.Join(", ", conflicts)}. Use this button for both? Escape / Start cancels.";
+            conflictNames = string.Join(", ", conflicts);
             state = CaptureState.ConflictRelease;
+            RefreshPrompt();
             releaseFrame = Time.frameCount + 1;
             deadline = Time.realtimeSinceStartup + 30f;
             accept.style.display = DisplayStyle.Flex;
@@ -230,9 +232,18 @@ namespace TwoBirds
             Finish();
         }
 
-        private void ContextCancel(InputAction.CallbackContext context)
+        private string CancelHint => $"Escape / {presentation.Resolve(ui.FindAction("Pause"), InputBindings.Controller).Text}";
+
+        private void RefreshPrompt()
         {
-            if (state == CaptureState.Conflict) Cancel();
+            if (state == CaptureState.Idle) return;
+            prompt.text = state switch
+            {
+                CaptureState.Waiting => $"Release the button, then choose a binding for {target.Name}. {CancelHint} cancels (15 seconds).",
+                CaptureState.Listening => $"Press a button for {target.Name}. {CancelHint} cancels (15 seconds).",
+                CaptureState.Finishing => "Release the button to continue.",
+                _ => $"Already assigned to {conflictNames}. Use this button for both? {CancelHint} cancels."
+            };
         }
 
         private void CaptureCancel(InputEventPtr evt, InputDevice device)
@@ -294,12 +305,17 @@ namespace TwoBirds
         }
 
         public void Close() => Cleanup(false);
+        private void Interrupted() => Cleanup(true);
         private void FocusChanged(bool focused) { if (!focused) Cleanup(true); }
         private bool BlockNavigation => state != CaptureState.Idle && state != CaptureState.Conflict ||
             Time.frameCount <= suppressThroughFrame;
         private void GuardSubmit(NavigationSubmitEvent evt) { if (BlockNavigation) evt.StopImmediatePropagation(); }
         private void GuardMove(NavigationMoveEvent evt) { if (BlockNavigation) evt.StopImmediatePropagation(); }
-        private void GuardCancel(NavigationCancelEvent evt) { if (SuppressMenuInput) evt.StopImmediatePropagation(); }
+        private void GuardCancel(NavigationCancelEvent evt)
+        {
+            if (state == CaptureState.Conflict) Cancel();
+            if (SuppressMenuInput) evt.StopImmediatePropagation();
+        }
         private void GuardKey(KeyDownEvent evt) { if (BlockNavigation) evt.StopImmediatePropagation(); }
         private bool AllowedTarget(IEventHandler target) => target is VisualElement element &&
             (element == cancel || cancel.Contains(element) || state == CaptureState.Conflict && (element == accept || accept.Contains(element)));
@@ -315,8 +331,8 @@ namespace TwoBirds
             cancel.clicked -= Cancel;
             accept.clicked -= Accept;
             restore.clicked -= Restore;
-            uiCancel.performed -= ContextCancel;
             presentation.Changed -= Refresh;
+            presentation.Interrupted -= Interrupted;
             Application.focusChanged -= FocusChanged;
             root.UnregisterCallback<NavigationSubmitEvent>(GuardSubmit, TrickleDown.TrickleDown);
             root.UnregisterCallback<NavigationMoveEvent>(GuardMove, TrickleDown.TrickleDown);
