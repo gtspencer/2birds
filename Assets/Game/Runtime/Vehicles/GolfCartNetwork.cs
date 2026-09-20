@@ -13,18 +13,6 @@ namespace TwoBirds
         public int Player;
         public uint Revision, ControlRevision, Generation;
     }
-    public struct SeatTransition
-    {
-        public int Player, Cart;
-        public sbyte Seat;
-        public uint Revision, ControlRevision, Generation;
-        public Vector3 Position, Velocity, Ejection;
-        public Quaternion Rotation;
-        public bool PlacementPending, ContextOnly, CarryPlacement, ChargingUse;
-        public CarryRole Role;
-        public int Partner;
-        public float Immunity, Recovery;
-    }
 
     [RequireComponent(typeof(GolfCartController))]
     public sealed partial class GolfCartNetwork : TickNetworkBehaviour
@@ -131,7 +119,7 @@ namespace TwoBirds
             CartBaseline state, Color color, bool lights)
         {
             if (IsServerInitialized) return;
-            ApplyState(revision, current, recovery, Array.Empty<SeatTransition>());
+            ApplyState(revision, current, recovery, Array.Empty<PlayerControlTransition>());
             InstallBaseline(state);
             bodyColor = color;
             presentation.SetColor(color);
@@ -222,7 +210,7 @@ namespace TwoBirds
                     controller.Body.linearVelocity = controller.Body.angularVelocity = Vector3.zero;
                     Recovery = CartRecovery.None;
                     BeginBaseline(true);
-                    Broadcast(Array.Empty<SeatTransition>(), true);
+                    Broadcast(Array.Empty<PlayerControlTransition>(), true);
                 }
                 change.Player?.CompleteRequest(change.Request, clear ? SeatRequestResult.Completed : SeatRequestResult.Blocked);
                 return;
@@ -234,7 +222,7 @@ namespace TwoBirds
         private void Commit(PendingChange change, CartMotion frame, bool handoff)
         {
             reservedExits.Clear();
-            var transitions = new List<SeatTransition>(4);
+            var transitions = new List<PlayerControlTransition>(4);
             if (change.Eject)
             {
                 for (int i = 0; i < 4; i++)
@@ -248,7 +236,7 @@ namespace TwoBirds
             {
                 var player = change.Player;
                 if (!player) { pending = null; return; }
-                SeatTransition transition;
+                PlayerControlTransition transition;
                 if (change.Seat < 0)
                 {
                     transition = CreateExit(player, frame, change, false);
@@ -259,7 +247,7 @@ namespace TwoBirds
                         return;
                     }
                 }
-                else transition = new SeatTransition { Player = player.ObjectId, Cart = ObjectId, Seat = (sbyte)change.Seat,
+                else transition = new PlayerControlTransition { Player = player.ObjectId, Cart = ObjectId, Seat = (sbyte)change.Seat,
                     Revision = player.Revision + 1, ControlRevision = player.Motor.ControlRevision + 1,
                     Immunity = player.Carry ? player.Carry.RemainingImmunity : 0f, Generation = player.Motor.ImpactGeneration + 1 };
                 if (player.Cart == this) occupants[player.SeatIndex] = new CartOccupant { Player = -1 };
@@ -269,7 +257,7 @@ namespace TwoBirds
                 if (change.Partner)
                 {
                     var partner = change.Partner;
-                    var paired = new SeatTransition { Player = partner.ObjectId, Cart = ObjectId, Seat = (sbyte)change.PartnerSeat,
+                    var paired = new PlayerControlTransition { Player = partner.ObjectId, Cart = ObjectId, Seat = (sbyte)change.PartnerSeat,
                         Revision = partner.Revision + 1, ControlRevision = partner.Motor.ControlRevision + 1,
                         Generation = partner.Motor.ImpactGeneration + 1, Immunity = partner.Carry ? partner.Carry.RemainingImmunity : 0f };
                     occupants[change.PartnerSeat] = new CartOccupant { Player = partner.ObjectId, Revision = paired.Revision,
@@ -289,7 +277,7 @@ namespace TwoBirds
             change.Player?.CompleteRequest(change.Request);
         }
 
-        private SeatTransition CreateExit(PlayerSeating player, CartMotion frame, PendingChange change, bool forced)
+        private PlayerControlTransition CreateExit(PlayerSeating player, CartMotion frame, PendingChange change, bool forced)
         {
             var seat = seats[player.SeatIndex];
             Vector3 riderPosition = frame.Position + frame.Rotation * seat.RiderLocal.position;
@@ -300,7 +288,7 @@ namespace TwoBirds
             bool clear = player.TryExit(desired, reservedExits, out var position);
             if (clear) reservedExits.Add(position);
             Vector3 outward = Vector3.ProjectOnPlane(riderPosition - center, Vector3.up).normalized;
-            return new SeatTransition { Player = player.ObjectId, Cart = ObjectId, Seat = -1,
+            return new PlayerControlTransition { Player = player.ObjectId, Cart = ObjectId, Seat = -1,
                 Revision = player.Revision + 1, ControlRevision = player.Motor.ControlRevision + 1,
                     Immunity = player.Carry ? player.Carry.RemainingImmunity : 0f, Generation = player.Motor.ImpactGeneration + 1,
                 Position = position, Rotation = Quaternion.Euler(0f, controller.Heading, 0f), Velocity = velocity,
@@ -308,7 +296,7 @@ namespace TwoBirds
                 PlacementPending = !clear };
         }
 
-        private void Broadcast(SeatTransition[] transitions, bool resetMotion)
+        private void Broadcast(PlayerControlTransition[] transitions, bool resetMotion)
         {
             uint revision = StateRevision + 1;
             ApplyState(revision, occupants, Recovery, transitions);
@@ -316,7 +304,7 @@ namespace TwoBirds
         }
 
         [ObserversRpc]
-        private void ObserversState(uint revision, CartOccupant[] current, CartRecovery recovery, SeatTransition[] transitions,
+        private void ObserversState(uint revision, CartOccupant[] current, CartRecovery recovery, PlayerControlTransition[] transitions,
             CartBaseline? baseline)
         {
             if (IsServerInitialized || revision <= StateRevision) return;
@@ -324,7 +312,7 @@ namespace TwoBirds
             if (baseline.HasValue) InstallBaseline(baseline.Value);
         }
 
-        private void ApplyState(uint revision, CartOccupant[] current, CartRecovery recovery, SeatTransition[] transitions)
+        private void ApplyState(uint revision, CartOccupant[] current, CartRecovery recovery, PlayerControlTransition[] transitions)
         {
             if (revision <= StateRevision) return;
             StateRevision = revision;
@@ -334,7 +322,7 @@ namespace TwoBirds
             Recovery = recovery;
             foreach (var transition in transitions) PlayerSeating.Receive(transition, true);
             for (int i = 0; i < 4; i++)
-                if (occupants[i].Player >= 0) PlayerSeating.Receive(new SeatTransition
+                if (occupants[i].Player >= 0) PlayerSeating.Receive(new PlayerControlTransition
                 {
                     Player = occupants[i].Player, Cart = ObjectId, Seat = (sbyte)i,
                     Revision = occupants[i].Revision, ControlRevision = occupants[i].ControlRevision, Generation = occupants[i].Generation
@@ -381,7 +369,7 @@ namespace TwoBirds
         {
             if (!IsServerInitialized || Recovery == CartRecovery.None || Busy) return;
             Recovery = CartRecovery.None;
-            Broadcast(Array.Empty<SeatTransition>(), false);
+            Broadcast(Array.Empty<PlayerControlTransition>(), false);
         }
 
         private void Disconnect(NetworkConnection connection)
@@ -409,7 +397,7 @@ namespace TwoBirds
                 RemoveOwnership();
                 BeginBaseline();
             }
-            Broadcast(Array.Empty<SeatTransition>(), driverLeft);
+            Broadcast(Array.Empty<PlayerControlTransition>(), driverLeft);
         }
 
         public bool LightsOn => lightsOn;

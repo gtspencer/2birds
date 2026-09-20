@@ -241,7 +241,7 @@ namespace TwoBirds
         private static void ApplyTransition(CarryTransition transition)
         {
             bool pickup = transition.Kind == CarryTransitionKind.Pickup;
-            var carrier = new SeatTransition
+            var carrier = new PlayerControlTransition
             {
                 Player = transition.Carrier, Cart = -1, Seat = -1, ControlRevision = transition.CarrierRevision,
                 ContextOnly = true, Role = pickup ? CarryRole.Carrying : CarryRole.Free,
@@ -256,7 +256,7 @@ namespace TwoBirds
                 carrier.Velocity = source.motor.Body.linearVelocity;
                 carrier.Immunity = source.RemainingImmunity;
             }
-            var carried = new SeatTransition
+            var carried = new PlayerControlTransition
             {
                 Player = transition.Carried, Cart = -1, Seat = -1, ControlRevision = transition.CarriedRevision,
                 Generation = transition.Generation, Role = pickup ? CarryRole.Carried : CarryRole.Free,
@@ -367,7 +367,7 @@ namespace TwoBirds
             Install(CarryRole.Free, -1, 0f);
         }
 
-        [ObserversRpc] private void ObserversSurvivor(SeatTransition state)
+        [ObserversRpc] private void ObserversSurvivor(PlayerControlTransition state)
         {
             if (!IsServerInitialized) PlayerSeating.Receive(state, false);
         }

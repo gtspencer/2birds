@@ -11,7 +11,7 @@ namespace TwoBirds
     public sealed class PlayerSeating : NetworkBehaviour
     {
         internal static readonly Dictionary<int, PlayerSeating> Players = new();
-        private static readonly Dictionary<int, (SeatTransition state, bool impulse)> unresolved = new();
+        private static readonly Dictionary<int, (PlayerControlTransition state, bool impulse)> unresolved = new();
         public static PlayerSeating Local { get; private set; }
         private readonly Collider[] query = new Collider[64];
         private readonly RaycastHit[] pathHits = new RaycastHit[64];
@@ -21,7 +21,7 @@ namespace TwoBirds
         private PlayerNetworkState networkState;
         internal PlayerCarry Carry { get; private set; }
         internal bool ServerRequestPending { get; set; }
-        private SeatTransition current;
+        private PlayerControlTransition current;
         private GolfCartNetwork exitCart;
         private uint requestId;
         private float retryTime, seatYaw, lookOffset;
@@ -71,7 +71,7 @@ namespace TwoBirds
             TargetCurrent(connection, state);
         }
 
-        internal SeatTransition CaptureCurrent()
+        internal PlayerControlTransition CaptureCurrent()
         {
             var state = current;
             state.Player = ObjectId;
@@ -92,12 +92,12 @@ namespace TwoBirds
             state.Immunity = Carry ? Carry.RemainingImmunity : 0f;
             return state;
         }
-        [TargetRpc] private void TargetCurrent(NetworkConnection connection, SeatTransition state)
+        [TargetRpc] private void TargetCurrent(NetworkConnection connection, PlayerControlTransition state)
         {
             if (!IsServerInitialized) Receive(state, false);
         }
 
-        internal static void Receive(SeatTransition state, bool impulse)
+        internal static void Receive(PlayerControlTransition state, bool impulse)
         {
             if (Players.TryGetValue(state.Player, out var player))
             {
@@ -178,7 +178,7 @@ namespace TwoBirds
             feedbackUntil = Time.unscaledTime + 3f;
         }
 
-        private void Apply(SeatTransition state, bool impulse)
+        private void Apply(PlayerControlTransition state, bool impulse)
         {
             if (receivedState && state.ControlRevision <= current.ControlRevision) return;
             receivedState = true;
@@ -317,7 +317,7 @@ namespace TwoBirds
                 }
             }
         }
-        [ObserversRpc] private void ObserversPlacement(SeatTransition state) { if (!IsServerInitialized) Receive(state, true); }
+        [ObserversRpc] private void ObserversPlacement(PlayerControlTransition state) { if (!IsServerInitialized) Receive(state, true); }
 
         internal bool TryExit(Vector3 desired, List<Vector3> reserved, out Vector3 position)
         {
