@@ -39,7 +39,12 @@ namespace TwoBirds
         private void LateUpdate()
         {
             // One driver orders all scene hosts before the singleton spring batch.
-            foreach (var pair in systems) { if (pair.Value != this) return; break; }
+            foreach (var pair in systems)
+            {
+                if (!pair.Value || !pair.Value.isActiveAndEnabled) continue;
+                if (pair.Value != this) return;
+                break;
+            }
             float dt = Mathf.Min(Time.deltaTime, 0.05f);
             bool prepared = false;
             foreach (var pair in systems)
@@ -48,15 +53,20 @@ namespace TwoBirds
                 for (int i = 0; i < system.hosts.Count; i++)
                 {
                     var host = system.hosts[i];
-                    host.UpdateInput(dt, Time.deltaTime > 0.25f);
-                    if (!prepared && host.NeedsPreparation)
+                    if (!host || host.Failed) continue;
+                    try
                     {
-                        prepared = true;
-                        using (PrepareMarker.Auto())
-                            try { host.Prepare(system.staging); }
-                            catch (Exception exception) { host.PreparationFailed(exception); }
+                        host.UpdateInput(dt, Time.deltaTime > 0.25f);
+                        if (!prepared && host.NeedsPreparation)
+                        {
+                            prepared = true;
+                            using (PrepareMarker.Auto())
+                                try { host.Prepare(system.staging); }
+                                catch (Exception exception) { host.PreparationFailed(exception); }
+                        }
+                        using (EvaluateMarker.Auto()) host.Evaluate(dt);
                     }
-                    using (EvaluateMarker.Auto()) host.Evaluate(dt);
+                    catch (Exception exception) { host.PresentationFailed(exception); }
                 }
             }
             using (SpringsMarker.Auto())
@@ -64,8 +74,15 @@ namespace TwoBirds
                 AvatarSpringBatch.Process(dt);
             }
             foreach (var pair in systems)
-                for (int i = 0; i < pair.Value.hosts.Count; i++) pair.Value.hosts[i].Commit();
+                for (int i = 0; i < pair.Value.hosts.Count; i++)
+                {
+                    var host = pair.Value.hosts[i];
+                    if (!host || host.Failed) continue;
+                    host.Commit();
+                }
         }
+
+        private void OnDisable() => AvatarSpringBatch.Flush();
 
         private void OnDestroy()
         {

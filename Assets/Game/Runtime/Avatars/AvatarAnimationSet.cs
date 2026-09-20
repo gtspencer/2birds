@@ -6,6 +6,9 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/Avatar Animation Set")]
     public sealed class AvatarAnimationSet : ScriptableObject
     {
+        public const float MinimumPlayback = 0.65f, MaximumPlayback = 1.8f;
+        public event Action ContentChanged;
+        private void OnValidate() => ContentChanged?.Invoke();
         public AnimationClip Idle, Jump, Fall, Seated;
         public LocomotionClip WalkForward, WalkBackward, WalkLeft, WalkRight;
         public LocomotionClip RunForward, RunBackward, RunLeft, RunRight;
@@ -44,13 +47,20 @@ namespace TwoBirds
         {
             get
             {
-                if (!Idle || !Jump || !Fall || !Seated || AscentEnd <= AscentStart || AscentDuration <= 0f) return false;
+                if (!Idle || !Jump || !Fall || !Seated || Idle.length <= 0f || Jump.length <= 0f || Fall.length <= 0f || Seated.length <= 0f ||
+                    !float.IsFinite(AscentStart) || !float.IsFinite(AscentEnd) || !float.IsFinite(AscentDuration) ||
+                    AscentStart < 0f || AscentEnd > 1f || AscentEnd <= AscentStart || AscentDuration <= 0f) return false;
+                float minimumCycles = 0f, maximumCycles = float.PositiveInfinity;
                 for (int i = 0; i < 8; i++)
                 {
                     var slot = GetLocomotion(i);
-                    if (!slot.Clip || slot.Clip.length <= 0f || slot.NominalSpeed <= 0f || slot.ReferenceHumanScale <= 0f) return false;
+                    if (!slot.Clip || slot.Clip.length <= 0f || !float.IsFinite(slot.NominalSpeed) || !float.IsFinite(slot.ReferenceHumanScale) ||
+                        !float.IsFinite(slot.CycleOffset) || slot.NominalSpeed <= 0f || slot.ReferenceHumanScale <= 0f) return false;
+                    minimumCycles = Mathf.Max(minimumCycles, MinimumPlayback / slot.Clip.length);
+                    maximumCycles = Mathf.Min(maximumCycles, MaximumPlayback / slot.Clip.length);
                 }
-                return true;
+                // All directions and gaits can overlap while blending.
+                return minimumCycles <= maximumCycles;
             }
         }
     }

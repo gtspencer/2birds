@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using UniGLTF;
 using UniGLTF.SpringBoneJobs.Blittables;
@@ -10,7 +11,27 @@ namespace TwoBirds
 {
     public sealed class AvatarSpringRuntimeProvider : MonoBehaviour, IVrm10SpringBoneRuntimeProvider
     {
-        public IVrm10SpringBoneRuntime CreateSpringBoneRuntime() => new Runtime();
+        private Runtime runtime;
+        public Task Initialization => runtime.Initialization;
+        public IVrm10SpringBoneRuntime CreateSpringBoneRuntime() => runtime = new Runtime();
+
+        public static void ValidateSpringReferences(Vrm10Instance instance)
+        {
+            foreach (var spring in instance.SpringBone.Springs)
+            {
+                if (spring == null || spring.Joints == null || spring.ColliderGroups == null)
+                    throw new InvalidOperationException("Spring chain data is missing.");
+                foreach (var joint in spring.Joints)
+                    if (!joint) throw new InvalidOperationException($"Spring {spring.Name} contains a missing joint.");
+                foreach (var group in spring.ColliderGroups)
+                {
+                    if (!group || group.Colliders == null)
+                        throw new InvalidOperationException($"Spring {spring.Name} contains a missing collider group.");
+                    foreach (var collider in group.Colliders)
+                        if (!collider) throw new InvalidOperationException($"Spring {spring.Name}, group {group.name} contains a missing collider.");
+                }
+            }
+        }
 
         private sealed class Runtime : IVrm10SpringBoneRuntime
         {
@@ -18,10 +39,14 @@ namespace TwoBirds
             private Vrm10Instance instance;
             private FastSpringBoneBuffer buffer;
             private bool hasSprings;
+            internal Task Initialization { get; private set; }
 
-            public async Task InitializeAsync(Vrm10Instance value, IAwaitCaller caller)
+            public Task InitializeAsync(Vrm10Instance value, IAwaitCaller caller) => Initialization = Initialize(value, caller);
+
+            private async Task Initialize(Vrm10Instance value, IAwaitCaller caller)
             {
                 instance = value;
+                ValidateSpringReferences(value);
                 foreach (var spring in value.SpringBone.Springs) hasSprings |= spring.Joints.Count > 1;
                 if (!hasSprings) return;
                 buffer = await FastSpringBoneBufferFactory.ConstructSpringBoneAsync(caller, instance);
@@ -52,13 +77,7 @@ namespace TwoBirds
             public void Dispose()
             {
                 if (buffer == null) return;
-                if (service)
-                {
-                    service.BufferCombiner.Register(null, buffer);
-                    // UniVRM backs up departing buffers during removal; keep them alive until then.
-                    service.BufferCombiner.ReconstructIfDirty(default).Complete();
-                }
-                buffer.Dispose();
+                AvatarSpringBatch.Retire(buffer);
                 buffer = null;
             }
 

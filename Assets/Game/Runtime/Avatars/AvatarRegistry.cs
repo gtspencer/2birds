@@ -26,7 +26,14 @@ namespace TwoBirds
         public bool TryResolve(AvatarId id, out Entry entry)
         {
             if (lookup == null) BuildLookup();
-            return lookup.TryGetValue(id.Value, out entry) && entry != null;
+            if (!lookup.TryGetValue(id.Value, out entry) || entry == null) return false;
+            try { AvatarContentValidation.Validate(entry.Prefab, entry.Settings); return true; }
+            catch (Exception exception)
+            {
+                Debug.LogError($"Invalid avatar entry {id} in {name}: {exception.Message}", this);
+                entry = null;
+                return false;
+            }
         }
 
         private void BuildLookup()

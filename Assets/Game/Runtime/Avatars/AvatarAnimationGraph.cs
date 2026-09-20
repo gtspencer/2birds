@@ -5,19 +5,20 @@ using UnityEngine.Playables;
 
 namespace TwoBirds
 {
-    internal enum AvatarPose { Locomotion, Jump, Fall, Seated }
+    internal enum AvatarPose { Locomotion, Jump, Fall, Seated, Count }
 
     internal sealed class AvatarAnimationState
     {
         internal readonly float[] Direction = { 1f, 0f, 0f, 0f };
-        internal readonly float[] Weights = { 1f, 0f, 0f, 0f };
-        private readonly float[] from = new float[4];
+        internal readonly float[] Weights = new float[(int)AvatarPose.Count];
+        private readonly float[] from = new float[(int)AvatarPose.Count];
         internal float Phase, IdleTime, AirTime, FallTime, SeatedTime, Speed, Motion, Run;
         private float transition, duration, previousVertical;
         private int landingFrames;
         private bool initialized, attached;
         private AvatarPose pose;
 
+        internal AvatarAnimationState() => Weights[(int)AvatarPose.Locomotion] = 1f;
         internal void Seed(float seed) { Phase = seed; IdleTime = seed; }
         internal void Advance(in AvatarPresentationInput input, float bodyYaw, AvatarSettings settings,
             AvatarAnimationSet clips, float dt)
@@ -61,13 +62,13 @@ namespace TwoBirds
             }
             if (!initialized)
             {
-                for (int i = 0; i < 4; i++) Weights[i] = i == (int)next ? 1f : 0f;
+                for (int i = 0; i < Weights.Length; i++) Weights[i] = i == (int)next ? 1f : 0f;
                 pose = next;
                 initialized = true;
             }
             if (next != pose || constrained != attached)
             {
-                Array.Copy(Weights, from, 4);
+                Array.Copy(Weights, from, Weights.Length);
                 duration = constrained != attached || next == AvatarPose.Seated || pose == AvatarPose.Seated ? 0.18f :
                     next == AvatarPose.Locomotion ? 0.15f : pose == AvatarPose.Jump && next == AvatarPose.Fall ? 0.12f : 0.10f;
                 transition = 0f;
@@ -77,7 +78,7 @@ namespace TwoBirds
             {
                 transition = Mathf.Min(transition + dt, duration);
                 float t = Mathf.SmoothStep(0f, 1f, transition / duration);
-                for (int i = 0; i < 4; i++) Weights[i] = Mathf.Lerp(from[i], i == (int)pose ? 1f : 0f, t);
+                for (int i = 0; i < Weights.Length; i++) Weights[i] = Mathf.Lerp(from[i], i == (int)pose ? 1f : 0f, t);
             }
             attached = constrained;
             previousVertical = velocity.y;
@@ -86,14 +87,19 @@ namespace TwoBirds
             FallTime = Mathf.Repeat(FallTime + dt, clips.Fall.length);
             if (pose == AvatarPose.Jump) AirTime = Mathf.Min(AirTime + dt, clips.AscentDuration);
             float cycles = 0f;
+            float minimumCycles = 0f, maximumCycles = float.PositiveInfinity;
             for (int i = 0; i < 8; i++)
             {
                 var slot = clips.GetLocomotion(i);
+                float weight = Direction[i % 4] * (i < 4 ? 1f - Run : Run);
+                if (weight <= 0f) continue;
                 float nominal = slot.NominalSpeed * settings.Generated.HumanScale * settings.Scale / slot.ReferenceHumanScale;
-                float ratio = Mathf.Clamp(Speed / nominal * settings.PlaybackMultiplier, 0.65f, 1.8f);
-                cycles += Direction[i % 4] * (i < 4 ? 1f - Run : Run) * ratio / slot.Clip.length;
+                float ratio = Mathf.Clamp(Speed / nominal * settings.PlaybackMultiplier, AvatarAnimationSet.MinimumPlayback, AvatarAnimationSet.MaximumPlayback);
+                cycles += weight * ratio / slot.Clip.length;
+                minimumCycles = Mathf.Max(minimumCycles, AvatarAnimationSet.MinimumPlayback / slot.Clip.length);
+                maximumCycles = Mathf.Min(maximumCycles, AvatarAnimationSet.MaximumPlayback / slot.Clip.length);
             }
-            Phase = Mathf.Repeat(Phase + cycles * Motion * dt, 1f);
+            if (Motion > 0f) Phase = Mathf.Repeat(Phase + Mathf.Clamp(cycles * Motion, minimumCycles, maximumCycles) * dt, 1f);
         }
     }
 
@@ -125,9 +131,9 @@ namespace TwoBirds
                 graph.Connect(walk, 0, gait, 0); graph.Connect(run, 0, gait, 1);
                 motion = AnimationMixerPlayable.Create(graph, 2);
                 graph.Connect(idle, 0, motion, 0); graph.Connect(gait, 0, motion, 1);
-                states = AnimationMixerPlayable.Create(graph, 4);
-                graph.Connect(motion, 0, states, 0); graph.Connect(jump, 0, states, 1);
-                graph.Connect(fall, 0, states, 2); graph.Connect(seated, 0, states, 3);
+                states = AnimationMixerPlayable.Create(graph, (int)AvatarPose.Count);
+                graph.Connect(motion, 0, states, (int)AvatarPose.Locomotion); graph.Connect(jump, 0, states, (int)AvatarPose.Jump);
+                graph.Connect(fall, 0, states, (int)AvatarPose.Fall); graph.Connect(seated, 0, states, (int)AvatarPose.Seated);
                 var layers = AnimationLayerMixerPlayable.Create(graph, 1);
                 graph.Connect(states, 0, layers, 0);
                 layers.SetInputWeight(0, 1f);
@@ -149,7 +155,7 @@ namespace TwoBirds
 
         internal void SampleSeated()
         {
-            for (int i = 0; i < 4; i++) states.SetInputWeight(i, i == 3 ? 1f : 0f);
+            for (int i = 0; i < (int)AvatarPose.Count; i++) states.SetInputWeight(i, i == (int)AvatarPose.Seated ? 1f : 0f);
             seated.SetTime(0);
             graph.Evaluate(0f);
         }
@@ -168,7 +174,7 @@ namespace TwoBirds
             jump.SetTime(Mathf.Lerp(clips.AscentStart, clips.AscentEnd, state.AirTime / clips.AscentDuration) * clips.Jump.length);
             fall.SetTime(state.FallTime);
             seated.SetTime(state.SeatedTime);
-            for (int i = 0; i < 4; i++) states.SetInputWeight(i, state.Weights[i]);
+            for (int i = 0; i < state.Weights.Length; i++) states.SetInputWeight(i, state.Weights[i]);
             graph.Evaluate(0f);
         }
 

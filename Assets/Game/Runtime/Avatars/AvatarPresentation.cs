@@ -45,11 +45,14 @@ namespace TwoBirds
         internal float BodyYaw { get; private set; }
         internal uint RequestGeneration { get; private set; }
         internal bool NeedsPreparation { get; private set; }
+        internal bool Failed { get; private set; }
         internal struct HandTarget { internal Transform Target; internal float Position, Rotation; }
         internal HandTarget LeftHand, RightHand;
         private AvatarInstance active, candidate;
         private AvatarRegistry.Entry candidateEntry;
         private AvatarSettings subscribedSettings;
+        private AvatarAnimationSet subscribedAnimations;
+        private bool animationsValid;
         private AvatarPresentationSystem system;
         private uint candidateRequest, resetRevision, controlRevision;
         private ulong bindingGeneration;
@@ -62,12 +65,17 @@ namespace TwoBirds
         {
             if (registry) registry.ContentChanged += Rebind;
             if (subscribedSettings) subscribedSettings.ContentChanged += Rebind;
+            Rebind();
+            RefreshAnimations();
+            UpdateRegistration();
         }
         private void OnDisable()
         {
             if (registry) registry.ContentChanged -= Rebind;
             if (subscribedSettings) subscribedSettings.ContentChanged -= Rebind;
-            SetVisual(false);
+            if (subscribedAnimations) subscribedAnimations.ContentChanged -= Rebind;
+            subscribedAnimations = null;
+            UpdateRegistration();
         }
 
         public void Configure(AvatarRegistry value, bool render, float phaseSeed = 0f)
@@ -76,15 +84,21 @@ namespace TwoBirds
             registry = value;
             if (isActiveAndEnabled && registry) registry.ContentChanged += Rebind;
             State.Seed(phaseSeed);
+            RefreshAnimations();
             SetVisual(render);
         }
 
         public void SetVisual(bool value)
         {
-            if (visual == value) return;
             visual = value;
-            if (value)
+            UpdateRegistration();
+        }
+
+        private void UpdateRegistration()
+        {
+            if (visual && isActiveAndEnabled)
             {
+                if (system) return;
                 system = AvatarPresentationSystem.ForScene(gameObject.scene);
                 system.Register(this);
                 if (Resolved != null) NeedsPreparation = true;
@@ -95,6 +109,7 @@ namespace TwoBirds
                 if (system) system.Unregister(this);
                 ReleaseInstances();
                 system = null;
+                facingInitialized = hasPosition = false;
                 FallbackChanged?.Invoke(false);
             }
         }
@@ -110,14 +125,23 @@ namespace TwoBirds
                 return;
             }
             Resolved = entry;
+            Failed = false;
             if (subscribedSettings) subscribedSettings.ContentChanged -= Rebind;
             subscribedSettings = entry.Settings;
             if (isActiveAndEnabled) subscribedSettings.ContentChanged += Rebind;
             IdentityResolved?.Invoke(entry);
-            NeedsPreparation = visual;
+            RefreshAnimations();
+            NeedsPreparation = visual && isActiveAndEnabled;
         }
 
         private void Rebind() { if (RequestedId.IsValid) RequestAvatar(RequestedId); }
+        private void RefreshAnimations()
+        {
+            if (subscribedAnimations) subscribedAnimations.ContentChanged -= Rebind;
+            subscribedAnimations = registry ? registry.Animations : null;
+            animationsValid = subscribedAnimations && subscribedAnimations.IsComplete;
+            if (isActiveAndEnabled && subscribedAnimations) subscribedAnimations.ContentChanged += Rebind;
+        }
         public void SetInput(in AvatarPresentationInput input) => Input = input;
         public bool TryGetNameAnchor(out Vector3 position)
         {
@@ -172,7 +196,7 @@ namespace TwoBirds
                 hasPosition && !attached && (transform.position - previousPosition).sqrMagnitude > 4f;
             previousPosition = transform.position; hasPosition = true;
             resetRevision = Input.ResetRevision; controlRevision = Input.ControlRevision; wasAttached = attached;
-            if (AnimationEnabled && registry && registry.Animations && registry.Animations.IsComplete)
+            if (AnimationEnabled && animationsValid)
             {
                 var settings = active ? active.Settings : Resolved?.Settings;
                 if (settings) State.Advance(Input, BodyYaw, settings, registry.Animations, dt);
@@ -190,7 +214,7 @@ namespace TwoBirds
             CancelCandidate();
             candidateEntry = Resolved;
             candidateRequest = RequestGeneration;
-            if (!registry.Animations || !registry.Animations.IsComplete) throw new InvalidOperationException("Process the complete shared avatar animation set first.");
+            if (!animationsValid) throw new InvalidOperationException("Process the complete shared avatar animation set first.");
             GameObject root = Instantiate(candidateEntry.Prefab, staging);
             try
             {
@@ -242,6 +266,13 @@ namespace TwoBirds
             CancelCandidate();
             Debug.LogError($"Avatar {RequestedId} preparation failed: {exception.Message}", this);
             FallbackChanged?.Invoke(visual && !active);
+        }
+        internal void PresentationFailed(Exception exception)
+        {
+            Failed = true;
+            ReleaseInstances();
+            Debug.LogError($"Avatar {RequestedId} presentation stopped: {exception}", this);
+            FallbackChanged?.Invoke(visual && isActiveAndEnabled);
         }
         private void CancelCandidate() { if (candidate) candidate.Release(); candidate = null; }
         internal void ReleaseInstances()

@@ -16,20 +16,11 @@ namespace TwoBirds.Editor
         public const string AnimationPath = "Assets/Game/Settings/Avatars/AvatarAnimationSet.asset";
         private const string SettingsFolder = "Assets/Game/Settings/Avatars";
         private const string PrefabFolder = "Assets/Game/Prefabs/Avatars";
-        private const int FormatVersion = 1;
-        private static readonly string[] ClipFiles =
+        private static readonly (string File, int Locomotion)[] ClipFiles =
         {
-            "walking.fbx", "Walking Backwards.fbx", "left strafe walking.fbx", "right strafe walking.fbx",
-            "running.fbx", "Running Backward.fbx", "left strafe.fbx", "right strafe.fbx",
-            "idle.fbx", "jump.fbx", "Falling.fbx", "Seated Idle.fbx"
-        };
-        private static readonly HumanBodyBones[] RequiredBones =
-        {
-            HumanBodyBones.Hips, HumanBodyBones.Spine, HumanBodyBones.Head,
-            HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot,
-            HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot,
-            HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand,
-            HumanBodyBones.RightUpperArm, HumanBodyBones.RightLowerArm, HumanBodyBones.RightHand
+            ("walking.fbx", 0), ("Walking Backwards.fbx", 1), ("left strafe walking.fbx", 2), ("right strafe walking.fbx", 3),
+            ("running.fbx", 4), ("Running Backward.fbx", 5), ("left strafe.fbx", 6), ("right strafe.fbx", 7),
+            ("idle.fbx", -1), ("jump.fbx", -1), ("Falling.fbx", -1), ("Seated Idle.fbx", -1)
         };
         private GameObject source;
         private AvatarSettings resolvedSettings;
@@ -85,13 +76,11 @@ namespace TwoBirds.Editor
         {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Process avatars outside Play Mode.");
             string stage = "source import";
-            var created = new List<string>();
+            var changes = new ProcessingChanges();
             var scene = EditorSceneManager.NewPreviewScene();
             GameObject root = null;
             AvatarSettings settings = null, draft = null;
-            string settingsBackup = null;
             AvatarRegistry registry = null;
-            string registryBackup = null;
             try
             {
                 var importer = AssetImporter.GetAtPath(sourcePath);
@@ -104,6 +93,7 @@ namespace TwoBirds.Editor
                 int urp = Array.IndexOf(pipeline.enumNames, "UniversalRenderPipeline");
                 if (!migrate.boolValue || pipeline.enumValueIndex != urp)
                 {
+                    changes.Capture(importer);
                     migrate.boolValue = true;
                     pipeline.enumValueIndex = urp;
                     importerData.ApplyModifiedPropertiesWithoutUndo();
@@ -135,7 +125,7 @@ namespace TwoBirds.Editor
                     throw new InvalidOperationException("Source root scale must be positive and uniform.");
                 root.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
                 root.transform.localScale = Vector3.one;
-                foreach (var bone in RequiredBones)
+                foreach (var bone in AvatarContentValidation.RequiredBones)
                     if (!animator.GetBoneTransform(bone)) throw new InvalidOperationException($"Missing required Humanoid mapping: {bone}.");
                 CheckWriters(root, animator, vrm);
                 var renderers = root.GetComponentsInChildren<Renderer>(true);
@@ -144,18 +134,18 @@ namespace TwoBirds.Editor
                 if (draft.VisualHeight <= 0f || !float.IsFinite(draft.VisualHeight)) throw new InvalidOperationException("VisualHeight must be positive and finite.");
                 stage = "shared animation preparation";
                 EnsureFolder(SettingsFolder); EnsureFolder(PrefabFolder);
-                bool newAnimations = !AssetDatabase.LoadAssetAtPath<AvatarAnimationSet>(AnimationPath);
-                if (newAnimations) created.Add(AnimationPath);
-                var animations = PrepareAnimations(prepareAnimations);
+                var animations = PrepareAnimations(prepareAnimations, changes);
                 stage = "presentation prefab preparation";
                 PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
                 PrepareModel(root, animator, vrm, draft.Generated.Height);
+                AvatarContentValidation.Validate(root, draft);
                 root.SetActive(true);
                 string prefabPath = ExistingPrefabPath(registry, draft.Id) ?? $"{PrefabFolder}/{draft.Id}.prefab";
                 string settingsPath = settings ? AssetDatabase.GetAssetPath(settings) : $"{SettingsFolder}/{draft.Id}.asset";
                 if (!settings && AssetDatabase.LoadMainAssetAtPath(settingsPath)) throw new InvalidOperationException($"Settings path already occupied: {settingsPath}.");
                 bool newPrefab = !AssetDatabase.LoadMainAssetAtPath(prefabPath);
-                if (newPrefab) created.Add(prefabPath);
+                if (newPrefab) changes.Created.Add(prefabPath);
+                else changes.CapturePrefab(prefabPath);
                 stage = "prefab save";
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out bool success);
                 if (!success || !prefab) throw new InvalidOperationException($"Could not save {prefabPath}.");
@@ -163,10 +153,10 @@ namespace TwoBirds.Editor
                 if (!settings)
                 {
                     settings = CreateInstance<AvatarSettings>();
-                    created.Add(settingsPath);
+                    changes.Created.Add(settingsPath);
                     AssetDatabase.CreateAsset(settings, settingsPath);
                 }
-                else settingsBackup = EditorJsonUtility.ToJson(settings);
+                else changes.Capture(settings);
                 EditorUtility.CopySerialized(draft, settings);
                 settings.name = sourceAsset.name;
                 EditorUtility.SetDirty(settings);
@@ -174,10 +164,10 @@ namespace TwoBirds.Editor
                 if (!registry)
                 {
                     registry = CreateInstance<AvatarRegistry>();
-                    created.Add(RegistryPath);
+                    changes.Created.Add(RegistryPath);
                     AssetDatabase.CreateAsset(registry, RegistryPath);
                 }
-                else registryBackup = EditorJsonUtility.ToJson(registry);
+                else changes.Capture(registry);
                 var entry = new AvatarRegistry.Entry { Id = settings.Id, Source = sourceAsset, SourceGuid = guid, Prefab = prefab, Settings = settings };
                 int index = registry.Entries.FindIndex(e => e != null && e.SourceGuid == guid);
                 if (index < 0) registry.Entries.Add(entry); else registry.Entries[index] = entry;
@@ -192,10 +182,7 @@ namespace TwoBirds.Editor
             }
             catch (Exception exception)
             {
-                if (settings && settingsBackup != null) { EditorJsonUtility.FromJsonOverwrite(settingsBackup, settings); EditorUtility.SetDirty(settings); }
-                if (registry && registryBackup != null) { EditorJsonUtility.FromJsonOverwrite(registryBackup, registry); registry.Invalidate(); EditorUtility.SetDirty(registry); }
-                for (int i = created.Count - 1; i >= 0; i--) AssetDatabase.DeleteAsset(created[i]);
-                AssetDatabase.SaveAssets();
+                changes.Restore();
                 throw new InvalidOperationException($"Avatar processing failed during {stage}: {exception.Message}", exception);
             }
             finally
@@ -258,6 +245,7 @@ namespace TwoBirds.Editor
 
         private static void CheckWriters(GameObject root, Animator animator, Vrm10Instance vrm)
         {
+            AvatarSpringRuntimeProvider.ValidateSpringReferences(vrm);
             var animated = new HashSet<Transform>();
             for (int i = 0; i < (int)HumanBodyBones.LastBone; i++)
             {
@@ -275,7 +263,6 @@ namespace TwoBirds.Editor
                 for (int i = 0; i < spring.Joints.Count - 1; i++)
                 {
                     var joint = spring.Joints[i];
-                    if (!joint) throw new InvalidOperationException("Spring chain contains a missing joint.");
                     foreach (var bone in animated)
                         if (bone == joint.transform || bone.IsChildOf(joint.transform))
                             throw new InvalidOperationException($"Spring joint {joint.name} writes a Humanoid bone or ancestor; remove that node from the authored spring chain.");
@@ -320,7 +307,7 @@ namespace TwoBirds.Editor
                 throw new InvalidOperationException("Source renderer dimensions/sole plane are invalid.");
             return new AvatarSettings.GeneratedSkeleton
             {
-                Source = source, SourceGuid = guid, FormatVersion = FormatVersion, HumanoidAvatar = animator.avatar,
+                Source = source, SourceGuid = guid, FormatVersion = AvatarSettings.CurrentFormatVersion, HumanoidAvatar = animator.avatar,
                 Bounds = bounds, Height = height, SolePlane = sole, HumanScale = animator.humanScale,
                 Hips = Position(HumanBodyBones.Hips) - Vector3.up * sole, Head = Position(HumanBodyBones.Head) - Vector3.up * sole,
                 LeftShoulder = Position(HumanBodyBones.LeftUpperArm) - Vector3.up * sole,
@@ -371,57 +358,79 @@ namespace TwoBirds.Editor
 
         public static AvatarAnimationSet PrepareAnimations(bool force = false)
         {
+            var changes = new ProcessingChanges();
+            try { return PrepareAnimations(force, changes); }
+            catch { changes.Restore(); throw; }
+        }
+
+        private static AvatarAnimationSet PrepareAnimations(bool force, ProcessingChanges changes)
+        {
             var asset = AssetDatabase.LoadAssetAtPath<AvatarAnimationSet>(AnimationPath);
             var draft = asset ? Instantiate(asset) : CreateInstance<AvatarAnimationSet>();
             try
             {
-                for (int i = 0; i < ClipFiles.Length; i++)
+                foreach (var source in ClipFiles)
                 {
-                    string path = "Assets/Art/Animations/" + ClipFiles[i];
+                    string path = "Assets/Art/Animations/" + source.File;
                     if (AssetImporter.GetAtPath(path) is not ModelImporter importer) throw new InvalidOperationException($"Missing animation source: {path}.");
                     var takes = importer.defaultClipAnimations;
                     if (takes.Length != 1) throw new InvalidOperationException($"{path} needs one unambiguous source take; found {takes.Length}.");
                     var take = takes[0];
-                    bool loop = i != 9;
-                    var slot = i < 8 ? draft.GetLocomotion(i) : default;
-                    bool calibrate = i < 8 && (slot.NominalSpeed <= 0f || slot.ReferenceHumanScale <= 0f);
+                    bool loop = source.File != "jump.fbx";
+                    var slot = source.Locomotion >= 0 ? draft.GetLocomotion(source.Locomotion) : default;
+                    bool calibrate = source.Locomotion >= 0 && (slot.NominalSpeed <= 0f || slot.ReferenceHumanScale <= 0f);
                     if (calibrate)
                     {
-                        ConfigureImporter(importer, take, loop, false);
-                        importer.SaveAndReimport();
-                        var original = SingleClip(path);
-                        Vector3 speed = original.averageSpeed;
-                        float horizontal = new Vector2(speed.x, speed.z).magnitude;
-                        if (slot.NominalSpeed <= 0f) slot.NominalSpeed = horizontal > 0.05f ? horizontal : i < 4 ? 1.6f : 3.8f;
-                        var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                        var sourceAnimator = model.GetComponent<Animator>();
-                        if (!sourceAnimator || !sourceAnimator.avatar || !sourceAnimator.avatar.isValid || !sourceAnimator.avatar.isHuman)
-                            throw new InvalidOperationException($"{path} has no valid source Humanoid Avatar.");
-                        if (slot.ReferenceHumanScale <= 0f)
+                        changes.Capture(importer);
+                        try
                         {
-                            var measurementScene = EditorSceneManager.NewPreviewScene();
-                            try
+                            ConfigureImporter(importer, take, loop, false);
+                            importer.SaveAndReimport();
+                            var original = SingleClip(path);
+                            Vector3 speed = original.averageSpeed;
+                            float horizontal = new Vector2(speed.x, speed.z).magnitude;
+                            if (slot.NominalSpeed <= 0f) slot.NominalSpeed = horizontal > 0.05f ? horizontal : source.Locomotion < 4 ? 1.6f : 3.8f;
+                            var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                            var sourceAnimator = model.GetComponent<Animator>();
+                            if (!sourceAnimator || !sourceAnimator.avatar || !sourceAnimator.avatar.isValid || !sourceAnimator.avatar.isHuman)
+                                throw new InvalidOperationException($"{path} has no valid source Humanoid Avatar.");
+                            if (slot.ReferenceHumanScale <= 0f)
                             {
-                                var measurement = (GameObject)PrefabUtility.InstantiatePrefab(model, measurementScene);
-                                measurement.transform.localScale = Vector3.one;
-                                slot.ReferenceHumanScale = measurement.GetComponent<Animator>().humanScale;
+                                var measurementScene = EditorSceneManager.NewPreviewScene();
+                                try
+                                {
+                                    var measurement = (GameObject)PrefabUtility.InstantiatePrefab(model, measurementScene);
+                                    measurement.transform.localScale = Vector3.one;
+                                    slot.ReferenceHumanScale = measurement.GetComponent<Animator>().humanScale;
+                                }
+                                finally { EditorSceneManager.ClosePreviewScene(measurementScene); }
                             }
-                            finally { EditorSceneManager.ClosePreviewScene(measurementScene); }
                         }
+                        finally { ConfigureImporter(importer, take, loop, true); importer.SaveAndReimport(); }
                     }
-                    if (force || calibrate || !ImporterMatches(importer, take, loop))
-                    { ConfigureImporter(importer, take, loop, true); importer.SaveAndReimport(); }
+                    if (!calibrate && (force || !ImporterMatches(importer, take, loop)))
+                    { changes.Capture(importer); ConfigureImporter(importer, take, loop, true); importer.SaveAndReimport(); }
                     var clip = SingleClip(path);
                     if (!clip.humanMotion || clip.length <= 0f) throw new InvalidOperationException($"{path} must contain a nonempty Humanoid clip.");
-                    if (i < 8) { slot.Clip = clip; draft.SetLocomotion(i, slot); }
-                    else if (i == 8) draft.Idle = clip;
-                    else if (i == 9) draft.Jump = clip;
-                    else if (i == 10) draft.Fall = clip;
-                    else draft.Seated = clip;
+                    if (source.Locomotion >= 0) { slot.Clip = clip; draft.SetLocomotion(source.Locomotion, slot); }
+                    else switch (source.File)
+                    {
+                        case "idle.fbx": draft.Idle = clip; break;
+                        case "jump.fbx": draft.Jump = clip; break;
+                        case "Falling.fbx": draft.Fall = clip; break;
+                        case "Seated Idle.fbx": draft.Seated = clip; break;
+                        default: throw new InvalidOperationException($"No animation assignment for {source.File}.");
+                    }
                 }
-                if (!draft.IsComplete) throw new InvalidOperationException("Animation set contains invalid calibration or jump interval settings.");
+                if (!draft.IsComplete) throw new InvalidOperationException("Animation set has invalid calibration, jump intervals, or cycle durations incompatible with the shared playback limits.");
                 EnsureFolder(SettingsFolder);
-                if (!asset) { asset = CreateInstance<AvatarAnimationSet>(); AssetDatabase.CreateAsset(asset, AnimationPath); }
+                if (!asset)
+                {
+                    asset = CreateInstance<AvatarAnimationSet>();
+                    changes.Created.Add(AnimationPath);
+                    AssetDatabase.CreateAsset(asset, AnimationPath);
+                }
+                else changes.Capture(asset);
                 EditorUtility.CopySerialized(draft, asset);
                 asset.name = "AvatarAnimationSet";
                 EditorUtility.SetDirty(asset);
@@ -429,6 +438,49 @@ namespace TwoBirds.Editor
                 return asset;
             }
             finally { DestroyImmediate(draft); }
+        }
+
+        private sealed class ProcessingChanges
+        {
+            internal readonly List<string> Created = new();
+            private readonly Dictionary<Object, string> assets = new();
+            private readonly Dictionary<string, string> importers = new();
+            private string prefabPath;
+            private byte[] prefab;
+
+            internal void Capture(Object asset)
+            {
+                if (asset is AssetImporter importer)
+                {
+                    if (!importers.ContainsKey(importer.assetPath)) importers.Add(importer.assetPath, EditorJsonUtility.ToJson(importer));
+                }
+                else if (!assets.ContainsKey(asset)) assets.Add(asset, EditorJsonUtility.ToJson(asset));
+            }
+
+            internal void CapturePrefab(string path) { prefabPath = path; prefab = File.ReadAllBytes(path); }
+
+            internal void Restore()
+            {
+                foreach (var pair in importers)
+                {
+                    var importer = AssetImporter.GetAtPath(pair.Key);
+                    EditorJsonUtility.FromJsonOverwrite(pair.Value, importer);
+                    importer.SaveAndReimport();
+                }
+                if (prefab != null)
+                {
+                    File.WriteAllBytes(prefabPath, prefab);
+                    AssetDatabase.ImportAsset(prefabPath, ImportAssetOptions.ForceUpdate);
+                }
+                foreach (var pair in assets)
+                {
+                    EditorJsonUtility.FromJsonOverwrite(pair.Value, pair.Key);
+                    EditorUtility.SetDirty(pair.Key);
+                    if (pair.Key is AvatarRegistry registry) registry.Invalidate();
+                }
+                for (int i = Created.Count - 1; i >= 0; i--) AssetDatabase.DeleteAsset(Created[i]);
+                AssetDatabase.SaveAssets();
+            }
         }
 
         private static AnimationClip SingleClip(string path)

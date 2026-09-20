@@ -12,6 +12,7 @@ namespace TwoBirds
         [SerializeField] private GameSettings gameSettings;
         private float clock;
         private bool showingB;
+        private bool initialized;
         private Pose origin;
 
         private void Start()
@@ -35,6 +36,14 @@ namespace TwoBirds
             presentation.InputSource = CaptureInput;
             presentation.SetHandTarget(AvatarIKGoal.RightHand, handTarget, 1f, 0.35f);
             presentation.RequestAvatar(avatarA);
+            initialized = true;
+        }
+
+        private void OnEnable()
+        {
+            if (!initialized) return;
+            presentation.InputSource = CaptureInput;
+            presentation.SetVisual(true);
         }
 
         private AvatarPresentationInput CaptureInput()

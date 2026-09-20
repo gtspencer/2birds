@@ -27,6 +27,7 @@ namespace TwoBirds
 
         internal void Stage(AvatarPresentation owner, AvatarRegistry.Entry entry, ulong generation)
         {
+            AvatarContentValidation.Validate(gameObject, entry.Settings);
             host = owner; Settings = entry.Settings;
             scale = Settings.Scale;
             VisualHeight = Settings.VisualHeight;
@@ -52,6 +53,7 @@ namespace TwoBirds
         {
             Place(0f);
             runtime = vrm.Runtime;
+            GetComponent<AvatarSpringRuntimeProvider>().Initialization.GetAwaiter().GetResult();
             springsRegistered = true;
             animator.enabled = true;
             graph = new AvatarAnimationGraph(animator, clips);

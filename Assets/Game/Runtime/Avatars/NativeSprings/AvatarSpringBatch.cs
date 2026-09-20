@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using UniGLTF.SpringBoneJobs.InputPorts;
 using UnityEngine;
 using UniVRM10.FastSpringBones;
 
@@ -9,6 +11,7 @@ namespace TwoBirds
         private static FastSpringBoneService.UpdateTypes previousPolicy;
         private static bool ownsService;
         private static int users;
+        private static readonly List<FastSpringBoneBuffer> retired = new();
 
         public static void Retain()
         {
@@ -22,14 +25,30 @@ namespace TwoBirds
 
         public static void Process(float deltaTime)
         {
-            service.BufferCombiner.ReconstructIfDirty(default).Complete();
+            Flush();
             if (service.BufferCombiner.HasBuffer) service.ManualUpdate(deltaTime);
+        }
+
+        internal static void Retire(FastSpringBoneBuffer buffer)
+        {
+            if (!service) { buffer.Dispose(); return; }
+            service.BufferCombiner.Register(null, buffer);
+            retired.Add(buffer);
+        }
+
+        public static void Flush()
+        {
+            if (service) service.BufferCombiner.ReconstructIfDirty(default).Complete();
+            // Reconstruction backs up departing buffers before removing them.
+            foreach (var buffer in retired) buffer.Dispose();
+            retired.Clear();
         }
 
         public static void Release()
         {
-            if (--users != 0 || !service) return;
-            service.BufferCombiner.ReconstructIfDirty(default).Complete();
+            if (--users != 0) return;
+            Flush();
+            if (!service) return;
             if (ownsService) FastSpringBoneService.Free();
             else service.UpdateType = previousPolicy;
             service = null;

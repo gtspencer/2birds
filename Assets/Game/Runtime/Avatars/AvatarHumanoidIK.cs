@@ -143,8 +143,10 @@ namespace TwoBirds
         private void ApplyHead()
         {
             if (!host.HeadLookEnabled) { animator.SetLookAtWeight(0f); return; }
-            float yaw = Mathf.Clamp(Mathf.DeltaAngle(host.BodyYaw, host.Input.LookYaw), -70f, 70f);
-            float pitch = Mathf.Clamp(host.Input.LookPitch, -40f, 50f);
+            Vector3 local = Quaternion.Inverse(host.transform.rotation) *
+                (Quaternion.Euler(host.Input.LookPitch, host.Input.LookYaw, 0f) * Vector3.forward);
+            float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -70f, 70f);
+            float pitch = Mathf.Clamp(-Mathf.Asin(Mathf.Clamp(local.y, -1f, 1f)) * Mathf.Rad2Deg, -40f, 50f);
             Vector3 direction = host.transform.rotation * Quaternion.Euler(pitch, yaw, 0f) * Vector3.forward;
             lookDirection = lookDirection == Vector3.zero ? direction : Vector3.Slerp(lookDirection, direction, AvatarPresentation.Smooth(DeltaTime, 0.05f));
             LookTarget = head.position + lookDirection * (3f * height);
