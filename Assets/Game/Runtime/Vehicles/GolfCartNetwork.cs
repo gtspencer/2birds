@@ -297,7 +297,7 @@ namespace TwoBirds
             Vector3 velocity = forced ? change.RiderVelocities[player.SeatIndex] :
                 frame.Velocity + Vector3.Cross(frame.AngularVelocity, riderPosition - center);
             Vector3 desired = frame.Position + frame.Rotation * seat.ExitLocal.position;
-            bool clear = player.TryExit(riderPosition, desired, this, forced, reservedExits, out var position);
+            bool clear = player.TryExit(desired, reservedExits, out var position);
             if (clear) reservedExits.Add(position);
             Vector3 outward = Vector3.ProjectOnPlane(riderPosition - center, Vector3.up).normalized;
             return new SeatTransition { Player = player.ObjectId, Cart = ObjectId, Seat = -1,

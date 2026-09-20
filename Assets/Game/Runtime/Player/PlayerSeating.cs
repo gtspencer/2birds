@@ -297,7 +297,7 @@ namespace TwoBirds
             {
                 retryTime = Time.unscaledTime + 0.25f;
                 if (current.CarryPlacement ? TryCarryPlacement(current.Position, current.Rotation.eulerAngles.y, null, true, out var position) :
-                    TryExit(current.Position, current.Position, exitCart, true, null, out position))
+                    TryExit(current.Position, null, out position))
                 {
                     var state = current;
                     state.Revision++;
@@ -314,40 +314,38 @@ namespace TwoBirds
         }
         [ObserversRpc] private void ObserversPlacement(SeatTransition state) { if (!IsServerInitialized) Receive(state, true); }
 
-        internal bool TryExit(Vector3 origin, Vector3 desired, GolfCartNetwork source, bool forced, List<Vector3> reserved, out Vector3 position)
+        internal bool TryExit(Vector3 desired, List<Vector3> reserved, out Vector3 position)
         {
-            position = desired;
-            if (SupportedExit(origin, desired, source, reserved, out position)) return true;
-            int rings = forced ? 5 : 4;
-            for (int ring = 0; ring < rings; ring++)
-            {
-                float radius = ring == 0 ? 1f : Mathf.Pow(2f, ring);
-                for (int step = 0; step < 16; step++)
-                {
-                    float angle = step * Mathf.PI / 8f;
-                    Vector3 candidate = desired + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
-                    if (SupportedExit(origin, candidate, source, reserved, out position)) return true;
-                }
-            }
-            position = Motor.SpawnPoint;
-            return forced && CapsuleClear(position, reserved);
+            return TryExitNear(desired, reserved, out position) ||
+                TryExitNear(Motor.SpawnPoint, reserved, out position);
         }
 
-        private bool SupportedExit(Vector3 origin, Vector3 candidate, GolfCartNetwork source, List<Vector3> reserved, out Vector3 position)
+        private bool TryExitNear(Vector3 desired, List<Vector3> reserved, out Vector3 position)
         {
-            position = candidate;
-            if (!Physics.Raycast(candidate + Vector3.up * 1.5f, Vector3.down, out var ground, 6f, groundMask, QueryTriggerInteraction.Ignore) ||
-                Vector3.Angle(ground.normal, Vector3.up) > 45f || ground.point.y > candidate.y + 0.5f) return false;
-            position.y = ground.point.y + capsule.height * 0.5f - capsule.center.y + 0.05f;
-            if (!CapsuleClear(position, reserved)) return false;
-            Vector3 travel = position - origin;
-            CapsulePoints(origin, out var bottom, out var top);
-            int count = Physics.CapsuleCastNonAlloc(bottom, top, capsule.radius, travel.normalized, pathHits,
-                travel.magnitude, clearanceMask, QueryTriggerInteraction.Ignore);
-            if (count == pathHits.Length) return false;
-            for (int i = 0; i < count; i++)
-                if (pathHits[i].collider != capsule && (source == null || pathHits[i].rigidbody != source.Controller.Body)) return false;
-            return true;
+            for (int pass = 0; pass < 5; pass++)
+            {
+                // Prefer ground, then clear air at increasing heights.
+                float lift = pass < 2 ? 0f : Mathf.Pow(2f, pass - 2);
+                for (int ring = 0; ring < 6; ring++)
+                {
+                    float radius = ring == 0 ? 0f : Mathf.Pow(2f, ring - 1);
+                    int steps = ring == 0 ? 1 : 16;
+                    for (int step = 0; step < steps; step++)
+                    {
+                        float angle = step * Mathf.PI / 8f;
+                        position = desired + new Vector3(Mathf.Cos(angle) * radius, lift, Mathf.Sin(angle) * radius);
+                        if (pass == 0)
+                        {
+                            if (!Physics.Raycast(position + Vector3.up * 1.5f, Vector3.down, out var ground, 6f,
+                                groundMask, QueryTriggerInteraction.Ignore)) continue;
+                            position.y = ground.point.y + capsule.height * 0.5f - capsule.center.y + 0.05f;
+                        }
+                        if (CapsuleClear(position, reserved)) return true;
+                    }
+                }
+            }
+            position = desired;
+            return false;
         }
 
         internal bool CapsuleClear(Vector3 position, List<Vector3> reserved)
