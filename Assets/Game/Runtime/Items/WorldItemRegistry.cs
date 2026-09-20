@@ -326,7 +326,7 @@ namespace TwoBirds
                         departureDrops[i] = (drop.Id, drop.Origin, drop.Fallback, drop.Facing, drop.Retries + 1);
                         continue;
                     }
-                    position = item.Record.Motion.Position;
+                    position = item.Body.position;
                 }
                 placedDrops.Add((position, radius));
                 Release(drop.Id, 0, new ItemMotion { Position = position, Rotation = item.Record.Motion.Rotation }, -1);

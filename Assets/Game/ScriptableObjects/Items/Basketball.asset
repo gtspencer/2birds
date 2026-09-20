@@ -23,7 +23,7 @@ MonoBehaviour:
   ThrowChargeTime: 1
   MinimumImpactSpeed: 1
   ImpulseMultiplier: 1
-  SyncRotation: 1
+  SyncRotation: 0
   DropSpeed: 1.5
   VelocityInheritance: 1
   Mass: 0.75

@@ -15,6 +15,7 @@ namespace TwoBirds
         public uint Sequence;
         public uint Path;
         public bool Sleeping, Boundary, Removed;
+        public bool PositionIsSphereCenter;
         public Vector3 Position;
         public Quaternion Rotation;
         public Vector3 Velocity;
@@ -54,7 +55,8 @@ namespace TwoBirds
 
     public static class ItemMotionBatchSerializer
     {
-        private const byte OmitRotation = 1, FullVelocity = 2, FullAngularVelocity = 4, Sleeping = 8, Boundary = 16, Removed = 32;
+        private const byte OmitRotation = 1, FullVelocity = 2, FullAngularVelocity = 4, Sleeping = 8, Boundary = 16, Removed = 32,
+            SphereCenter = 64;
 
         public static void WriteItemMotionBatch(this Writer writer, ItemMotionBatch batch)
         {
@@ -66,6 +68,7 @@ namespace TwoBirds
                 if (motion.Sleeping) flags |= Sleeping;
                 if (motion.Boundary) flags |= Boundary;
                 if (motion.Removed) flags |= Removed;
+                if (motion.PositionIsSphereCenter) flags |= SphereCenter;
                 if (!Fits(motion.Velocity)) flags |= FullVelocity;
                 if (!motion.RotationOmitted && !Fits(motion.AngularVelocity)) flags |= FullAngularVelocity;
                 writer.WriteUInt32(motion.Id);
@@ -96,6 +99,7 @@ namespace TwoBirds
                 motion.Sleeping = (flags & Sleeping) != 0;
                 motion.Boundary = (flags & Boundary) != 0;
                 motion.Removed = (flags & Removed) != 0;
+                motion.PositionIsSphereCenter = (flags & SphereCenter) != 0;
                 motion.Position = reader.ReadVector3();
                 motion.Velocity = ReadVelocity(reader, (flags & FullVelocity) != 0);
                 if (!motion.RotationOmitted)
