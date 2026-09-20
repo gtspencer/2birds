@@ -24,6 +24,8 @@ MonoBehaviour:
   RightFootRotation: {x: 0, y: 0, z: 0, w: 1}
   FootCorrection: 1
   PelvisCorrection: 1
+  LeftHandFollowBone: 17
+  RightHandFollowBone: 45
   Id:
     high: 1149333059
     low: 2402174837

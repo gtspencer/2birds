@@ -16,6 +16,8 @@ namespace TwoBirds
         public float LeftSoleAdjustment, RightSoleAdjustment;
         public Quaternion LeftFootRotation = Quaternion.identity, RightFootRotation = Quaternion.identity;
         [Range(0f, 1f)] public float FootCorrection = 1f, PelvisCorrection = 1f;
+        public HumanBodyBones LeftHandFollowBone = HumanBodyBones.LeftHand;
+        public HumanBodyBones RightHandFollowBone = HumanBodyBones.RightHand;
         [Header("Generated source and skeleton")]
         public AvatarId Id;
         public GeneratedSkeleton Generated;

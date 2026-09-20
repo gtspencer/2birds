@@ -17,6 +17,7 @@ namespace TwoBirds
         private readonly Animator animator;
         private readonly Transform head, leftShoulder, rightShoulder;
         private readonly float leftArm, rightArm;
+        private readonly Vector3 leftHandOffset, rightHandOffset;
         private Foot left, right;
         private float groundedWeight, pelvis;
         private Vector3 lookDirection;
@@ -35,6 +36,14 @@ namespace TwoBirds
             var data = settings.Generated;
             leftArm = (data.LeftArm.x + data.LeftArm.y) * settings.Scale;
             rightArm = (data.RightArm.x + data.RightArm.y) * settings.Scale;
+            var leftHand = binding.GetBone(HumanBodyBones.LeftHand);
+            var leftFollow = binding.GetBone(settings.LeftHandFollowBone);
+            leftHandOffset = leftFollow && leftFollow != leftHand
+                ? Quaternion.Inverse(leftHand.rotation) * (leftFollow.position - leftHand.position) : Vector3.zero;
+            var rightHand = binding.GetBone(HumanBodyBones.RightHand);
+            var rightFollow = binding.GetBone(settings.RightHandFollowBone);
+            rightHandOffset = rightFollow && rightFollow != rightHand
+                ? Quaternion.Inverse(rightHand.rotation) * (rightFollow.position - rightHand.position) : Vector3.zero;
             left = new Foot { Goal = AvatarIKGoal.LeftFoot, Hip = binding.GetBone(HumanBodyBones.LeftUpperLeg),
                 Length = (data.LeftLeg.x + data.LeftLeg.y) * settings.Scale, Offset = data.LeftSoleToGoal * settings.Scale,
                 Bone = binding.GetBone(HumanBodyBones.LeftFoot), RestRotation = data.LeftFootRestRotation,
@@ -78,8 +87,8 @@ namespace TwoBirds
                 ApplyFoot(ref left, shift); ApplyFoot(ref right, shift);
             }
             ApplyHead();
-            ApplyHand(AvatarIKGoal.LeftHand, host.LeftHand, leftShoulder, leftArm);
-            ApplyHand(AvatarIKGoal.RightHand, host.RightHand, rightShoulder, rightArm);
+            ApplyHand(AvatarIKGoal.LeftHand, host.LeftHand, leftShoulder, leftArm, leftHandOffset);
+            ApplyHand(AvatarIKGoal.RightHand, host.RightHand, rightShoulder, rightArm, rightHandOffset);
         }
 
         private void Calibrate(ref Foot foot)
@@ -154,10 +163,11 @@ namespace TwoBirds
             animator.SetLookAtPosition(LookTarget);
         }
 
-        private void ApplyHand(AvatarIKGoal goal, AvatarPresentation.HandTarget target, Transform shoulder, float length)
+        private void ApplyHand(AvatarIKGoal goal, AvatarPresentation.HandTarget target, Transform shoulder, float length, Vector3 followOffset)
         {
             if (!target.Target) { animator.SetIKPositionWeight(goal, 0f); animator.SetIKRotationWeight(goal, 0f); return; }
-            Vector3 delta = target.Target.position - shoulder.position;
+            Vector3 wristTarget = target.Target.position - target.Target.rotation * followOffset;
+            Vector3 delta = wristTarget - shoulder.position;
             float fade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.88f, 0.98f, delta.magnitude / length));
             animator.SetIKPositionWeight(goal, target.Position * fade);
             animator.SetIKRotationWeight(goal, target.Rotation * fade);
