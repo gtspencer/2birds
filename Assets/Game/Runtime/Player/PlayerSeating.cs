@@ -10,19 +10,11 @@ namespace TwoBirds
     [DefaultExecutionOrder(20)]
     public sealed class PlayerSeating : NetworkBehaviour
     {
-        private sealed class Contact
-        {
-            public Vector3 CartPosition, PlayerPosition;
-            public Quaternion CartRotation;
-            public uint Epoch, Revision, Reset;
-            public bool Touching;
-        }
         internal static readonly Dictionary<int, PlayerSeating> Players = new();
         private static readonly Dictionary<int, (SeatTransition state, bool impulse)> unresolved = new();
         public static PlayerSeating Local { get; private set; }
         private readonly Collider[] query = new Collider[64];
         private readonly RaycastHit[] pathHits = new RaycastHit[64];
-        private readonly Dictionary<int, Contact> contacts = new();
         private CapsuleCollider capsule;
         private PlayerInventory inventory;
         private PlayerPresentation presentation;
@@ -65,7 +57,6 @@ namespace TwoBirds
         public override void OnStartNetwork()
         {
             Players[ObjectId] = this;
-            Motor.PresentationCorrected += RebaseContacts;
             ResolvePending();
         }
         public override void OnStartClient() { if (IsOwner) Local = this; }
@@ -99,7 +90,7 @@ namespace TwoBirds
 
         internal static void ForgetCart(int id)
         {
-            foreach (var player in Players.Values) player.contacts.Remove(id);
+            foreach (var player in Players.Values) player.Motor.ForgetCartContact(id);
             foreach (int playerId in new List<int>(unresolved.Keys))
                 if (unresolved[playerId].state.Cart == id) unresolved.Remove(playerId);
         }
@@ -168,12 +159,13 @@ namespace TwoBirds
             {
                 lookOffset = 0f;
                 seatYaw = Cart.Controller.Heading + (SeatIndex >= 2 ? 180f : 0f);
-                var anchor = Cart.GetSeat(SeatIndex).Rider;
+                var anchor = Cart.GetSeat(SeatIndex).PhysicalRider;
                 state.Position = anchor.position;
                 state.Rotation = anchor.rotation;
             }
             else Input.SetWorldYaw(worldYaw);
             Motor.ApplySeating(Seated || PlacementPending, state.Revision, state.Generation, state.Position, state.Rotation, state.Velocity);
+            if (!Seated) Motor.SuppressExitLaunch(exitCart);
             inventory.Hitbox.SetSuspended(Seated || PlacementPending);
             presentation.SetSeated(Seated || PlacementPending);
             if (IsDriver || wasDriver) inventory.ApplySeatPermissions();
@@ -185,19 +177,17 @@ namespace TwoBirds
         internal void AddLook(float yaw) => lookOffset = Mathf.Repeat(lookOffset + yaw + 180f, 360f) - 180f;
         private float UpdateSeatHeading()
         {
-            Vector3 forward = Vector3.ProjectOnPlane(Cart.GetSeat(SeatIndex).Rider.forward, Vector3.up);
+            Vector3 forward = Vector3.ProjectOnPlane((Cart.GetSeat(SeatIndex).VisualRider.rotation * Vector3.forward), Vector3.up);
             if (forward.sqrMagnitude > 0.01f) seatYaw = Quaternion.LookRotation(forward).eulerAngles.y;
             return seatYaw;
         }
-        internal Pose AimPose => new(Cart.GetSeat(SeatIndex).Eye.position, Quaternion.Euler(Input.Pitch, WorldYaw, 0f));
+        internal Pose AimPose => new(Cart.GetSeat(SeatIndex).VisualEye.position, Quaternion.Euler(Input.Pitch, WorldYaw, 0f));
         public Vector3 PointVelocity
         {
             get
             {
                 if (!Seated) return Motor.Body.linearVelocity;
-                var frame = Cart.DisplayMotion;
-                Vector3 center = frame.Position + frame.Rotation * Cart.Controller.Settings.CenterOfMass;
-                return frame.Velocity + Vector3.Cross(frame.AngularVelocity, Cart.GetSeat(SeatIndex).Rider.position - center);
+                return Cart.Controller.Body.GetPointVelocity(Cart.GetSeat(SeatIndex).PhysicalRider.position);
             }
         }
 
@@ -206,9 +196,12 @@ namespace TwoBirds
             if (!IsServerInitialized && !IsClientInitialized) return;
             if (Seated)
             {
-                var anchor = Cart.GetSeat(SeatIndex).Rider;
-                transform.SetPositionAndRotation(anchor.position, anchor.rotation);
-                presentation.Graphics.SetPositionAndRotation(anchor.position, anchor.rotation);
+                var seat = Cart.GetSeat(SeatIndex);
+                var physical = seat.PhysicalRider;
+                Motor.Body.position = physical.position;
+                Motor.Body.rotation = physical.rotation;
+                var visual = seat.VisualRider;
+                presentation.Graphics.SetPositionAndRotation(visual.position, visual.rotation);
             }
             if (PlacementPending && IsServerInitialized && Time.unscaledTime >= retryTime)
             {
@@ -224,7 +217,6 @@ namespace TwoBirds
                     ObserversPlacement(state);
                 }
             }
-            if (IsOwner && !Seated && !PlacementPending && !PredictionManager.IsReconciling) SampleCartContacts();
         }
         [ObserversRpc] private void ObserversPlacement(SeatTransition state) { if (!IsServerInitialized) Receive(state, true); }
 
@@ -283,80 +275,11 @@ namespace TwoBirds
             top = center + Vector3.up * half;
         }
 
-        private void RebaseContacts(Vector3 correction)
-        {
-            foreach (var contact in contacts.Values) contact.PlayerPosition += correction;
-        }
-
-        private void SampleCartContacts()
-        {
-            Vector3 playerPosition = presentation.Graphics.position;
-            foreach (var entry in GolfCartNetwork.Carts)
-            {
-                var cart = entry.Value;
-                var frame = cart.DisplayMotion;
-                bool fresh = !contacts.TryGetValue(entry.Key, out var contact);
-                if (fresh) contacts[entry.Key] = contact = new Contact();
-                fresh |= contact.Epoch != cart.Epoch || contact.Revision != Revision || contact.Reset != Motor.ResetRevision;
-                bool touching = CartOverlap(cart, playerPosition, frame.Position, frame.Rotation, out var normal, 0.08f);
-                bool ignored = exitCart == cart;
-                if (!fresh && !contact.Touching && !ignored)
-                {
-                    float relativeDistance = ((frame.Position - contact.CartPosition) - (playerPosition - contact.PlayerPosition)).magnitude;
-                    int steps = Mathf.Max(1, Mathf.CeilToInt(relativeDistance / (capsule.radius * 0.5f)),
-                        Mathf.CeilToInt(Quaternion.Angle(frame.Rotation, contact.CartRotation) / 4f));
-                    for (int i = 0; i <= steps; i++)
-                    {
-                        float t = (float)i / steps;
-                        Vector3 point = Vector3.Lerp(contact.PlayerPosition, playerPosition, t);
-                        if (!CartOverlap(cart, point, Vector3.Lerp(contact.CartPosition, frame.Position, t),
-                            Quaternion.Slerp(contact.CartRotation, frame.Rotation, t), out normal, 0f)) continue;
-                        Vector3 center = frame.Position + frame.Rotation * cart.Controller.Settings.CenterOfMass;
-                        Vector3 velocity = frame.Velocity + Vector3.Cross(frame.AngularVelocity, point - center);
-                        float closing = Mathf.Max(0f, Vector3.Dot(velocity - Motor.Body.linearVelocity, normal));
-                        var settings = cart.Controller.Settings;
-                        if (closing >= settings.MinimumHitSpeed)
-                            Motor.SubmitWorldImpact((normal + Vector3.up * settings.HitLift) * closing * settings.CollisionMultiplier, 0.2f);
-                        touching = true;
-                        break;
-                    }
-                }
-                if (ignored && !touching) exitCart = null;
-                contact.CartPosition = frame.Position;
-                contact.CartRotation = frame.Rotation;
-                contact.PlayerPosition = playerPosition;
-                contact.Epoch = cart.Epoch;
-                contact.Revision = Revision;
-                contact.Reset = Motor.ResetRevision;
-                contact.Touching = touching;
-            }
-        }
-
-        private bool CartOverlap(GolfCartNetwork cart, Vector3 playerPosition, Vector3 cartPosition, Quaternion cartRotation,
-            out Vector3 normal, float margin)
-        {
-            normal = Vector3.zero;
-            foreach (var box in cart.Controller.Chassis)
-            {
-                Vector3 local = cart.transform.InverseTransformPoint(box.transform.position);
-                Quaternion rotation = cartRotation * Quaternion.Inverse(cart.transform.rotation) * box.transform.rotation;
-                if (Physics.ComputePenetration(capsule, playerPosition, Quaternion.identity, box,
-                    cartPosition + cartRotation * local, rotation, out normal, out _)) return true;
-                if (margin <= 0f) continue;
-                Vector3 toPlayer = (playerPosition - cartPosition).normalized * margin;
-                if (Physics.ComputePenetration(capsule, playerPosition - toPlayer, Quaternion.identity, box,
-                    cartPosition + cartRotation * local, rotation, out normal, out _)) return true;
-            }
-            return false;
-        }
-
         public override void OnStopNetwork()
         {
             Players.Remove(ObjectId);
-            Motor.PresentationCorrected -= RebaseContacts;
             unresolved.Remove(ObjectId);
             if (Local == this) Local = null;
-            contacts.Clear();
         }
     }
 }

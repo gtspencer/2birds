@@ -1,4 +1,5 @@
 using System;
+using FishNet.Component.Transforming.Beta;
 using UnityEngine;
 
 namespace TwoBirds
@@ -32,6 +33,8 @@ namespace TwoBirds
         private readonly float[] wheelScale = new float[4];
         private MaterialPropertyBlock[] blocks;
         private Quaternion steeringRest, gasPedalRest, brakePedalRest;
+        private NetworkTickSmoother tickSmoother;
+        internal Transform Graphics { get; private set; }
         private GolfCartNetwork network;
         private GolfCartSettings settings;
         private uint lastEpoch;
@@ -42,6 +45,8 @@ namespace TwoBirds
 
         private void Awake()
         {
+            Graphics = transform.Find("Graphics");
+            tickSmoother = Graphics.GetComponent<NetworkTickSmoother>();
             network = GetComponent<GolfCartNetwork>();
             settings = GetComponent<GolfCartController>().Settings;
             for (int i = 0; i < 4; i++)
@@ -86,11 +91,22 @@ namespace TwoBirds
             if (hornSource) hornSource.Play(hornSfx);
         }
 
+        internal void RebaseTravel(Vector3 correction) => previousPosition += correction;
+
+        internal void ResetPose()
+        {
+            var smoother = tickSmoother.SmootherController;
+            smoother?.StopSmoother();
+            Graphics.SetPositionAndRotation(transform.position, transform.rotation);
+            previousPosition = Graphics.position;
+            smoother?.StartSmoother();
+        }
+
         private void LateUpdate()
         {
             if (!network.IsServerInitialized && !network.IsClientInitialized) return;
             var frame = network.DisplayMotion;
-            if (lastEpoch == frame.Epoch && !frame.ParkingBrake)
+            if (lastEpoch == frame.Epoch)
             {
                 float turn = Vector3.Dot(frame.Position - previousPosition, frame.Rotation * Vector3.forward) / settings.WheelRadius * Mathf.Rad2Deg;
                 spin = (spin + turn) % 360f;

@@ -139,10 +139,10 @@ namespace TwoBirds
         }
         internal void CartBefore(GolfCartNetwork cart)
         {
-            if (!active || !ready || Replaying) return;
+            if (!active || !ready || Replaying || !cart.ReportsWorldEffects) return;
             if (Host && !cartDrivers.ContainsKey((cart.ObjectId, cart.Epoch, cart.StateRevision))) RememberCart(cart);
             hitReporter.CartBefore(cart);
         }
-        internal void CartAfter(GolfCartNetwork cart) { if (active && ready && !Replaying) hitReporter.CartAfter(cart); }
+        internal void CartAfter(GolfCartNetwork cart) { if (active && ready && !Replaying && cart.ReportsWorldEffects) hitReporter.CartAfter(cart); }
     }
 }

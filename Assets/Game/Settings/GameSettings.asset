@@ -19,6 +19,7 @@ MonoBehaviour:
   StaminaRecoveryRate: 1.5
   StaminaRecoveryDelay: 1
   GroundAcceleration: 25
+  CartPushAcceleration: 3
   Braking: 25
   AirAcceleration: 4
   JumpSpeed: 4

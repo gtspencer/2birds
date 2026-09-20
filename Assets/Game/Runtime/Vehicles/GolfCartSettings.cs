@@ -29,6 +29,8 @@ namespace TwoBirds
         public float DriveForce = 2400f;
         [Tooltip("Maximum braking force (N), split across four wheels. Increasing this strengthens braking within the available tire grip and each wheel's per-step stopping limit.")]
         public float BrakeForce = 4200f;
+        [Tooltip("Total passive longitudinal parking resistance (N). ")]
+        public float ParkingForce = 150f;
         [Tooltip("Top forward speed in m/s. The engine stops adding force once this speed is reached. Also affects steering: at this speed, steering angle is reduced to FastSteeringAngle.")]
         public float MaximumSpeed = 15f;
         [Tooltip("Top reverse speed in m/s. The engine stops adding reverse force once this speed is reached. Increasing this lets the cart back up faster.")]
@@ -51,12 +53,10 @@ namespace TwoBirds
         [Tooltip("Time in seconds to recover from zero rear grip to full grip. After releasing the handbrake, recovery takes (1 - HandbrakeGrip) times this value. Increasing it restores grip more slowly.")]
         public float GripRecoverySeconds = 0.35f;
         [Header("Pedestrian impacts")]
-        [Tooltip("Minimum relative closing speed (m/s) along the contact normal required to hit a pedestrian. Accounts for cart rotation and pedestrian velocity. Increasing this excludes slower contacts.")]
-        public float MinimumHitSpeed = 1.5f;
-        [Tooltip("Multiplier for the pedestrian's closing-speed-based velocity impulse, including lift. Increasing this launches hit players farther and higher.")]
-        public float CollisionMultiplier = 1.2f;
-        [Tooltip("Dimensionless upward-lift multiplier. Added vertical velocity is HitLift times closing speed times CollisionMultiplier. Increasing this launches hit players higher.")]
-        public float HitLift = 0.3f;
+        [Tooltip("Closing speed where upward launch begins (m/s).")]
+        public float LaunchSpeed = 3f;
+        [Tooltip("Upward speed per m/s of a full-strength hit.")]
+        public float LaunchLift = 0.4f;
         [Header("Ejection")]
         [Tooltip("Collision severity threshold (summed impulse / mass, in m/s) that triggers rider ejection. Lowering this makes riders eject from weaker crashes. Increasing it means only harder impacts throw riders out.")]
         public float CrashVelocityChange = 7f;

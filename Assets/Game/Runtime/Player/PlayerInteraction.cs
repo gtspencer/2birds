@@ -13,7 +13,7 @@ namespace TwoBirds
         private PlayerInputReader inputReader;
         private PlayerPresentation presentation;
         private int queryMask;
-        private int seatMask;
+        private int triggerMask;
         private readonly RaycastHit[] hits = new RaycastHit[32];
         private readonly Collider[] overlaps = new Collider[16];
         private readonly Dictionary<string, InputAction> actions = new();
@@ -27,7 +27,7 @@ namespace TwoBirds
             inputReader = GetComponent<PlayerInputReader>();
             presentation = GetComponent<PlayerPresentation>();
             queryMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemHeld", "PlayerItemHitbox", "Player", "BirdBody", "BirdQuery");
-            seatMask = LayerMask.GetMask("CartSeat");
+            triggerMask = LayerMask.GetMask("CartSeat", "GolfCart");
         }
 
         public override void OnStartClient()
@@ -59,16 +59,16 @@ namespace TwoBirds
                 obstruction = solid.distance;
                 selected = solid.collider;
             }
-            int count = Physics.RaycastNonAlloc(aim.position, direction, hits, obstruction, seatMask, QueryTriggerInteraction.Collide);
-            int inside = Physics.OverlapSphereNonAlloc(aim.position, 0.025f, overlaps, seatMask, QueryTriggerInteraction.Collide);
+            int count = Physics.RaycastNonAlloc(aim.position, direction, hits, obstruction, triggerMask, QueryTriggerInteraction.Collide);
+            int inside = Physics.OverlapSphereNonAlloc(aim.position, 0.025f, overlaps, triggerMask, QueryTriggerInteraction.Collide);
             if (count == hits.Length || inside == overlaps.Length) return;
             float nearest = obstruction;
             for (int i = 0; i < count; i++)
-                if (hits[i].distance < nearest && hits[i].collider.TryGetComponent<CartSeat>(out var seat) && seat.CanInteract)
+                if (hits[i].distance < nearest && SelectableTrigger(hits[i].collider))
                 { nearest = hits[i].distance; selected = hits[i].collider; }
             for (int i = 0; i < inside; i++)
                 if ((overlaps[i].ClosestPoint(aim.position) - aim.position).sqrMagnitude < 0.000001f &&
-                    overlaps[i].TryGetComponent<CartSeat>(out var seat) && seat.CanInteract)
+                    SelectableTrigger(overlaps[i]))
                 { selected = overlaps[i]; break; }
             if (selected == null) return;
             var target = selected.GetComponentInParent<IInteractable>();
@@ -82,6 +82,10 @@ namespace TwoBirds
             if (TargetCollider == null || !TargetCollider.gameObject.activeInHierarchy || !target.CanInteract)
                 ClearTarget();
         }
+
+        private static bool SelectableTrigger(Collider collider) => collider.isTrigger &&
+            (collider.TryGetComponent<CartSeat>(out var seat) && seat.CanInteract ||
+             collider.TryGetComponent<SteeringWheelHorn>(out var horn) && horn.CanInteract);
 
         private void ClearTarget() { Target = null; TargetCollider = null; Action = null; }
         public override void OnStopClient() => ClearTarget();

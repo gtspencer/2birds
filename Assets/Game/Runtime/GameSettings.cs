@@ -12,6 +12,7 @@ namespace TwoBirds
         [Min(0)] public float StaminaRecoveryRate = 1.5f;
         [Min(0)] public float StaminaRecoveryDelay = 1f;
         [Min(0)] public float GroundAcceleration = 25f;
+        [Min(0), Tooltip("Acceleration into a touching cart (m/s?).")] public float CartPushAcceleration = 3f;
         [Min(0)] public float Braking = 25f;
         [Min(0)] public float AirAcceleration = 4f;
         [Min(0)] public float JumpSpeed = 4f;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using FishNet.Connection;
@@ -19,7 +19,7 @@ namespace TwoBirds
     {
         public const int MultiplayerCapacity = 8;
         public const string GameId = "two-birds";
-        public const string Protocol = "eight-player-birds-5";
+        public const string Protocol = "eight-player-birds-6";
         public const float DefaultMouseSensitivity = 0.12f;
         public const float DefaultControllerSensitivity = 150f;
         public static SessionController Instance { get; private set; }

@@ -23,6 +23,7 @@ MonoBehaviour:
   MaximumLoad: 9000
   DriveForce: 2400
   BrakeForce: 4200
+  ParkingForce: 150
   MaximumSpeed: 15
   ReverseSpeed: 6
   ReverseDeadband: 0.25
@@ -33,9 +34,8 @@ MonoBehaviour:
   HandbrakeGrip: 0.5
   HandbrakeForce: 5500
   GripRecoverySeconds: 0.25
-  MinimumHitSpeed: 1.5
-  CollisionMultiplier: 1.2
-  HitLift: 0.3
+  LaunchSpeed: 3
+  LaunchLift: 0.4
   CrashVelocityChange: 7
   EjectionSpeed: 3
   EjectionLift: 4

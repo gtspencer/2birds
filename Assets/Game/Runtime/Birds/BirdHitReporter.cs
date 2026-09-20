@@ -198,7 +198,7 @@ namespace TwoBirds
             var player = WorldItemRegistry.Instance.LocalInventory;
             if (player) Threat(BirdThreatKind.Player, (uint)player.ObjectId, player.Hitbox.PresentedCenter, registry.MaximumScareRadius, now, false);
             foreach (var cart in GolfCartNetwork.Carts.Values)
-                if (cart && cart.Simulating) Threat(BirdThreatKind.Cart, (uint)cart.ObjectId, cart.transform.position, registry.MaximumScareRadius, now, false);
+                if (cart && cart.ReportsWorldEffects) Threat(BirdThreatKind.Cart, (uint)cart.ObjectId, cart.transform.position, registry.MaximumScareRadius, now, false);
             expiredEncounters.Clear();
             foreach (var pair in encounters) if (pair.Value < now - 5d / registry.Delta) expiredEncounters.Add(pair.Key);
             foreach (var key in expiredEncounters) encounters.Remove(key);
@@ -246,7 +246,7 @@ namespace TwoBirds
             }
             sample.Position = cart.Controller.Body.position; sample.Rotation = cart.Controller.Body.rotation;
             sample.Epoch = cart.Epoch; sample.Revision = cart.StateRevision; sample.Tick = registry.SimulationTick;
-            sample.Valid = cart.Simulating;
+            sample.Valid = cart.ReportsWorldEffects;
         }
         public void ForgetCart(int id) => carts.Remove(id);
 

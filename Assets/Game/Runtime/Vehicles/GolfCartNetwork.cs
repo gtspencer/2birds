@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
-using FishNet.Component.Prediction;
-using FishNet.Component.Transforming;
 using FishNet.Connection;
 using FishNet.Object;
 using UnityEngine;
-using MotionFrame = FishNet.Component.Transforming.NetworkTransform.MotionFrame;
+using FishNet.Utility.Template;
 
 namespace TwoBirds
 {
@@ -25,18 +23,17 @@ namespace TwoBirds
         public bool PlacementPending;
     }
 
-    [RequireComponent(typeof(GolfCartController), typeof(NetworkTransform), typeof(OfflineRigidbody))]
-    public sealed class GolfCartNetwork : NetworkBehaviour
+    [RequireComponent(typeof(GolfCartController))]
+    public sealed partial class GolfCartNetwork : TickNetworkBehaviour
     {
         private sealed class PendingChange
         {
             public PlayerSeating Player;
             public int Seat;
-            public uint Request, Token;
-            public bool Eject;
+            public uint Request, PlayerRevision;
+            public bool Eject, Recover;
             public CartRecovery Recovery;
             public Vector3[] RiderVelocities;
-            public float Deadline;
         }
 
         internal static readonly Dictionary<int, GolfCartNetwork> Carts = new();
@@ -45,35 +42,35 @@ namespace TwoBirds
         private float hornCooldown;
         private GolfCartController controller;
         private GolfCartPresentation presentation;
-        private NetworkTransform motion;
-        private OfflineRigidbody offlineBody;
         private CartSeat[] seats;
         private CartOccupant[] occupants = EmptySeats();
         private PendingChange pending;
-        private MotionFrame baseline, lastSent, stoppedMotion;
-        private uint epoch, nextToken, stopToken, cancelledToken, eventSequence, lastIncident;
-        private int simulator = -1;
-        private bool startPending, sentRest, incidentPending;
+        private byte disconnectedSeats;
+        private uint epoch;
         private readonly List<Vector3> reservedExits = new();
         public CartRecovery Recovery { get; private set; }
         public uint StateRevision { get; private set; }
         public bool Busy => pending != null;
-        public bool Simulating { get; private set; }
+        public bool SimulatesPhysics => baselineReady && !controller.Body.isKinematic &&
+            NetworkObject.RigidbodyPauser?.Paused != true && !(PredictionManager.IsReconciling && rejectReplay);
+        public bool ReportsWorldEffects => SimulatesPhysics && !PredictionManager.IsReconciling &&
+            (inputOwner < 0 ? IsServerInitialized : IsOwner && OwnerId == inputOwner);
         public uint Epoch => epoch;
         public int DriverId => occupants[0].Player;
         public GolfCartController Controller => controller;
         internal Vector3 RecoveryOrigin { get; private set; }
-        public MotionFrame DisplayMotion
+        public CartMotion DisplayMotion
         {
             get
             {
-                if (!Simulating) return motion.DisplayMotion;
                 var frame = controller.Capture(epoch, TimeManager.LocalTick);
-                frame.Position = transform.position;
-                frame.Rotation = transform.rotation;
+                frame.Position = presentation.Graphics.position;
+                frame.Rotation = presentation.Graphics.rotation;
                 return frame;
             }
         }
+        internal Pose VisualPose(Pose local) => new(presentation.Graphics.TransformPoint(local.position),
+            presentation.Graphics.rotation * local.rotation);
         public CartSeat GetSeat(int index) => seats[index];
         public bool IsOccupied(int index) => occupants[index].Player >= 0;
 
@@ -87,18 +84,20 @@ namespace TwoBirds
         {
             controller = GetComponent<GolfCartController>();
             presentation = GetComponent<GolfCartPresentation>();
-            motion = GetComponent<NetworkTransform>();
-            offlineBody = GetComponent<OfflineRigidbody>();
             seats = new CartSeat[4];
             foreach (var seat in GetComponentsInChildren<CartSeat>()) seats[seat.Index] = seat;
-            motion.EnableEpochMotion();
+            SetTickCallbacks(TickCallback.Tick | TickCallback.PostTick);
         }
 
         public override void OnStartNetwork()
         {
             Carts[ObjectId] = this;
             controller.Body.isKinematic = true;
-            offlineBody.SetPredictionManager(PredictionManager);
+            Bodies[controller.Body] = this;
+            PredictionManager.OnPreReplicateReplay += BeforeReplay;
+            PredictionManager.OnPostReplicateReplay += AfterReplay;
+            PredictionManager.OnPreReconcile += BeforeReconcile;
+            PredictionManager.OnPostReconcile += AfterReconcile;
             TimeManager.OnPrePhysicsSimulation += BeforePhysics;
             TimeManager.OnPostPhysicsSimulation += AfterPhysics;
             PlayerSeating.ResolvePending();
@@ -107,24 +106,28 @@ namespace TwoBirds
         public override void OnStartServer()
         {
             ServerManager.Objects.OnPreDestroyClientObjects += Disconnect;
-            baseline = controller.Capture(1, 0);
-            baseline.Velocity = baseline.AngularVelocity = Vector3.zero;
-            InstallBaseline(baseline, -1);
+            controller.Body.isKinematic = false;
+            controller.ResetMotion(false, true);
+            controller.Body.WakeUp();
+            BaselineTick = TimeManager.Tick;
+            epoch = 1;
+            inputOwner = -1;
+            baselineReady = true;
             StateRevision = 1;
             BirdRegistry.Instance?.RememberCart(this);
             presentation.SetColor(bodyColor);
         }
 
         public override void OnSpawnServer(NetworkConnection connection) =>
-            TargetCurrent(connection, StateRevision, occupants, Recovery, motion.LatestMotion, simulator, bodyColor, lightsOn);
+            TargetCurrent(connection, StateRevision, occupants, Recovery, CaptureBaseline(), bodyColor, lightsOn);
 
         [TargetRpc]
         private void TargetCurrent(NetworkConnection connection, uint revision, CartOccupant[] current, CartRecovery recovery,
-            MotionFrame frame, int owner, Color color, bool lights)
+            CartBaseline state, Color color, bool lights)
         {
             if (IsServerInitialized) return;
-            if (frame.Epoch >= epoch) InstallBaseline(frame, owner);
             ApplyState(revision, current, recovery, Array.Empty<SeatTransition>());
+            InstallBaseline(state);
             bodyColor = color;
             presentation.SetColor(color);
             lightsOn = lights;
@@ -137,159 +140,62 @@ namespace TwoBirds
             bool changesDriver = player.SeatIndex == 0 || destination == 0;
             if (Busy || player.Revision != playerRevision || motionEpoch != epoch ||
                 (changesDriver || Recovery != CartRecovery.None) && cartRevision != StateRevision || destination < -1 || destination > 3 ||
-                player.PlacementPending || player.Cart != null && player.Cart != this || destination < 0 && player.Cart != this)
+                player.PlacementPending || player.Cart && player.Cart != this || destination < 0 && player.Cart != this)
             { player.CompleteRequest(request, SeatRequestResult.Busy); return; }
-            if (Recovery != CartRecovery.None)
-            {
-                if (destination >= 0 && Array.TrueForAll(occupants, entry => entry.Player < 0) &&
-                    controller.TryRecovery(out var position, out var rotation))
-                {
-                    Freeze();
-                    var frame = motion.LatestMotion;
-                    frame.Epoch = epoch + 1;
-                    frame.Tick = 0;
-                    frame.Position = position;
-                    frame.Rotation = rotation;
-                    frame.Velocity = frame.AngularVelocity = Vector3.zero;
-                    InstallBaseline(frame, -1);
-                    Recovery = CartRecovery.None;
-                    Broadcast(Array.Empty<SeatTransition>(), true);
-                }
-                player.CompleteRequest(request, Recovery == CartRecovery.None ? SeatRequestResult.Completed : SeatRequestResult.Blocked);
-                return;
-            }
             if (destination >= 0 && IsOccupied(destination)) { player.CompleteRequest(request, SeatRequestResult.Occupied); return; }
-            var change = new PendingChange { Player = player, Seat = destination, Request = request };
-            if (player.SeatIndex == 0 || destination == 0) BeginHandoff(change);
-            else Commit(change, motion.LatestMotion, false);
-        }
-
-        private void BeginHandoff(PendingChange change)
-        {
-            if (pending != null) return;
-            change.Token = ++nextToken;
-            change.Deadline = Time.unscaledTime + 2f;
-            pending = change;
-            if (simulator < 0 || IsOwner) stopToken = change.Token;
-            else TargetStop(Owner, change.Token, epoch);
-        }
-
-        [TargetRpc]
-        private void TargetStop(NetworkConnection connection, uint token, uint expectedEpoch)
-        {
-            if (expectedEpoch == epoch && token > cancelledToken) stopToken = token;
-        }
-
-        [ServerRpc]
-        private void ServerStopped(uint token, MotionFrame frame)
-        {
-            if (pending == null || pending.Token != token || frame.Epoch != epoch) return;
-            Commit(pending, frame, true);
-        }
-
-        [TargetRpc]
-        private void TargetResume(NetworkConnection connection, uint token, uint expectedEpoch)
-        {
-            cancelledToken = Math.Max(cancelledToken, token);
-            if (expectedEpoch != epoch) return;
-            stopToken = 0;
-            if (!Simulating)
-            {
-                baseline = stoppedMotion;
-                startPending = true;
-            }
-            incidentPending = false;
+            pending = new PendingChange { Player = player, Seat = destination, Request = request, PlayerRevision = playerRevision,
+                Recover = Recovery != CartRecovery.None };
         }
 
         private void BeforePhysics(float delta)
         {
-            if (PredictionManager.IsReconciling) return;
-            if (startPending && (simulator < 0 ? IsServerInitialized : IsOwner && OwnerId == simulator))
-            {
-                startPending = false;
-                controller.Body.position = baseline.Position;
-                controller.Body.rotation = baseline.Rotation;
-                controller.Body.isKinematic = false;
-                controller.Body.interpolation = RigidbodyInterpolation.Interpolate;
-                controller.Body.linearVelocity = baseline.Velocity;
-                controller.Body.angularVelocity = baseline.AngularVelocity;
-                Simulating = true;
-            }
-            if (!Simulating) return;
-            var driver = PlayerSeating.Local;
-            if (driver != null && driver.Cart == this && driver.IsDriver && !driver.TransitionPending)
-                controller.SetInput(driver.Input.CartMove, driver.Input.Handbrake);
-            else controller.ClearInput();
-            controller.BeforePhysics(delta);
-            BirdRegistry.Instance?.CartBefore(this);
+            if (!SimulatesPhysics) return;
+            controller.CaptureContactStep();
+            if (ReportsWorldEffects) BirdRegistry.Instance?.CartBefore(this);
         }
 
         private void AfterPhysics(float delta)
         {
-            if (PredictionManager.IsReconciling) return;
-            if (IsServerInitialized && pending != null && Time.unscaledTime >= pending.Deadline)
+            if (!SimulatesPhysics) return;
+            controller.FinishPhysics(delta);
+            if (ReportsWorldEffects) BirdRegistry.Instance?.CartAfter(this);
+        }
+
+        private void CommitPending()
+        {
+            if (pending == null) return;
+            var change = pending;
+            if (!change.Eject && (!change.Player || change.Player.Revision != change.PlayerRevision ||
+                change.Player.Cart && change.Player.Cart != this || change.Seat >= 0 && IsOccupied(change.Seat)))
             {
-                var timedOut = pending;
                 pending = null;
-                if (simulator >= 0 && !IsOwner) TargetResume(Owner, timedOut.Token, epoch);
-                else stopToken = 0;
-                timedOut.Player?.CompleteRequest(timedOut.Request, SeatRequestResult.Busy);
-                incidentPending = false;
+                if (change.Player) change.Player.CompleteRequest(change.Request, SeatRequestResult.Busy);
+                return;
             }
-            if (!Simulating) return;
-            controller.AfterPhysics(delta);
-            BirdRegistry.Instance?.CartAfter(this);
-            var frame = controller.Capture(epoch, TimeManager.LocalTick);
-            bool resting = controller.Body.IsSleeping() || frame.Velocity.sqrMagnitude < 0.0001f && frame.AngularVelocity.sqrMagnitude < 0.0001f;
-            bool parkingChanged = frame.ParkingBrake != lastSent.ParkingBrake;
-            bool changed = (frame.Position - lastSent.Position).sqrMagnitude > 0.000001f || Quaternion.Angle(frame.Rotation, lastSent.Rotation) > 0.05f ||
-                (frame.Velocity - lastSent.Velocity).sqrMagnitude > 0.0001f || (frame.AngularVelocity - lastSent.AngularVelocity).sqrMagnitude > 0.0001f ||
-                frame.Steering != lastSent.Steering || frame.Handbrake != lastSent.Handbrake ||
-                frame.FrontLeft != lastSent.FrontLeft || frame.FrontRight != lastSent.FrontRight || frame.RearLeft != lastSent.RearLeft || frame.RearRight != lastSent.RearRight;
-            if (parkingChanged || resting && !sentRest || changed && TimeManager.LocalTick % 3 == 0)
+            if (change.Recover)
             {
-                if (resting) frame.Velocity = frame.AngularVelocity = Vector3.zero;
-                motion.PublishMotion(frame, resting || parkingChanged);
-                lastSent = frame;
-                sentRest = resting;
+                pending = null;
+                Vector3 position = default;
+                Quaternion rotation = default;
+                bool clear = change.Seat >= 0 && Array.TrueForAll(occupants, entry => entry.Player < 0) &&
+                    controller.TryRecovery(out position, out rotation);
+                if (clear)
+                {
+                    controller.Body.position = position;
+                    controller.Body.rotation = rotation;
+                    controller.Body.linearVelocity = controller.Body.angularVelocity = Vector3.zero;
+                    Recovery = CartRecovery.None;
+                    BeginBaseline();
+                    Broadcast(Array.Empty<SeatTransition>(), true);
+                }
+                change.Player?.CompleteRequest(change.Request, clear ? SeatRequestResult.Completed : SeatRequestResult.Blocked);
+                return;
             }
-            if (stopToken == 0) return;
-            uint token = stopToken;
-            stopToken = 0;
-            stoppedMotion = frame;
-            Freeze();
-            if (IsServerInitialized && pending != null && pending.Token == token) Commit(pending, frame, true);
-            else if (IsOwner) ServerStopped(token, frame);
+            bool handoff = change.Eject || change.Seat == 0 || change.Player && change.Player.SeatIndex == 0;
+            Commit(change, controller.Capture(epoch, TimeManager.Tick), handoff);
         }
 
-        private void Freeze()
-        {
-            Simulating = startPending = false;
-            controller.ClearInput();
-            controller.Body.isKinematic = true;
-            controller.Body.interpolation = RigidbodyInterpolation.None;
-        }
-
-        private void InstallBaseline(MotionFrame frame, int owner)
-        {
-            Freeze();
-            epoch = frame.Epoch;
-            simulator = owner;
-            baseline = frame;
-            motion.InstallMotionBaseline(baseline);
-            controller.ResetMotion(owner >= 0, frame.ParkingBrake);
-            eventSequence = lastIncident = stopToken = cancelledToken = 0;
-            incidentPending = sentRest = false;
-            startPending = true;
-        }
-
-        public override void OnOwnershipClient(NetworkConnection previousOwner)
-        {
-            if (IsOwner && simulator == OwnerId) startPending = true;
-            else if (Simulating && simulator >= 0) Freeze();
-        }
-
-        private void Commit(PendingChange change, MotionFrame frame, bool handoff)
+        private void Commit(PendingChange change, CartMotion frame, bool handoff)
         {
             reservedExits.Clear();
             var transitions = new List<SeatTransition>(4);
@@ -299,12 +205,13 @@ namespace TwoBirds
                     if (PlayerSeating.Players.TryGetValue(occupants[i].Player, out var rider))
                         transitions.Add(CreateExit(rider, frame, change, true));
                 occupants = EmptySeats();
+                if (change.Recovery != CartRecovery.None && change.Recovery != Recovery) RecoveryOrigin = controller.Body.position;
                 Recovery = change.Recovery == CartRecovery.None ? Recovery : change.Recovery;
             }
             else
             {
                 var player = change.Player;
-                if (player == null) { pending = null; return; }
+                if (!player) { pending = null; return; }
                 SeatTransition transition;
                 if (change.Seat < 0)
                 {
@@ -312,7 +219,6 @@ namespace TwoBirds
                     if (transition.PlacementPending)
                     {
                         pending = null;
-                        if (handoff) ResumeStopped(change.Token, frame);
                         player.CompleteRequest(change.Request, SeatRequestResult.Blocked);
                         return;
                     }
@@ -329,32 +235,20 @@ namespace TwoBirds
             {
                 int owner = PlayerSeating.Players.TryGetValue(occupants[0].Player, out var driver) ? driver.OwnerId : -1;
                 if (owner < 0) RemoveOwnership(); else GiveOwnership(driver.Owner);
-                frame.Epoch = epoch + 1;
-                frame.Tick = 0;
-                InstallBaseline(frame, owner);
+                BeginBaseline();
             }
             Broadcast(transitions.ToArray(), handoff);
             change.Player?.CompleteRequest(change.Request);
         }
 
-        private void ResumeStopped(uint token, MotionFrame frame)
-        {
-            if (simulator >= 0 && !IsOwner) TargetResume(Owner, token, epoch);
-            else
-            {
-                stopToken = 0;
-                if (!Simulating) { baseline = frame; startPending = true; }
-            }
-        }
-
-        private SeatTransition CreateExit(PlayerSeating player, MotionFrame frame, PendingChange change, bool forced)
+        private SeatTransition CreateExit(PlayerSeating player, CartMotion frame, PendingChange change, bool forced)
         {
             var seat = seats[player.SeatIndex];
-            Vector3 riderPosition = frame.Position + frame.Rotation * transform.InverseTransformPoint(seat.Rider.position);
+            Vector3 riderPosition = frame.Position + frame.Rotation * seat.RiderLocal.position;
             Vector3 center = frame.Position + frame.Rotation * controller.Settings.CenterOfMass;
             Vector3 velocity = forced ? change.RiderVelocities[player.SeatIndex] :
                 frame.Velocity + Vector3.Cross(frame.AngularVelocity, riderPosition - center);
-            Vector3 desired = frame.Position + frame.Rotation * transform.InverseTransformPoint(seat.Exit.position);
+            Vector3 desired = frame.Position + frame.Rotation * seat.ExitLocal.position;
             bool clear = player.TryExit(riderPosition, desired, this, forced, reservedExits, out var position);
             if (clear) reservedExits.Add(position);
             Vector3 outward = Vector3.ProjectOnPlane(riderPosition - center, Vector3.up).normalized;
@@ -369,16 +263,16 @@ namespace TwoBirds
         {
             uint revision = StateRevision + 1;
             ApplyState(revision, occupants, Recovery, transitions);
-            ObserversState(revision, occupants, Recovery, transitions, resetMotion, baseline, simulator);
+            ObserversState(revision, occupants, Recovery, transitions, resetMotion, CaptureBaseline());
         }
 
         [ObserversRpc]
         private void ObserversState(uint revision, CartOccupant[] current, CartRecovery recovery, SeatTransition[] transitions,
-            bool resetMotion, MotionFrame frame, int owner)
+            bool resetMotion, CartBaseline baseline)
         {
             if (IsServerInitialized || revision <= StateRevision) return;
-            if (resetMotion && frame.Epoch > epoch) InstallBaseline(frame, owner);
             ApplyState(revision, current, recovery, transitions);
+            if (resetMotion) InstallBaseline(baseline);
         }
 
         private void ApplyState(uint revision, CartOccupant[] current, CartRecovery recovery, SeatTransition[] transitions)
@@ -387,8 +281,8 @@ namespace TwoBirds
             StateRevision = revision;
             occupants = (CartOccupant[])current.Clone();
             BirdRegistry.Instance?.RememberCart(this);
+            if (recovery != CartRecovery.None && recovery != Recovery) RecoveryOrigin = controller.Body.position;
             Recovery = recovery;
-            if (recovery != CartRecovery.None) RecoveryOrigin = motion.LatestMotion.Position;
             foreach (var transition in transitions) PlayerSeating.Receive(transition, true);
             for (int i = 0; i < 4; i++)
                 if (occupants[i].Player >= 0) PlayerSeating.Receive(new SeatTransition
@@ -400,54 +294,13 @@ namespace TwoBirds
 
         internal void ReportIncident(CartRecovery recovery)
         {
-            if (!Simulating || incidentPending) return;
+            if (!IsServerInitialized || PredictionManager.IsReconciling) return;
             if ((recovery == CartRecovery.None || recovery == Recovery) &&
                 Array.TrueForAll(occupants, entry => entry.Player < 0)) return;
-            incidentPending = true;
             var velocities = new Vector3[4];
-            for (int i = 0; i < 4; i++) velocities[i] = controller.PreImpactVelocity(transform.InverseTransformPoint(seats[i].Rider.position));
-            if (IsServerInitialized) AcceptIncident(epoch, ++eventSequence, StateRevision, recovery, velocities, null);
-            else ServerIncident(epoch, ++eventSequence, StateRevision, recovery, velocities);
-        }
-
-        [ServerRpc(RequireOwnership = false)]
-        private void ServerIncident(uint motionEpoch, uint sequence, uint revision, CartRecovery recovery, Vector3[] velocities, NetworkConnection sender = null) =>
-            AcceptIncident(motionEpoch, sequence, revision, recovery, velocities, sender);
-
-        private void AcceptIncident(uint motionEpoch, uint sequence, uint revision, CartRecovery recovery, Vector3[] velocities, NetworkConnection sender)
-        {
-            bool accepted = motionEpoch == epoch && sequence > lastIncident && revision == StateRevision &&
-                (sender == null || sender == Owner) && velocities != null && velocities.Length == 4;
-            if (sender == null) FinishIncident(motionEpoch, sequence, accepted);
-            else TargetIncident(sender, motionEpoch, sequence, accepted, StateRevision, occupants, Recovery);
-            if (!accepted) return;
-            lastIncident = sequence;
-            if (pending != null)
-            {
-                pending.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
-                pending.Player = null;
-                pending.Eject = true;
-                pending.Recovery = recovery;
-                pending.RiderVelocities = velocities;
-                return;
-            }
-            BeginHandoff(new PendingChange { Eject = true, Recovery = recovery, RiderVelocities = velocities });
-        }
-
-        [TargetRpc]
-        private void TargetIncident(NetworkConnection target, uint motionEpoch, uint sequence, bool accepted,
-            uint revision, CartOccupant[] current, CartRecovery recovery)
-        {
-            if (motionEpoch != epoch) return;
-            ApplyState(revision, current, recovery, Array.Empty<SeatTransition>());
-            FinishIncident(motionEpoch, sequence, accepted);
-        }
-
-        private void FinishIncident(uint motionEpoch, uint sequence, bool accepted)
-        {
-            if (motionEpoch != epoch || sequence != eventSequence || !incidentPending || accepted) return;
-            incidentPending = false;
-            controller.ReassessIncident();
+            for (int i = 0; i < 4; i++) velocities[i] = controller.PreImpactVelocity(seats[i].RiderLocal.position);
+            pending?.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
+            pending = new PendingChange { Eject = true, Recovery = recovery, RiderVelocities = velocities };
         }
 
         internal void ClearRecovery()
@@ -459,25 +312,23 @@ namespace TwoBirds
 
         private void Disconnect(NetworkConnection connection)
         {
-            bool driverLeft = PlayerSeating.Players.TryGetValue(occupants[0].Player, out var driver) && driver.Owner == connection;
-            if (pending != null && (driverLeft || pending.Player != null && pending.Player.Owner == connection))
-            {
-                if (!driverLeft) ResumeStopped(pending.Token, motion.LatestMotion);
-                pending.Player?.CompleteRequest(pending.Request);
-                pending = null;
-            }
-            bool changed = false;
             for (int i = 0; i < 4; i++)
                 if (PlayerSeating.Players.TryGetValue(occupants[i].Player, out var player) && player.Owner == connection)
-                { occupants[i] = new CartOccupant { Player = -1 }; changed = true; }
-            if (!changed) return;
+                    disconnectedSeats |= (byte)(1 << i);
+            if (pending != null && pending.Player && pending.Player.Owner == connection) pending = null;
+        }
+
+        private void CommitDisconnects()
+        {
+            if (disconnectedSeats == 0) return;
+            bool driverLeft = (disconnectedSeats & 1) != 0;
+            for (int i = 0; i < 4; i++)
+                if ((disconnectedSeats & (1 << i)) != 0) occupants[i] = new CartOccupant { Player = -1 };
+            disconnectedSeats = 0;
             if (driverLeft)
             {
-                var frame = motion.LatestMotion;
                 RemoveOwnership();
-                frame.Epoch = epoch + 1;
-                frame.Tick = 0;
-                InstallBaseline(frame, -1);
+                BeginBaseline();
             }
             Broadcast(Array.Empty<SeatTransition>(), driverLeft);
         }
@@ -537,7 +388,7 @@ namespace TwoBirds
         protected override void OnValidate()
         {
             base.OnValidate();
-            if (Application.isPlaying && presentation != null && IsServerInitialized) SetBodyColor(bodyColor);
+            if (Application.isPlaying && presentation && IsServerInitialized) SetBodyColor(bodyColor);
         }
 #endif
 
@@ -550,7 +401,14 @@ namespace TwoBirds
             Carts.Remove(ObjectId);
             PlayerSeating.ForgetCart(ObjectId);
             pending = null;
-            Freeze();
+            PredictionManager.OnPreReplicateReplay -= BeforeReplay;
+            PredictionManager.OnPostReplicateReplay -= AfterReplay;
+            PredictionManager.OnPreReconcile -= BeforeReconcile;
+            PredictionManager.OnPostReconcile -= AfterReconcile;
+            AfterReplay(0, 0);
+            Bodies.Remove(controller.Body);
+            baselineReady = false;
+            controller.Body.isKinematic = true;
         }
     }
 }

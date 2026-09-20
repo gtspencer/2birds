@@ -50,7 +50,9 @@ namespace TwoBirds
                 interaction.Target.ActionText : interaction.Target.TooltipTextOverride;
             tooltip.style.display = DisplayStyle.Flex;
             var anchor = interaction.Target.TooltipAnchor;
-            if (anchor != null)
+            if (interaction.Target is CartSeat seat)
+                PositionAtPoint(interaction.ViewCamera, seat.VisualTooltipPosition);
+            else if (anchor)
                 PositionAtPoint(interaction.ViewCamera, anchor.position);
             else
                 Position(interaction.ViewCamera, interaction.TargetCollider.bounds);
