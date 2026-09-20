@@ -42,21 +42,18 @@ namespace TwoBirds
             for (int i = 0; i < hints.Length; i++)
             {
                 var hint = hints[i];
-                var binding = presentation.Resolve(hint.Action);
                 string textOverride = hint.TextOverride?.Invoke(presentation.ActiveGroup);
-                if (textOverride != null) binding = (textOverride, null);
                 var row = new VisualElement();
                 row.AddToClassList("controls-row");
                 row.pickingMode = PickingMode.Ignore;
 
-                var glyph = new Image { pickingMode = PickingMode.Ignore };
-                glyph.AddToClassList("controls-glyph");
-                row.Add(glyph);
-
-                var keycap = new Label();
-                keycap.AddToClassList("controls-keycap");
-                keycap.pickingMode = PickingMode.Ignore;
-                row.Add(keycap);
+                if (textOverride == null) row.Add(new InputPrompt(presentation, hint.Action));
+                else
+                {
+                    var keycap = new Label(textOverride) { pickingMode = PickingMode.Ignore };
+                    keycap.AddToClassList("controls-keycap");
+                    row.Add(keycap);
+                }
 
                 var label = new Label(hint.Label);
                 label.AddToClassList("controls-label");
@@ -64,10 +61,7 @@ namespace TwoBirds
                 row.Add(label);
 
                 container.Add(row);
-                glyph.image = binding.Glyph;
-                glyph.style.display = binding.Glyph ? DisplayStyle.Flex : DisplayStyle.None;
-                keycap.text = binding.Text;
-                keycap.style.display = binding.Glyph ? DisplayStyle.None : DisplayStyle.Flex;
+
             }
         }
 

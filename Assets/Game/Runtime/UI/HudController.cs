@@ -38,7 +38,7 @@ namespace TwoBirds
         private InputPresentation presentation;
         private InventoryInputHandler inventoryInput;
         private InputAction inventoryAction;
-        private Label inventoryShortcut;
+        private VisualElement inventoryShortcut;
         private InteractionTooltip interactionTooltip;
         private ControlsHintPanel controlsHint;
         private PlayerInteraction interaction;
@@ -89,10 +89,10 @@ namespace TwoBirds
             controlsHint = new ControlsHintPanel(root, presentation);
             BuildHotbar();
             BuildInventoryGrid();
-            inventoryShortcut = inventoryPanel.Q<Label>("inventory-shortcut");
+            inventoryShortcut = inventoryPanel.Q("inventory-shortcut");
             if (inventoryShortcut == null)
             {
-                inventoryShortcut = new Label { name = "inventory-shortcut" };
+                inventoryShortcut = new VisualElement { name = "inventory-shortcut" };
                 inventoryPanel.Add(inventoryShortcut);
             }
             presentation.Changed += RefreshBindings;
@@ -146,24 +146,22 @@ namespace TwoBirds
             }
         }
 
-        private static void AddShortcut(VisualElement slot, int number)
+        private void AddShortcut(VisualElement slot, int number)
         {
-            var key = new Label { text = number.ToString(), pickingMode = PickingMode.Ignore };
-            key.AddToClassList("slot-key");
-            var glyph = new Image { pickingMode = PickingMode.Ignore };
-            glyph.AddToClassList("slot-binding-glyph");
-            glyph.style.display = DisplayStyle.None;
-            slot.Add(key);
-            slot.Add(glyph);
+            var prompt = new InputPrompt(presentation, InputSystem.actions.FindAction($"Player/Hotbar{number}"),
+                22, hideUnassigned: true);
+            prompt.AddToClassList("slot-binding");
+            slot.Add(prompt);
         }
 
         private void RefreshBindings()
         {
-            if (presentation.ActiveDevice is Gamepad) CancelDrag();
-            inventoryShortcut.text = $"{presentation.Label("UI/Submit")} {(moveSource < 0 ? "Select item" : "Move item")}   " +
-                $"{presentation.Label("UI/Cancel")} {(moveSource < 0 ? "Close" : "Cancel move")}   {presentation.Label("UI/Pause")} Close";
-            if (presentation.ActiveDevice is not Gamepad)
-                inventoryShortcut.text += $"   {presentation.Resolve(inventoryAction).Text} Close";
+            if (presentation.IsController) CancelDrag();
+            InputPrompt.Begin(inventoryShortcut);
+            InputPrompt.AddAction(inventoryShortcut, presentation, "UI/Submit", moveSource < 0 ? "Select item" : "Move item");
+            InputPrompt.AddAction(inventoryShortcut, presentation, "UI/Cancel", moveSource < 0 ? "Close" : "Cancel move");
+            InputPrompt.AddAction(inventoryShortcut, presentation, "UI/Pause", "Close");
+            if (!presentation.IsController) InputPrompt.AddAction(inventoryShortcut, presentation, "Player/Inventory", "Close");
         }
 
         private static VisualElement MakeSlot(int index)

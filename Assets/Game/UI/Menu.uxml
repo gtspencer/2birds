@@ -53,7 +53,7 @@
                 <ui:Button name="entry-confirm" text="Confirm" />
                 <ui:Button name="entry-cancel" text="Cancel" />
             </ui:VisualElement>
-            <ui:Label name="menu-footer" class="hint" />
+            <ui:VisualElement name="menu-footer" class="hint" />
             <ui:Label name="status" class="status" />
             <ui:Button name="cancel" text="Cancel connection" style="display: none;" />
         </ui:VisualElement>

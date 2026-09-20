@@ -75,7 +75,7 @@ namespace TwoBirds
                 return;
             }
             if (preferred == null && Eligible(focused) && (area.Contains(focused) || !root.Contains(focused))) return;
-            if (presentation.ActiveDevice is not Gamepad) return;
+            if (!presentation.IsController) return;
             var target = Eligible(preferred) ? preferred : Eligible(remembered) && area.Contains(remembered) ? remembered : initial();
             if (!Eligible(target) || !area.Contains(target)) target = Controls(area).Find(Eligible);
             if (target == null && !Eligible(focused)) focused?.Blur();
@@ -94,7 +94,7 @@ namespace TwoBirds
 
         private void PresentationChanged()
         {
-            bool controller = presentation.ActiveDevice is Gamepad;
+            bool controller = presentation.IsController;
             root.EnableInClassList("controller-navigation", controller);
             if (!presentation.SuppressInput) Repair();
         }

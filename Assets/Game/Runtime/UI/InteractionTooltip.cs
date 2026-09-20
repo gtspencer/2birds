@@ -8,8 +8,8 @@ namespace TwoBirds
     internal sealed class InteractionTooltip : IDisposable
     {
         private readonly VisualElement root, tooltip, chargeTrack;
-        private readonly Image glyph;
-        private readonly Label keycap, verb;
+        private readonly VisualElement bindingContainer;
+        private readonly Label verb;
         private readonly InputPresentation presentation;
         private InputAction displayedAction;
         private bool bindingDirty = true;
@@ -20,8 +20,12 @@ namespace TwoBirds
             this.presentation = presentation;
             tooltip = root.Q("interaction-tooltip");
             chargeTrack = root.Q("charge-track");
-            glyph = root.Q<Image>("interaction-glyph");
-            keycap = root.Q<Label>("interaction-keycap");
+            var glyph = root.Q<Image>("interaction-glyph");
+            var keycap = root.Q<Label>("interaction-keycap");
+            bindingContainer = new VisualElement();
+            glyph.parent.Insert(glyph.parent.IndexOf(glyph), bindingContainer);
+            glyph.RemoveFromHierarchy();
+            keycap.RemoveFromHierarchy();
             verb = root.Q<Label>("interaction-action");
             presentation.Changed += PresentationChanged;
         }
@@ -39,11 +43,8 @@ namespace TwoBirds
             {
                 displayedAction = action;
                 bindingDirty = false;
-                var binding = presentation.Resolve(action);
-                keycap.text = binding.Text;
-                glyph.image = binding.Glyph;
-                glyph.style.display = binding.Glyph ? DisplayStyle.Flex : DisplayStyle.None;
-                keycap.style.display = binding.Glyph ? DisplayStyle.None : DisplayStyle.Flex;
+                bindingContainer.Clear();
+                bindingContainer.Add(new InputPrompt(presentation, action, 32));
             }
             verb.text = interaction.Target.HideTooltipText ? string.Empty :
                 string.IsNullOrWhiteSpace(interaction.Target.TooltipTextOverride) ?

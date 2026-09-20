@@ -369,3 +369,5 @@
 
 .inventory-grid .slot.move-source:focus { border-left-color: rgb(245, 170, 70); }
 .inventory-grid .slot.selected:focus { border-bottom-color: var(--accent); }
+
+.slot-binding { position: absolute; top: 2px; left: 4px; font-size: 12px; }

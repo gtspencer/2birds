@@ -21,7 +21,8 @@ namespace TwoBirds
         private SettingsPanel settings;
         private MenuNavigation navigation;
         private ScrollView friendList;
-        private Label friendStatus, status, footer, entryError;
+        private Label friendStatus, status, entryError;
+        private VisualElement footer;
         private Button start, invite, cancel, refresh;
         private Label hostEndpoint, lobbyEndpoint;
         private TextField hostPort, joinIP, joinPort, entryValue, editing;
@@ -54,7 +55,7 @@ namespace TwoBirds
             friendList = root.Q<ScrollView>("friends-list");
             friendStatus = root.Q<Label>("friends-status");
             status = root.Q<Label>("status");
-            footer = root.Q<Label>("menu-footer");
+            footer = root.Q("menu-footer");
             start = root.Q<Button>("start-game");
             invite = root.Q<Button>("invite");
             cancel = root.Q<Button>("cancel");
@@ -111,7 +112,7 @@ namespace TwoBirds
             EventCallback<ChangeEvent<string>> changed = evt => save(evt.newValue);
             EventCallback<NavigationSubmitEvent> submit = evt =>
             {
-                if (session.InputPresentation.ActiveDevice is not Gamepad) return;
+                if (!session.InputPresentation.IsController) return;
                 OpenEntry(field);
                 evt.StopPropagation();
             };
@@ -197,7 +198,7 @@ namespace TwoBirds
         {
             if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput) return;
             // Escape is delivered as Toolkit Cancel; Start never leaves a lobby.
-            if (context.control.device is Gamepad && session.Phase == SessionPhase.Idle)
+            if (InputPresentation.IsControllerDevice(context.control.device) && session.Phase == SessionPhase.Idle)
             {
                 using var evt = NavigationCancelEvent.GetPooled();
                 (root.panel.focusController.focusedElement as VisualElement)?.SendEvent(evt);
@@ -284,15 +285,16 @@ namespace TwoBirds
         private void PresentationChanged()
         {
             var presentation = session.InputPresentation;
-            footer.text = $"{presentation.Label("UI/Submit")} Select";
+            InputPrompt.Begin(footer);
+            InputPrompt.AddAction(footer, presentation, "UI/Submit", "Select");
             if (editing != null || page != "main" || session.Phase != SessionPhase.Idle)
-                footer.text += $"   {presentation.Label("UI/Cancel")} {(editing != null ? "Cancel edit" : session.Phase == SessionPhase.InLobby ? "Leave lobby" : "Back")}";
+                InputPrompt.AddAction(footer, presentation, "UI/Cancel", editing != null ? "Cancel edit" : session.Phase == SessionPhase.InLobby ? "Leave lobby" : "Back");
             if (editing == null && session.Phase == SessionPhase.Idle &&
                 (page == "join" && !session.LocalNetworking || page == "settings" && settings.SelectedTab.name == "controls-tab"))
-                footer.text += $"   {presentation.ScrollLabel} Scroll";
+                InputPrompt.AddAction(footer, presentation, presentation.IsController ? "UI/Scroll" : "UI/ScrollWheel", "Scroll");
             if (editing != null)
             {
-                entryValue.isReadOnly = presentation.ActiveDevice is Gamepad;
+                entryValue.isReadOnly = presentation.IsController;
                 entryValue.focusable = !entryValue.isReadOnly;
             }
         }

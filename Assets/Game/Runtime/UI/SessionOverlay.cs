@@ -15,7 +15,8 @@ namespace TwoBirds
         private InputAction pause, cancel;
         private MenuNavigation navigation;
         private Button resume, leave, invite;
-        private Label status, footer;
+        private Label status;
+        private VisualElement footer;
         private int handledFrame = -1;
         private void OnEnable()
         {
@@ -31,7 +32,7 @@ namespace TwoBirds
             leave = root.Q<Button>("leave");
             invite = root.Q<Button>("invite");
             status = root.Q<Label>("status");
-            footer = root.Q<Label>("session-footer");
+            footer = root.Q("session-footer");
             settings = new SettingsPanel(root, session, CloseSettings);
             settings.Changed += PresentationChanged;
             settingsButton.clicked += OpenSettings;
@@ -83,11 +84,22 @@ namespace TwoBirds
         private void PresentationChanged()
         {
             var presentation = session.InputPresentation;
-            footer.text = settings.IsOpen
-                ? $"{presentation.Label("UI/Submit")} Select   {presentation.Label("UI/Cancel")} Back"
-                : session.Phase == SessionPhase.InGame ? $"{presentation.Label("UI/Submit")} Select   {presentation.Label("UI/Pause")} / {presentation.Label("UI/Cancel")} Resume"
-                : session.Phase == SessionPhase.Stopping ? "Leaving session…" : $"{presentation.Label("UI/Cancel")} Cancel connection";
-            if (settings.IsOpen && settings.SelectedTab.name == "controls-tab") footer.text += $"   {presentation.ScrollLabel} Scroll";
+            InputPrompt.Begin(footer);
+            if (settings.IsOpen)
+            {
+                InputPrompt.AddAction(footer, presentation, "UI/Submit", "Select");
+                InputPrompt.AddAction(footer, presentation, "UI/Cancel", "Back");
+                if (settings.SelectedTab.name == "controls-tab")
+                    InputPrompt.AddAction(footer, presentation, presentation.IsController ? "UI/Scroll" : "UI/ScrollWheel", "Scroll");
+            }
+            else if (session.Phase == SessionPhase.InGame)
+            {
+                InputPrompt.AddAction(footer, presentation, "UI/Submit", "Select");
+                InputPrompt.AddAction(footer, presentation, "UI/Pause", "Resume");
+                InputPrompt.AddAction(footer, presentation, "UI/Cancel", "Resume");
+            }
+            else if (session.Phase == SessionPhase.Stopping) footer.Add(new Label("Leaving session?"));
+            else InputPrompt.AddAction(footer, presentation, "UI/Cancel", "Cancel connection");
         }
         private void Resume() => session.SetPanel(false);
         private void Leave() => session.Leave();
@@ -102,7 +114,7 @@ namespace TwoBirds
         {
             settings.SetVisible(false);
             Render();
-            if (session.InputPresentation.ActiveDevice is Gamepad) settingsButton.Focus();
+            if (session.InputPresentation.IsController) settingsButton.Focus();
         }
         private void Render()
         {

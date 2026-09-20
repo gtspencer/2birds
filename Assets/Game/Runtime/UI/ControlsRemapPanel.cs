@@ -163,7 +163,7 @@ namespace TwoBirds
         {
             foreach (var device in InputSystem.devices)
             {
-                if (device is not Keyboard && device is not Mouse && device is not Gamepad) continue;
+                if (device is not Keyboard && device is not Mouse && !InputPresentation.IsControllerDevice(device)) continue;
                 foreach (var control in device.allControls)
                     if (control is ButtonControl button && button.isPressed && control.parent is not StickControl)
                         return true;

@@ -35,6 +35,7 @@ Unity CLI 1.0.0-beta.9 (lives at `C:\Users\spenc\AppData\Local\Unity\bin\unity.e
 FishNet 4.7.3 for networking
 Unity UI Toolkit for UI
 New Input System for input
+Steamworks.NET 2025.164.1
 
 ### Hardware
 OS: Windows
