@@ -124,6 +124,9 @@ namespace TwoBirds
         public bool Grounded => Mode == MovementMode.Walking;
         public float Stamina01 => settings && settings.MaximumStamina > 0f ? stamina / settings.MaximumStamina : 0f;
         public uint ResetRevision => resetRevision;
+        public LayerMask GroundLayers => settings.GroundLayers;
+        public float WalkSpeed => settings.WalkSpeed;
+        public float SprintSpeed => settings.SprintSpeed;
         internal uint ImpactGeneration => impactGeneration;
         internal float RemainingRecovery => recoveryTicks * (float)TimeManager.TickDelta;
         public event System.Action<uint, uint, Vector3> Reconciled;

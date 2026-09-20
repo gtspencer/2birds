@@ -33,7 +33,7 @@ namespace TwoBirds
         private PlayerInputReader input;
         private PlayerNetworkState state;
         private Camera localCamera;
-        private Renderer[] bodyRenderers;
+        [SerializeField] private Renderer[] fallbackRenderers = System.Array.Empty<Renderer>();
         private bool[] bodyRendererStates;
         private uint resetRevision;
         private PlayerSeating seating;
@@ -56,22 +56,26 @@ namespace TwoBirds
             state = GetComponent<PlayerNetworkState>();
             seating = GetComponent<PlayerSeating>();
             tickSmoother = graphics.GetComponent<NetworkTickSmoother>();
-            bodyRenderers = graphics.GetComponentsInChildren<Renderer>(true);
-            bodyRendererStates = new bool[bodyRenderers.Length];
-            for (int i = 0; i < bodyRenderers.Length; i++)
-                bodyRendererStates[i] = bodyRenderers[i].enabled;
+            bodyRendererStates = new bool[fallbackRenderers.Length];
+            for (int i = 0; i < fallbackRenderers.Length; i++)
+                bodyRendererStates[i] = fallbackRenderers[i] && fallbackRenderers[i].enabled;
         }
 
         public override void OnStartClient()
         {
             if (!IsOwner) return;
+            CreateCamera();
+        }
+
+        private void CreateCamera()
+        {
+            if (localCamera) return;
             var cameraObject = new GameObject("Local player camera", typeof(Camera), typeof(AudioListener));
             localCamera = cameraObject.GetComponent<Camera>();
             localCamera.nearClipPlane = 0.1f;
             localCamera.farClipPlane = 250f;
             localCamera.tag = "MainCamera";
-            for (int i = 0; i < bodyRenderers.Length; i++)
-                bodyRenderers[i].enabled = false;
+            SetFallbackVisible(false);
             UpdateCamera();
         }
 
@@ -131,7 +135,8 @@ namespace TwoBirds
         }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
-            if (!IsOwner) ReleaseCamera();
+            if (IsOwner) CreateCamera();
+            else ReleaseCamera();
         }
 
         private void ReleaseCamera()
@@ -140,8 +145,12 @@ namespace TwoBirds
             localCamera.gameObject.SetActive(false);
             Destroy(localCamera.gameObject);
             localCamera = null;
-            for (int i = 0; i < bodyRenderers.Length; i++)
-                if (bodyRenderers[i] != null) bodyRenderers[i].enabled = bodyRendererStates[i];
+        }
+
+        public void SetFallbackVisible(bool value)
+        {
+            for (int i = 0; i < fallbackRenderers.Length; i++)
+                if (fallbackRenderers[i]) fallbackRenderers[i].enabled = value && IsClientInitialized && !IsOwner && bodyRendererStates[i];
         }
     }
 }

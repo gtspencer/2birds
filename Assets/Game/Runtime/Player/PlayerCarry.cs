@@ -48,6 +48,16 @@ namespace TwoBirds
         public bool RequestPending => pendingRequest != 0;
         public bool IsCharging => charging;
         internal bool ReleasePreview => preview;
+        public event System.Action PresentationContextChanged;
+        internal Vector3 PreviewVelocity => Time.unscaledTime - previewStart < 0.25f
+            ? previewRelease.Velocity + Physics.gravity * (Time.unscaledTime - previewStart) : Vector3.zero;
+
+        private void SetPreview(bool value)
+        {
+            if (preview == value) return;
+            preview = value;
+            PresentationContextChanged?.Invoke();
+        }
         public float Charge01 => charging ? Mathf.Clamp01((Time.unscaledTime - chargeStart) / settings.PlayerThrowChargeTime) : 0f;
         internal float RemainingImmunity => Mathf.Max(0f, immuneUntil - Time.unscaledTime);
         internal PlayerSeating Seating => seating;
@@ -129,7 +139,7 @@ namespace TwoBirds
             if (role != CarryRole.Free && Players.TryGetValue(partner, out var found)) Partner = found;
             immuneUntil = Time.unscaledTime + immunity;
             pendingRequest = 0;
-            preview = false;
+            SetPreview(false);
         }
 
         public void BeginUse()
@@ -181,9 +191,9 @@ namespace TwoBirds
             else
             {
                 pendingRequest = request;
-                Partner.preview = !release.PlacementPending;
                 Partner.previewRelease = release;
                 Partner.previewStart = Time.unscaledTime;
+                Partner.SetPreview(!release.PlacementPending);
                 Partner.UpdateAttachment();
                 ServerRelease(request, Partner.ObjectId, motor.ControlRevision, Partner.motor.ControlRevision, release);
             }
@@ -289,7 +299,7 @@ namespace TwoBirds
             pendingRequest = 0;
             if (Partner && Partner.IsCarried && Partner.Partner == this)
             {
-                Partner.preview = false;
+                Partner.SetPreview(false);
                 Partner.UpdateAttachment();
             }
             if (result != CarryRequestResult.Completed)
@@ -377,8 +387,8 @@ namespace TwoBirds
         {
             CancelUse();
             pendingRequest = 0;
-            preview = false;
-            if (Partner) Partner.preview = false;
+            SetPreview(false);
+            if (Partner) Partner.SetPreview(false);
             if (IsOwner) Local = this;
             else if (Local == this) Local = null;
         }
@@ -393,7 +403,7 @@ namespace TwoBirds
         {
             if (Partner && Partner.Partner == this)
             {
-                Partner.preview = false;
+                Partner.SetPreview(false);
                 Partner.CancelUse();
                 Partner.pendingRequest = 0;
                 Partner.Partner = null;
@@ -402,7 +412,8 @@ namespace TwoBirds
             if (Local == this) Local = null;
             Partner = null;
             Role = CarryRole.Free;
-            preview = charging = false;
+            SetPreview(false);
+            charging = false;
             pendingRequest = 0;
         }
     }

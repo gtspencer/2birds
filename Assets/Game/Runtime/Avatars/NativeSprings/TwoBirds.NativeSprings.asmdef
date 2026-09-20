@@ -1,0 +1,5 @@
+{
+    "name": "TwoBirds.NativeSprings",
+    "references": ["FastSpringBone10", "SpringBoneJobs", "VRM10", "UniGLTF", "UniGLTF.Utils", "Unity.Collections", "Unity.Mathematics"],
+    "autoReferenced": true
+}

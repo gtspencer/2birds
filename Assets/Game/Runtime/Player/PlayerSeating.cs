@@ -38,6 +38,8 @@ namespace TwoBirds
         public bool PlacementPending { get; private set; }
         public bool AwaitingReference { get; private set; }
         public bool TransitionPending { get; private set; }
+        public event System.Action PresentationContextChanged;
+        public float AttachmentLookYaw => lookOffset;
         public PlayerInputReader Input { get; private set; }
         public PlayerMotor Motor { get; private set; }
         public bool CanEquip => !AwaitingReference && (!Carry || !Carry.IsCarried) && !IsDriver && !PlacementPending && !TransitionPending;
@@ -116,6 +118,7 @@ namespace TwoBirds
                 player.inventory.Hitbox.SetSuspended(true);
                 player.presentation.SetSeated(true);
                 player.Input.ClearContext();
+                player.PresentationContextChanged?.Invoke();
             }
             if (!unresolved.TryGetValue(state.Player, out var old) || state.ControlRevision >= old.state.ControlRevision)
                 unresolved[state.Player] = (state, impulse);
@@ -222,6 +225,7 @@ namespace TwoBirds
             networkState.ApplyControlState(state.ChargingUse);
             if (impulse && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
                 Motor.SubmitWorldImpact(state.Ejection, 0.2f);
+            PresentationContextChanged?.Invoke();
         }
 
         internal void ResetToSpawn()

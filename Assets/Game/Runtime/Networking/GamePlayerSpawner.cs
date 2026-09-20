@@ -68,6 +68,7 @@ namespace TwoBirds
                 var player = Instantiate(playerPrefab, marker.position, marker.rotation);
                 player.GetComponent<PlayerMotor>().SetSpawnPoint(marker.position);
                 player.GetComponent<PlayerNetworkState>().Initialize((byte)slot);
+                player.GetComponent<PlayerAvatarPresentation>().Initialize();
                 players.Add(connection.ClientId, (player, slot));
                 ServerManager.Spawn(player, connection, gameObject.scene);
                 playerCount.Value = players.Count;

@@ -4,14 +4,19 @@ using UnityEngine;
 
 namespace TwoBirds
 {
+    [DefaultExecutionOrder(210)]
     public sealed class PlayerNameLabel : MonoBehaviour
     {
         [SerializeField] private TMP_Text label;
 
         private Transform cameraTransform;
+        private PlayerAvatarPresentation avatar;
+        private Vector3 fallbackPosition;
 
         private void Start()
         {
+            avatar = GetComponentInParent<PlayerAvatarPresentation>();
+            fallbackPosition = transform.localPosition;
             var networkObject = GetComponentInParent<NetworkObject>();
             if (!networkObject) return;
 
@@ -45,6 +50,8 @@ namespace TwoBirds
 
         private void LateUpdate()
         {
+            if (avatar && avatar.Presentation.TryGetNameAnchor(out var anchor)) transform.position = anchor;
+            else transform.localPosition = fallbackPosition;
             if (!cameraTransform)
             {
                 var localPlayer = SessionController.Instance.LocalPlayer;

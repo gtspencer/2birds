@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 98705ba0010b2a8459de3ce075d58853, type: 3}
+  m_Name: AvatarRegistry
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.AvatarRegistry
+  DefaultId:
+    high: 1149333059
+    low: 2402174837
+  Animations: {fileID: 11400000, guid: 08ddb4170443d504ab5c1c9c14dfdad4, type: 2}
+  Entries:
+  - Id:
+      high: 1149333059
+      low: 2402174837
+    Source: {fileID: -1728013695380148634, guid: b77c2247043ed304789f8f715eb95b84, type: 3}
+    SourceGuid: b77c2247043ed304789f8f715eb95b84
+    Prefab: {fileID: 4841294986615409859, guid: 05c9f4682ed528d4a91eb75bf0b00fc2, type: 3}
+    Settings: {fileID: 11400000, guid: 91f55006ab69bef409462158de6d4c5f, type: 2}
+  - Id:
+      high: 1176343954
+      low: 4084229738
+    Source: {fileID: -1728013695380148634, guid: 4637b162658b79848ac548f75e304935, type: 3}
+    SourceGuid: 4637b162658b79848ac548f75e304935
+    Prefab: {fileID: 3594509910487555251, guid: a3c2a3bc551aa97448e9ec14ae118e5e, type: 3}
+    Settings: {fileID: 11400000, guid: 9ddfe6acb4eedb74ea84ac1d1c521440, type: 2}
