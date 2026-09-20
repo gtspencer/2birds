@@ -75,7 +75,11 @@ namespace TwoBirds
             if (IsServerInitialized) ObserversChargingUse(false, motor.ControlRevision);
         }
 
-        internal void ClearChargingForSeat() => ResetChargingUse();
+        internal void ApplyControlState(bool chargingUse)
+        {
+            ResetChargingUse();
+            replicatedChargingUse = chargingUse && CanCharge;
+        }
 
         public override void OnStartServer() => ResetChargingUse();
         public override void OnOwnershipServer(NetworkConnection previousOwner) => ResetChargingUse();

@@ -396,6 +396,12 @@ namespace TwoBirds
         protected override void TimeManager_OnTick()
         {
             if (Suspended) return;
+            if (pendingCartDrop)
+            {
+                pendingCartDrop = false;
+                if (pendingCartDropRevision == ControlRevision && carry)
+                    carry.ImpactDrop(Body.position, Body.rotation.eulerAngles.y);
+            }
             if (IsOwner) BeforeOwnerMove?.Invoke();
             var data = IsOwner ? input.Consume() : default;
             if (IsOwner) UpdateStamina(ref data);

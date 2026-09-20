@@ -234,7 +234,7 @@ namespace TwoBirds
             dragElement = null;
         }
 
-        private bool CanMove => inventoryOpen && inventory && inventory.IsOwner && session &&
+        private bool CanMove => inventoryOpen && inventory && inventory.IsOwner && inventory.CanAct && session &&
             session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen;
 
         private void MoveFocus(NavigationMoveEvent evt, int index)
@@ -295,6 +295,12 @@ namespace TwoBirds
             if (dragGhost != null) dragGhost.style.display = DisplayStyle.None;
         }
 
+        private void CancelItemGestures()
+        {
+            CancelDrag();
+            ClearMove();
+        }
+
         private int FindSlotAt(Vector3 pos)
         {
             for (int i = 0; i < inventorySlots.Length; i++)
@@ -324,7 +330,11 @@ namespace TwoBirds
         private void Bind(PlayerInventory inv, PlayerNetworkState state)
         {
             HideCharge();
-            if (inventory) inventory.InventoryChanged -= Refresh;
+            if (inventory)
+            {
+                inventory.InventoryChanged -= Refresh;
+                inventory.ControlPermissionsChanged -= CancelItemGestures;
+            }
             if (!inv) CloseInventory();
             inventory = inv;
             playerState = state;
@@ -334,7 +344,11 @@ namespace TwoBirds
             playerMotor = inv ? inv.GetComponent<PlayerMotor>() : null;
             seating = inv ? inv.GetComponent<PlayerSeating>() : null;
             inventoryInput?.Bind(inv, inputReader);
-            if (inventory) inventory.InventoryChanged += Refresh;
+            if (inventory)
+            {
+                inventory.InventoryChanged += Refresh;
+                inventory.ControlPermissionsChanged += CancelItemGestures;
+            }
             EnsureCartHints();
             EnsurePassengerHints();
             Refresh();

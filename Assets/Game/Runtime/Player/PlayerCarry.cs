@@ -47,6 +47,7 @@ namespace TwoBirds
         public bool IsCarrying => Role == CarryRole.Carrying;
         public bool RequestPending => pendingRequest != 0;
         public bool IsCharging => charging;
+        internal bool ReleasePreview => preview;
         public float Charge01 => charging ? Mathf.Clamp01((Time.unscaledTime - chargeStart) / settings.PlayerThrowChargeTime) : 0f;
         internal float RemainingImmunity => Mathf.Max(0f, immuneUntil - Time.unscaledTime);
         internal PlayerSeating Seating => seating;
@@ -180,7 +181,7 @@ namespace TwoBirds
             else
             {
                 pendingRequest = request;
-                Partner.preview = true;
+                Partner.preview = !release.PlacementPending;
                 Partner.previewRelease = release;
                 Partner.previewStart = Time.unscaledTime;
                 Partner.UpdateAttachment();
@@ -199,6 +200,11 @@ namespace TwoBirds
                 !WorldItemRegistry.Finite(release.Position) || !WorldItemRegistry.Finite(release.Velocity) ||
                 !float.IsFinite(release.Yaw) || !float.IsFinite(release.Recovery) || release.Recovery < 0f)
             { Complete(request, CarryRequestResult.Changed); return; }
+            if (release.PlacementPending)
+            {
+                release.Position = Partner.motor.SpawnPoint;
+                release.PlacementPending = !Partner.seating.CapsuleClear(release.Position, null);
+            }
             Commit(new CarryTransition
             {
                 Kind = CarryTransitionKind.Release, Carrier = ObjectId, Carried = partner,

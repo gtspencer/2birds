@@ -66,6 +66,8 @@ namespace TwoBirds
         private int pendingCartSource = -1;
         private uint pendingCartGeneration, contactRestoreTick;
         private bool cartTookOff, restoreCartContacts, restoringCartHistory;
+        private bool pendingCartDrop;
+        private uint pendingCartDropRevision;
         private int cartMask, exitGraceCart = -1;
 
         private bool ContactPhysicsActive => !Suspended && capsule.enabled && !Body.isKinematic &&
@@ -78,6 +80,7 @@ namespace TwoBirds
             pendingCartSource = -1;
             pendingCartGeneration = 0;
             cartTookOff = restoringCartHistory = false;
+            pendingCartDrop = false;
             exitGraceCart = -1;
             restoreCartContacts = true;
         }
@@ -300,7 +303,15 @@ namespace TwoBirds
             }
             if (target > 0f)
             {
-                if (!PredictionManager.IsReconciling && IsOwner && carry) carry.ImpactDrop(preContactPosition, preContactYaw);
+                if (carry && carry.IsCarrying && (IsOwner || IsServerInitialized))
+                {
+                    if (PredictionManager.IsReconciling)
+                    {
+                        pendingCartDrop = true;
+                        pendingCartDropRevision = ControlRevision;
+                    }
+                    else carry.ImpactDrop(preContactPosition, preContactYaw);
+                }
                 pendingCartLift = Mathf.Max(0f, target - Body.linearVelocity.y);
                 pendingCartSource = source;
                 pendingCartGeneration = generation;

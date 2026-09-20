@@ -50,6 +50,7 @@ namespace TwoBirds
         public bool CanEquip => CanAct && (!seating || seating.CanEquip);
         public sbyte SelectedSlot => !CanEquip ? (sbyte)-1 : IsServerInitialized && !IsOwner ? serverSelection : viewSelection;
         public event Action InventoryChanged;
+        public event Action ControlPermissionsChanged;
 
         private void Awake()
         {
@@ -281,10 +282,7 @@ namespace TwoBirds
                         BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, accepted || request.Operation != operation);
                 if (!accepted && request.Operation == operation && request.Ids != null)
                     foreach (uint id in request.Ids)
-                    {
-                        if (request.Kind == InventoryOperation.Release) BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, false);
                         registry.Rollback(id, request.Operation);
-                    }
                 pending.RemoveAt(i);
             }
             RebuildView();
@@ -325,6 +323,7 @@ namespace TwoBirds
         internal void ApplyControlPermissions()
         {
             Equipment.CancelUse();
+            ControlPermissionsChanged?.Invoke();
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 var request = pending[i];

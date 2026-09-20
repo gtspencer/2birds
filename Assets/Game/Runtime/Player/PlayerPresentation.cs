@@ -39,6 +39,9 @@ namespace TwoBirds
         private PlayerSeating seating;
         private NetworkTickSmoother tickSmoother;
         private bool seated;
+        private Vector3 releaseOffset;
+        private TransformProperties releaseTracker;
+        private float releaseBlendRemaining;
         public Camera ViewCamera => localCamera;
         public Pose AimPose => seating != null && seating.Seated ? seating.AimPose :
             new Pose(graphics.position + Vector3.up * eyeHeight, Quaternion.Euler(input.Pitch, input.Yaw, 0f));
@@ -78,10 +81,12 @@ namespace TwoBirds
             {
                 resetRevision = motor.ResetRevision;
                 // Restart only the presentation buffer. Authoritative reconcile discards the old fall state.
-                var smoother = tickSmoother.SmootherController;
-                smoother?.StopSmoother();
-                graphics.SetPositionAndRotation(transform.position, transform.rotation);
-                smoother?.StartSmoother();
+                SetSeated(false);
+            }
+            if (releaseBlendRemaining > 0f)
+            {
+                releaseBlendRemaining = Mathf.Max(0f, releaseBlendRemaining - Time.deltaTime);
+                UpdateReleaseOffset();
             }
             UpdateCamera();
         }
@@ -93,16 +98,37 @@ namespace TwoBirds
             localCamera.transform.SetPositionAndRotation(aim.position, aim.rotation);
         }
 
-        internal void SetSeated(bool value)
+        internal void SetSeated(bool value, Pose? releasePreview = null)
         {
             seated = value;
+            releaseBlendRemaining = 0f;
             var smoother = tickSmoother.SmootherController;
             smoother?.StopSmoother();
             graphics.SetPositionAndRotation(transform.position, transform.rotation);
             if (!value) smoother?.StartSmoother();
+            if (!value && releasePreview.HasValue && smoother != null)
+            {
+                releaseTracker = smoother.UniversalSmoother.GetGraphicalTrackerLocalProperties();
+                releaseOffset = releasePreview.Value.position - graphics.position;
+                releaseBlendRemaining = 0.5f;
+                UpdateReleaseOffset();
+                graphics.SetPositionAndRotation(releasePreview.Value.position, releasePreview.Value.rotation);
+                smoother.UniversalSmoother.OnPreTick();
+            }
         }
 
-        public override void OnStopClient() => ReleaseCamera();
+        private void UpdateReleaseOffset()
+        {
+            var properties = releaseTracker;
+            properties.Position += transform.InverseTransformVector(releaseOffset * (releaseBlendRemaining / 0.5f));
+            tickSmoother.SmootherController.UniversalSmoother.TrySetGraphicalTrackerLocalProperties(properties);
+        }
+
+        public override void OnStopClient()
+        {
+            releaseBlendRemaining = 0f;
+            ReleaseCamera();
+        }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
             if (!IsOwner) ReleaseCamera();

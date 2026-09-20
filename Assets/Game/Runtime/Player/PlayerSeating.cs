@@ -66,7 +66,9 @@ namespace TwoBirds
         public override void OnStartClient() { if (IsOwner) Local = this; }
         public override void OnSpawnServer(NetworkConnection connection)
         {
-            TargetCurrent(connection, CaptureCurrent());
+            var state = CaptureCurrent();
+            state.ChargingUse = networkState.IsChargingUse;
+            TargetCurrent(connection, state);
         }
 
         internal SeatTransition CaptureCurrent()
@@ -84,6 +86,7 @@ namespace TwoBirds
             state.Ejection = Vector3.zero;
             state.Recovery = Motor.RemainingRecovery;
             state.ContextOnly = false;
+            state.ChargingUse = false;
             state.Role = Carry ? Carry.Role : CarryRole.Free;
             state.Partner = Carry && Carry.Partner ? Carry.Partner.ObjectId : -1;
             state.Immunity = Carry ? Carry.RemainingImmunity : 0f;
@@ -182,6 +185,8 @@ namespace TwoBirds
             AwaitingReference = false;
             float worldYaw = WorldYaw;
             bool wasDriver = IsDriver;
+            Pose? releasePreview = Carry && Carry.ReleasePreview && state.Role == CarryRole.Free &&
+                state.Seat < 0 && !state.PlacementPending ? new Pose(presentation.Graphics.position, presentation.Graphics.rotation) : null;
             exitCart = Cart;
             current = state;
             Revision = state.Revision;
@@ -209,12 +214,12 @@ namespace TwoBirds
                 Motor.ApplyPlacement(suspended, state.ControlRevision, state.Generation, state.Position, state.Rotation, state.Velocity,
                     state.Recovery > 0f ? state.Recovery : 0.2f);
                 inventory.Hitbox.SetSuspended(suspended);
-                presentation.SetSeated(suspended);
+                presentation.SetSeated(suspended, releasePreview);
             }
             if (!suspended && !state.ContextOnly) Motor.SuppressExitLaunch(exitCart);
             inventory.ApplyControlPermissions();
             if (IsDriver || wasDriver) inventory.ApplySeatPermissions();
-            networkState.ClearChargingForSeat();
+            networkState.ApplyControlState(state.ChargingUse);
             if (impulse && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
                 Motor.SubmitWorldImpact(state.Ejection, 0.2f);
         }
@@ -260,8 +265,8 @@ namespace TwoBirds
                     if (pathHits[j].collider != capsule && pathHits[j].collider != carrier) clear = false;
                 if (clear) return true;
             }
-            position = Motor.SpawnPoint;
-            return forced && CapsuleClear(position, null);
+            position = forced && IsServerInitialized ? Motor.SpawnPoint : origin;
+            return forced && IsServerInitialized && CapsuleClear(position, null);
         }
 
         internal void AddLook(float yaw) => lookOffset = Mathf.Repeat(lookOffset + yaw + 180f, 360f) - 180f;
