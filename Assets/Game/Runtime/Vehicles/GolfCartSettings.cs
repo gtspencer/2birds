@@ -31,6 +31,8 @@ namespace TwoBirds
         public float BrakeForce = 4200f;
         [Tooltip("Total passive longitudinal parking resistance (N). ")]
         public float ParkingForce = 150f;
+        [Tooltip("Maximum slope in degrees where parking counters downhill gravity while allowing pushes.")]
+        [Range(0f, 45f)] public float ParkingHoldSlope = 10f;
         [Tooltip("Top forward speed in m/s. The engine stops adding force once this speed is reached. Also affects steering: at this speed, steering angle is reduced to FastSteeringAngle.")]
         public float MaximumSpeed = 15f;
         [Tooltip("Top reverse speed in m/s. The engine stops adding reverse force once this speed is reached. Increasing this lets the cart back up faster.")]

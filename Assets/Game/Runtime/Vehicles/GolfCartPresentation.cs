@@ -91,8 +91,6 @@ namespace TwoBirds
             if (hornSource) hornSource.Play(hornSfx);
         }
 
-        internal void RebaseTravel(Vector3 correction) => previousPosition += correction;
-
         internal void ResetPose()
         {
             var smoother = tickSmoother.SmootherController;

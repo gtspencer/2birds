@@ -136,6 +136,7 @@ namespace TwoBirds
             steering = drive.x * Mathf.Lerp(settings.SteeringAngle, settings.FastSteeringAngle,
                 Mathf.Abs(speed) / settings.MaximumSpeed);
             int supported = 0;
+            Vector3 supportNormal = Vector3.zero;
             for (int i = 0; i < 4; i++)
             {
                 wheelOrigins[i] = Body.position + Body.rotation * suspension[i].localPosition;
@@ -143,12 +144,15 @@ namespace TwoBirds
                 if (!Physics.Raycast(wheelOrigins[i], -up, out wheelHits[i], settings.SuspensionTravel + settings.WheelRadius,
                     supportMask, QueryTriggerInteraction.Ignore)) continue;
                 supported++;
+                supportNormal += wheelHits[i].normal;
                 compression[i] = Mathf.Clamp01((settings.SuspensionTravel + settings.WheelRadius - wheelHits[i].distance) / settings.SuspensionTravel);
             }
             bool stable = supported >= 3;
             this.supported = stable;
             if (parkingBrake && driven && Mathf.Abs(drive.y) > 0.1f) parkingBrake = false;
             if (!driven) parkingBrake = true;
+            if (parkingBrake && stable && Vector3.Angle(supportNormal, Vector3.up) <= settings.ParkingHoldSlope)
+                predictedBody.AddForce(-Vector3.ProjectOnPlane(Physics.gravity, supportNormal) * Body.mass);
             rearGrip = parkingBrake ? 1f : handbrake ? settings.HandbrakeGrip : Mathf.MoveTowards(rearGrip, 1f, delta / settings.GripRecoverySeconds);
             bool braking = drive.y * speed < 0f && Mathf.Abs(speed) > settings.ReverseDeadband;
             for (int i = 0; i < 4; i++)
@@ -206,7 +210,8 @@ namespace TwoBirds
             bool settled = Body.linearVelocity.magnitude < settings.SettledSpeed && Body.angularVelocity.magnitude < settings.SettledAngularSpeed;
             settledTime = overturned && settled ? settledTime + delta : 0f;
             if (!overturned) rolloverReported = false;
-            CartRecovery recovery = settledTime >= settings.SettledSeconds ? CartRecovery.Flipped :
+            CartRecovery recovery = !network.IsServerInitialized ? CartRecovery.None :
+                settledTime >= settings.SettledSeconds ? CartRecovery.Flipped :
                 stuckTime >= settings.StuckSeconds ? CartRecovery.Stuck : CartRecovery.None;
             bool eject = collisionSeverity >= settings.CrashVelocityChange || rolloverTime >= settings.RolloverSeconds && !rolloverReported;
             if (eject || recovery != CartRecovery.None && recovery != network.Recovery)
@@ -214,6 +219,7 @@ namespace TwoBirds
                 rolloverReported |= rolloverTime >= settings.RolloverSeconds;
                 network.ReportIncident(recovery);
             }
+            if (!network.IsServerInitialized) return;
             bool progressed = Vector3.ProjectOnPlane(Body.position - network.RecoveryOrigin, Vector3.up).magnitude > settings.StuckProgress;
             clearTime = !overturned && previouslySupported && progressed ? clearTime + delta : 0f;
             if (network.Recovery != CartRecovery.None && clearTime >= 1f) network.ClearRecovery();

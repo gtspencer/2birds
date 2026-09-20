@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using FishNet.CodeGenerating;
 using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
+using GameKit.Dependencies.Utilities;
 using UnityEngine;
 
 namespace TwoBirds
@@ -26,6 +28,10 @@ namespace TwoBirds
         public uint GetTick() => tick;
         public void SetTick(uint value) => tick = value;
         public void Dispose() { }
+
+        [CustomComparer]
+        public static bool ControlsEqual(CartInput a, CartInput b) =>
+            a.Steering == b.Steering && a.Throttle == b.Throttle && a.Handbrake == b.Handbrake;
     }
 
     public struct CartState : IReconcileData
@@ -45,7 +51,7 @@ namespace TwoBirds
     {
         public CartMotion Motion;
         public CartPhysicsState Physics;
-        public uint ServerTick;
+        public uint ServerTick, ContactGeneration;
         public int Owner;
         public Vector3 RecoveryOrigin;
     }
@@ -59,8 +65,9 @@ namespace TwoBirds
         private int inputOwner = -1;
         private uint lastStateTick;
         internal uint BaselineTick { get; private set; }
+        internal uint ContactGeneration { get; private set; }
         private bool baselineReady, rejectReplay, pausedReplay;
-        private Vector3 graphicsBeforeReconcile;
+        private bool incidentReported;
 
         protected override void TimeManager_OnTick()
         {
@@ -112,6 +119,7 @@ namespace TwoBirds
                 controller.AfterPhysics((float)TimeManager.TickDelta);
                 CommitPending();
             }
+            else if (IsOwner && inputOwner == OwnerId) controller.AfterPhysics((float)TimeManager.TickDelta);
             CreateReconcile();
         }
 
@@ -129,7 +137,11 @@ namespace TwoBirds
         private void ReconcileDrive(CartState data, Channel channel = Channel.Unreliable)
         {
             rejectReplay = !baselineReady || data.Generation != epoch;
-            if (rejectReplay) return;
+            if (rejectReplay)
+            {
+                ResettableObjectCaches<PredictionRigidbody>.Store(data.Body);
+                return;
+            }
             lastStateTick = System.Math.Max(lastStateTick, data.ServerTick);
             controller.PredictedBody.Reconcile(data.Body);
             controller.RestorePhysics(data.Physics);
@@ -154,27 +166,27 @@ namespace TwoBirds
             pausedReplay = false;
         }
 
-        private void BeforeReconcile(uint clientTick, uint serverTick) => graphicsBeforeReconcile = presentation.Graphics.position;
-
         private void AfterReconcile(uint clientTick, uint serverTick)
         {
             AfterReplay(clientTick, serverTick);
             rejectReplay = false;
-            presentation.RebaseTravel(presentation.Graphics.position - graphicsBeforeReconcile);
         }
 
         private CartBaseline CaptureBaseline() => new()
         {
             Motion = controller.Capture(epoch, TimeManager.Tick), Physics = controller.CapturePhysics(),
-            ServerTick = TimeManager.Tick, Owner = inputOwner, RecoveryOrigin = RecoveryOrigin
+            ServerTick = TimeManager.Tick, ContactGeneration = ContactGeneration,
+            Owner = inputOwner, RecoveryOrigin = RecoveryOrigin
         };
 
-        private void BeginBaseline()
+        private void BeginBaseline(bool teleported = false)
         {
             epoch++;
             inputOwner = Owner.IsValid ? OwnerId : -1;
             controller.ResetMotion(inputOwner >= 0, inputOwner < 0);
-            InstallBaseline(CaptureBaseline());
+            var baseline = CaptureBaseline();
+            if (teleported) baseline.ContactGeneration = epoch;
+            InstallBaseline(baseline);
         }
 
         private void InstallBaseline(CartBaseline state)
@@ -182,13 +194,16 @@ namespace TwoBirds
             if (state.Motion.Epoch < epoch || baselineReady && state.Motion.Epoch == epoch && state.ServerTick < lastStateTick) return;
             ClearReplicateCache();
             controller.PredictedBody.ClearPendingForces();
+            bool contactsChanged = !baselineReady || ContactGeneration != state.ContactGeneration;
             epoch = state.Motion.Epoch;
+            ContactGeneration = state.ContactGeneration;
             inputOwner = state.Owner;
             lastStateTick = state.ServerTick;
             BaselineTick = state.ServerTick;
             RecoveryOrigin = state.RecoveryOrigin;
             heldInput = default;
             inputAge = ControlHoldTicks;
+            incidentReported = false;
             controller.ClearInput();
             var body = controller.Body;
             body.isKinematic = false;
@@ -196,13 +211,15 @@ namespace TwoBirds
             body.rotation = state.Motion.Rotation;
             body.linearVelocity = state.Motion.Velocity;
             body.angularVelocity = state.Motion.AngularVelocity;
+            if (!IsServerInitialized) controller.ResetMotion(state.Physics.Driven, state.Physics.ParkingBrake);
             controller.RestorePhysics(state.Physics);
             controller.RestoreDisplay(state.Motion);
             baselineReady = true;
             rejectReplay = true;
             presentation.ResetPose();
             Physics.SyncTransforms();
-            foreach (var player in PlayerSeating.Players.Values) player.Motor.CartGenerationChanged(this);
+            if (contactsChanged)
+                foreach (var player in PlayerSeating.Players.Values) player.Motor.CartGenerationChanged(this);
         }
 
         public override void OnOwnershipClient(NetworkConnection previousOwner)

@@ -96,7 +96,6 @@ namespace TwoBirds
             Bodies[controller.Body] = this;
             PredictionManager.OnPreReplicateReplay += BeforeReplay;
             PredictionManager.OnPostReplicateReplay += AfterReplay;
-            PredictionManager.OnPreReconcile += BeforeReconcile;
             PredictionManager.OnPostReconcile += AfterReconcile;
             TimeManager.OnPrePhysicsSimulation += BeforePhysics;
             TimeManager.OnPostPhysicsSimulation += AfterPhysics;
@@ -111,6 +110,7 @@ namespace TwoBirds
             controller.Body.WakeUp();
             BaselineTick = TimeManager.Tick;
             epoch = 1;
+            ContactGeneration = epoch;
             inputOwner = -1;
             baselineReady = true;
             StateRevision = 1;
@@ -185,7 +185,7 @@ namespace TwoBirds
                     controller.Body.rotation = rotation;
                     controller.Body.linearVelocity = controller.Body.angularVelocity = Vector3.zero;
                     Recovery = CartRecovery.None;
-                    BeginBaseline();
+                    BeginBaseline(true);
                     Broadcast(Array.Empty<SeatTransition>(), true);
                 }
                 change.Player?.CompleteRequest(change.Request, clear ? SeatRequestResult.Completed : SeatRequestResult.Blocked);
@@ -263,16 +263,16 @@ namespace TwoBirds
         {
             uint revision = StateRevision + 1;
             ApplyState(revision, occupants, Recovery, transitions);
-            ObserversState(revision, occupants, Recovery, transitions, resetMotion, CaptureBaseline());
+            ObserversState(revision, occupants, Recovery, transitions, resetMotion ? CaptureBaseline() : null);
         }
 
         [ObserversRpc]
         private void ObserversState(uint revision, CartOccupant[] current, CartRecovery recovery, SeatTransition[] transitions,
-            bool resetMotion, CartBaseline baseline)
+            CartBaseline? baseline)
         {
             if (IsServerInitialized || revision <= StateRevision) return;
             ApplyState(revision, current, recovery, transitions);
-            if (resetMotion) InstallBaseline(baseline);
+            if (baseline.HasValue) InstallBaseline(baseline.Value);
         }
 
         private void ApplyState(uint revision, CartOccupant[] current, CartRecovery recovery, SeatTransition[] transitions)
@@ -294,11 +294,35 @@ namespace TwoBirds
 
         internal void ReportIncident(CartRecovery recovery)
         {
-            if (!IsServerInitialized || PredictionManager.IsReconciling) return;
+            if (PredictionManager.IsReconciling) return;
             if ((recovery == CartRecovery.None || recovery == Recovery) &&
                 Array.TrueForAll(occupants, entry => entry.Player < 0)) return;
+            if (!IsServerInitialized && (!IsOwner || inputOwner != OwnerId || incidentReported)) return;
             var velocities = new Vector3[4];
             for (int i = 0; i < 4; i++) velocities[i] = controller.PreImpactVelocity(seats[i].RiderLocal.position);
+            if (!IsServerInitialized)
+            {
+                incidentReported = true;
+                ServerIncident(epoch, occupants[0].Revision, velocities);
+                return;
+            }
+            QueueIncident(recovery, velocities);
+        }
+
+        [ServerRpc]
+        private void ServerIncident(uint generation, uint driverRevision, Vector3[] velocities)
+        {
+            if (generation != epoch || driverRevision != occupants[0].Revision || inputOwner < 0) return;
+            QueueIncident(CartRecovery.None, velocities);
+        }
+
+        private void QueueIncident(CartRecovery recovery, Vector3[] velocities)
+        {
+            if (pending != null && pending.Eject)
+            {
+                if (recovery != CartRecovery.None) pending.Recovery = recovery;
+                return;
+            }
             pending?.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
             pending = new PendingChange { Eject = true, Recovery = recovery, RiderVelocities = velocities };
         }
@@ -403,7 +427,6 @@ namespace TwoBirds
             pending = null;
             PredictionManager.OnPreReplicateReplay -= BeforeReplay;
             PredictionManager.OnPostReplicateReplay -= AfterReplay;
-            PredictionManager.OnPreReconcile -= BeforeReconcile;
             PredictionManager.OnPostReconcile -= AfterReconcile;
             AfterReplay(0, 0);
             Bodies.Remove(controller.Body);

@@ -4,6 +4,7 @@ using FishNet.Object;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
 using FishNet.Utility.Template;
+using GameKit.Dependencies.Utilities;
 using UnityEngine;
 
 namespace TwoBirds
@@ -500,8 +501,9 @@ namespace TwoBirds
             }
             if (pendingCartLift > 0f)
             {
-                if (GolfCartNetwork.Carts.TryGetValue(pendingCartSource, out var source) && source.Epoch == pendingCartGeneration)
+                if (GolfCartNetwork.Carts.TryGetValue(pendingCartSource, out var source) && source.ContactGeneration == pendingCartGeneration)
                     predictedBody.AddForce(Vector3.up * pendingCartLift, ForceMode.VelocityChange);
+                else cartRecovery = 0f;
                 pendingCartLift = 0f;
             }
             if (pendingVelocityChange.sqrMagnitude > 0f)
@@ -557,7 +559,11 @@ namespace TwoBirds
         {
             rejectReplay = Seated || data.SeatingRevision != SeatingRevision || data.ImpactGeneration < impactGeneration || data.ResetRevision < resetRevision;
             TraceImpactState($"reconcile rejected={rejectReplay} stateGeneration={data.ImpactGeneration} stateTick={data.GetTick()} serverTick={data.ServerTick} sequence={data.LastImpactSequence} request={data.LastOwnerRequestId} position={data.Position:F6}");
-            if (rejectReplay) return;
+            if (rejectReplay)
+            {
+                ResettableObjectCaches<PredictionRigidbody>.Store(data.Body);
+                return;
+            }
             if (data.ImpactGeneration != impactGeneration) BeginGeneration(data.ImpactGeneration);
             if (data.ServerTick != 0)
             {

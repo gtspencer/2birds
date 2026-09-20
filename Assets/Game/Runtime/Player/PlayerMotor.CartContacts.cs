@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FishNet.Serializing;
 using UnityEngine;
 
@@ -57,6 +58,7 @@ namespace TwoBirds
         private const float CartSeparation = 0.03f;
         private CartContactSet cartContacts;
         private readonly Collider[] nearbyCarts = new Collider[32];
+        private readonly HashSet<int> checkedCarts = new();
         private readonly float[] upwardTargets = new float[CartContactSet.Capacity];
         private Vector3 preContactVelocity;
         private float pendingCartLift, cartRecovery;
@@ -87,12 +89,13 @@ namespace TwoBirds
 
         internal void CartGenerationChanged(GolfCartNetwork cart)
         {
-            if (pendingCartSource == cart.ObjectId) pendingCartLift = 0f;
+            if (pendingCartSource == cart.ObjectId && pendingCartLift > 0f)
+                pendingCartLift = cartRecovery = 0f;
             for (int i = 0; i < cartContacts.Count; i++)
             {
                 var entry = cartContacts[i];
                 if (entry.Cart != cart.ObjectId) continue;
-                entry.Generation = cart.Epoch;
+                entry.Generation = cart.ContactGeneration;
                 entry.Launched = true;
                 cartContacts[i] = entry;
             }
@@ -102,7 +105,7 @@ namespace TwoBirds
 
         internal void ForgetCartContact(int id)
         {
-            if (pendingCartSource == id) pendingCartLift = 0f;
+            if (pendingCartSource == id && pendingCartLift > 0f) pendingCartLift = cartRecovery = 0f;
             for (int i = cartContacts.Count - 1; i >= 0; i--)
                 if (cartContacts[i].Cart == id) RemoveCartContact(i);
             if (exitGraceCart == id) exitGraceCart = -1;
@@ -115,8 +118,8 @@ namespace TwoBirds
             if (index < cartContacts.Count && cartContacts[index].Cart == cart.ObjectId)
             {
                 var entry = cartContacts[index];
-                entry.Launched |= baseline || entry.Generation != cart.Epoch;
-                entry.Generation = cart.Epoch;
+                entry.Launched |= baseline || entry.Generation != cart.ContactGeneration;
+                entry.Generation = cart.ContactGeneration;
                 entry.Normal = normal;
                 cartContacts[index] = entry;
                 return index;
@@ -130,7 +133,7 @@ namespace TwoBirds
             cartContacts.Count++;
             cartContacts[index] = new CartContactState
             {
-                Cart = cart.ObjectId, Generation = cart.Epoch, Normal = normal,
+                Cart = cart.ObjectId, Generation = cart.ContactGeneration, Normal = normal,
                 Launched = baseline || exitGraceCart == cart.ObjectId
             };
             upwardTargets[index] = 0f;
@@ -149,15 +152,15 @@ namespace TwoBirds
 
         private void RestoreNearbyCartContacts()
         {
-            Physics.SyncTransforms();
-            RefreshCartSeparation();
+            checkedCarts.Clear();
+            RefreshCartSeparation(true);
             CapsuleEnds(out var bottom, out var top);
             int count = Physics.OverlapCapsuleNonAlloc(bottom, top, capsule.radius + CartSeparation,
                 nearbyCarts, cartMask, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
                 var body = nearbyCarts[i].attachedRigidbody;
-                if (body && GolfCartNetwork.Bodies.TryGetValue(body, out var cart) && cart.SimulatesPhysics &&
+                if (body && GolfCartNetwork.Bodies.TryGetValue(body, out var cart) && checkedCarts.Add(cart.ObjectId) && cart.SimulatesPhysics &&
                     TouchesCart(cart, out var normal)) AddCartContact(cart, normal, restoringCartHistory && cart.BaselineTick >= contactRestoreTick);
             }
             restoreCartContacts = false;
@@ -199,21 +202,30 @@ namespace TwoBirds
             return deepest >= 0f;
         }
 
-        private void RefreshCartSeparation()
+        private void RefreshCartSeparation(bool restoring = false)
         {
+            bool exitChecked = false;
             for (int i = cartContacts.Count - 1; i >= 0; i--)
             {
                 var entry = cartContacts[i];
                 if (!GolfCartNetwork.Carts.TryGetValue(entry.Cart, out var cart)) { RemoveCartContact(i); continue; }
                 // Paused replay partners provide no evidence of separation.
                 if (!cart.SimulatesPhysics) continue;
-                if (!TouchesCart(cart, out var normal)) { RemoveCartContact(i); continue; }
-                entry.Launched |= entry.Generation != cart.Epoch;
-                entry.Generation = cart.Epoch;
+                if (restoring) checkedCarts.Add(entry.Cart);
+                if (entry.Cart == exitGraceCart) exitChecked = true;
+                if (!TouchesCart(cart, out var normal))
+                {
+                    if (entry.Cart == exitGraceCart) exitGraceCart = -1;
+                    RemoveCartContact(i);
+                    continue;
+                }
+                entry.Launched |= entry.Generation != cart.ContactGeneration ||
+                    restoring && restoringCartHistory && cart.BaselineTick >= contactRestoreTick;
+                entry.Generation = cart.ContactGeneration;
                 entry.Normal = normal;
                 cartContacts[i] = entry;
             }
-            if (exitGraceCart >= 0 && (!GolfCartNetwork.Carts.TryGetValue(exitGraceCart, out var exited) ||
+            if (!exitChecked && exitGraceCart >= 0 && (!GolfCartNetwork.Carts.TryGetValue(exitGraceCart, out var exited) ||
                 exited.SimulatesPhysics && !TouchesCart(exited, out _))) exitGraceCart = -1;
         }
 
