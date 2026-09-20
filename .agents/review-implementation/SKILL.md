@@ -32,3 +32,5 @@ For each issue include:
 - recommended fix
 
 If there are no meaningful issues, say so.
+
+Write your findings to a doc named `{Feature_Name}_Implementation_Review.md`

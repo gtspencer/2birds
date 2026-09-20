@@ -1,6 +1,12 @@
-# Directories and files that AI agents should ignore.
-# Uses .gitignore glob syntax.
-# Respected by: Claude Code (via hooks), Codex CLI (via instructions).
+# Files/directories AI agents must not access.
+# Uses .gitignore pattern syntax.
+
+# Guardrail / repository metadata
+.agentignore
+.hooks/
+.codex/hooks.json
+.codex/config.toml
+.git/
 
 # Unity generated directories
 Library/
