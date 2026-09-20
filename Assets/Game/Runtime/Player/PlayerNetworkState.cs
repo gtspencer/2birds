@@ -17,10 +17,18 @@ namespace TwoBirds
         private bool localChargingUse;
         private bool replicatedChargingUse;
         private PlayerSeating seating;
-        private void Awake() => seating = GetComponent<PlayerSeating>();
+        private PlayerMotor motor;
+        private PlayerCarry carry;
+        private void Awake()
+        {
+            seating = GetComponent<PlayerSeating>();
+            motor = GetComponent<PlayerMotor>();
+            carry = GetComponent<PlayerCarry>();
+        }
+        private bool CanCharge => (!seating || seating.CanEquip) && (!carry || carry.Role == CarryRole.Free);
         public PublicPlayerState Snapshot => state.Value;
         public float Health => state.Value.Health;
-        public bool IsChargingUse => (seating == null || seating.CanEquip) && (IsOwner ? localChargingUse : replicatedChargingUse);
+        public bool IsChargingUse => CanCharge && (IsOwner ? localChargingUse : replicatedChargingUse);
 
         internal void Initialize(byte slot)
         {
@@ -30,18 +38,18 @@ namespace TwoBirds
 
         internal void SetChargingUse(bool value)
         {
-            if (value && seating != null && !seating.CanEquip) return;
+            if (value && !CanCharge) return;
             if (localChargingUse == value) return;
             localChargingUse = value;
             if (!IsOwner || !IsClientInitialized) return;
             if (IsServerInitialized) StoreChargingUse(value);
-            else CmdChargingUse(value, seating != null ? seating.Revision : 0);
+            else CmdChargingUse(value, motor.ControlRevision);
         }
 
         [ServerRpc(RequireOwnership = true)]
         private void CmdChargingUse(bool value, uint revision)
         {
-            if (seating != null && (revision != seating.Revision || value && !seating.CanEquip)) return;
+            if (revision != motor.ControlRevision || value && !CanCharge) return;
             StoreChargingUse(value);
         }
 
@@ -49,13 +57,13 @@ namespace TwoBirds
         {
             if (replicatedChargingUse == value) return;
             replicatedChargingUse = value;
-            ObserversChargingUse(value, seating != null ? seating.Revision : 0);
+            ObserversChargingUse(value, motor.ControlRevision);
         }
 
         [ObserversRpc(BufferLast = true)]
         private void ObserversChargingUse(bool value, uint revision)
         {
-            if (seating != null && (revision != seating.Revision || value && !seating.CanEquip)) return;
+            if (revision != motor.ControlRevision || value && !CanCharge) return;
             if (!IsOwner && !IsServerInitialized) replicatedChargingUse = value;
         }
 
@@ -64,7 +72,7 @@ namespace TwoBirds
             localChargingUse = false;
             replicatedChargingUse = false;
             ClearBuffedRpcs();
-            if (IsServerInitialized) ObserversChargingUse(false, seating != null ? seating.Revision : 0);
+            if (IsServerInitialized) ObserversChargingUse(false, motor.ControlRevision);
         }
 
         internal void ClearChargingForSeat() => ResetChargingUse();

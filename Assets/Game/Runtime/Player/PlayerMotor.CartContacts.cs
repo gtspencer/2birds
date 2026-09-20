@@ -60,14 +60,15 @@ namespace TwoBirds
         private readonly Collider[] nearbyCarts = new Collider[32];
         private readonly HashSet<int> checkedCarts = new();
         private readonly float[] upwardTargets = new float[CartContactSet.Capacity];
-        private Vector3 preContactVelocity;
+        private Vector3 preContactVelocity, preContactPosition;
+        private float preContactYaw;
         private float pendingCartLift, cartRecovery;
         private int pendingCartSource = -1;
         private uint pendingCartGeneration, contactRestoreTick;
         private bool cartTookOff, restoreCartContacts, restoringCartHistory;
         private int cartMask, exitGraceCart = -1;
 
-        private bool ContactPhysicsActive => !Seated && capsule.enabled && !Body.isKinematic &&
+        private bool ContactPhysicsActive => !Suspended && capsule.enabled && !Body.isKinematic &&
             !(PredictionManager.IsReconciling && rejectReplay) && NetworkObject.RigidbodyPauser?.Paused != true;
 
         private void ClearCartContacts()
@@ -99,7 +100,7 @@ namespace TwoBirds
                 entry.Launched = true;
                 cartContacts[i] = entry;
             }
-            if (!Seated && TouchesCart(cart, out var normal)) AddCartContact(cart, normal, true);
+            if (!Suspended && TouchesCart(cart, out var normal)) AddCartContact(cart, normal, true);
             restoreCartContacts = true;
         }
 
@@ -248,6 +249,8 @@ namespace TwoBirds
         {
             if (!ContactPhysicsActive) return;
             preContactVelocity = Body.linearVelocity;
+            preContactPosition = Body.position;
+            preContactYaw = Body.rotation.eulerAngles.y;
             System.Array.Clear(upwardTargets, 0, upwardTargets.Length);
         }
 
@@ -297,6 +300,7 @@ namespace TwoBirds
             }
             if (target > 0f)
             {
+                if (!PredictionManager.IsReconciling && IsOwner && carry) carry.ImpactDrop(preContactPosition, preContactYaw);
                 pendingCartLift = Mathf.Max(0f, target - Body.linearVelocity.y);
                 pendingCartSource = source;
                 pendingCartGeneration = generation;

@@ -11,16 +11,19 @@ namespace TwoBirds
     public struct CartOccupant
     {
         public int Player;
-        public uint Revision, Generation;
+        public uint Revision, ControlRevision, Generation;
     }
     public struct SeatTransition
     {
         public int Player, Cart;
         public sbyte Seat;
-        public uint Revision, Generation;
+        public uint Revision, ControlRevision, Generation;
         public Vector3 Position, Velocity, Ejection;
         public Quaternion Rotation;
-        public bool PlacementPending;
+        public bool PlacementPending, ContextOnly, CarryPlacement;
+        public CarryRole Role;
+        public int Partner;
+        public float Immunity, Recovery;
     }
 
     [RequireComponent(typeof(GolfCartController))]
@@ -28,10 +31,12 @@ namespace TwoBirds
     {
         private sealed class PendingChange
         {
-            public PlayerSeating Player;
+            public PlayerSeating Player, Partner;
+            public uint ControlRevision, PartnerRevision, PartnerControlRevision, CartRevision, Epoch;
+            public int PartnerSeat;
             public int Seat;
             public uint Request, PlayerRevision;
-            public bool Eject, Recover;
+            public bool Eject, Recover, Paired;
             public CartRecovery Recovery;
             public Vector3[] RiderVelocities;
         }
@@ -134,17 +139,44 @@ namespace TwoBirds
             presentation.SetLights(lights);
         }
 
-        internal void Request(PlayerSeating player, uint request, uint playerRevision, uint cartRevision, uint motionEpoch, int destination)
+        internal void Request(PlayerSeating player, uint request, uint playerRevision, uint controlRevision, uint cartRevision, uint motionEpoch, int destination, int partnerId, uint partnerRevision)
         {
             if (!IsServerInitialized) return;
-            bool changesDriver = player.SeatIndex == 0 || destination == 0;
-            if (Busy || player.Revision != playerRevision || motionEpoch != epoch ||
+            bool changesDriver = player.SeatIndex == 0 || destination == 0 || partnerId >= 0;
+            if (Busy || player.Motor.ControlRevision != controlRevision || player.Carry && player.Carry.IsCarried || player.Revision != playerRevision || motionEpoch != epoch ||
                 (changesDriver || Recovery != CartRecovery.None) && cartRevision != StateRevision || destination < -1 || destination > 3 ||
                 player.PlacementPending || player.Cart && player.Cart != this || destination < 0 && player.Cart != this)
             { player.CompleteRequest(request, SeatRequestResult.Busy); return; }
             if (destination >= 0 && IsOccupied(destination)) { player.CompleteRequest(request, SeatRequestResult.Occupied); return; }
+            PlayerSeating partner = null;
+            int secondSeat = -1;
+            if (Recovery == CartRecovery.None && player.Carry && player.Carry.IsCarrying)
+            {
+                var carried = player.Carry.Partner;
+                if (!carried || carried.ObjectId != partnerId || carried.Seating.Motor.ControlRevision != partnerRevision ||
+                    carried.Partner != player.Carry || !carried.IsCarried || destination < 0 ||
+                    carried.Seating.ServerRequestPending || carried.Seating.PlacementPending)
+                { player.CompleteRequest(request, SeatRequestResult.Busy); return; }
+                partner = carried.Seating;
+                secondSeat = destination ^ 2;
+                if (IsOccupied(secondSeat))
+                {
+                    secondSeat = -1;
+                    for (int i = 0; i < seats.Length; i++)
+                        if (i != destination && !IsOccupied(i)) { secondSeat = i; break; }
+                }
+                if (secondSeat < 0) { player.CompleteRequest(request, SeatRequestResult.NoPairSeat); return; }
+            }
+            else if (Recovery == CartRecovery.None && partnerId >= 0)
+            { player.CompleteRequest(request, SeatRequestResult.Busy); return; }
+            player.ServerRequestPending = true;
+            if (partner) partner.ServerRequestPending = true;
             pending = new PendingChange { Player = player, Seat = destination, Request = request, PlayerRevision = playerRevision,
+                ControlRevision = controlRevision, CartRevision = StateRevision, Epoch = epoch,
+                Partner = partner, PartnerSeat = secondSeat, Paired = partner,
+                PartnerRevision = partner ? partner.Revision : 0, PartnerControlRevision = partnerRevision,
                 Recover = Recovery != CartRecovery.None };
+
         }
 
         private void BeforePhysics(float delta)
@@ -165,10 +197,14 @@ namespace TwoBirds
         {
             if (pending == null) return;
             var change = pending;
-            if (!change.Eject && (!change.Player || change.Player.Revision != change.PlayerRevision ||
+            if (!change.Eject && (change.CartRevision != StateRevision || change.Epoch != epoch || !change.Player || change.Player.Revision != change.PlayerRevision || change.Player.Motor.ControlRevision != change.ControlRevision ||
+                change.Paired && (!change.Partner || change.Partner.Revision != change.PartnerRevision ||
+                    change.Partner.Motor.ControlRevision != change.PartnerControlRevision || IsOccupied(change.PartnerSeat) ||
+                    !change.Player.Carry || !change.Player.Carry.IsCarrying || change.Player.Carry.Partner != change.Partner.Carry) ||
                 change.Player.Cart && change.Player.Cart != this || change.Seat >= 0 && IsOccupied(change.Seat)))
             {
                 pending = null;
+                if (change.Partner) change.Partner.ServerRequestPending = false;
                 if (change.Player) change.Player.CompleteRequest(change.Request, SeatRequestResult.Busy);
                 return;
             }
@@ -191,7 +227,7 @@ namespace TwoBirds
                 change.Player?.CompleteRequest(change.Request, clear ? SeatRequestResult.Completed : SeatRequestResult.Blocked);
                 return;
             }
-            bool handoff = change.Eject || change.Seat == 0 || change.Player && change.Player.SeatIndex == 0;
+            bool handoff = change.Eject || change.Seat == 0 || change.Partner && change.PartnerSeat == 0 || change.Player && change.Player.SeatIndex == 0;
             Commit(change, controller.Capture(epoch, TimeManager.Tick), handoff);
         }
 
@@ -224,11 +260,23 @@ namespace TwoBirds
                     }
                 }
                 else transition = new SeatTransition { Player = player.ObjectId, Cart = ObjectId, Seat = (sbyte)change.Seat,
-                    Revision = player.Revision + 1, Generation = player.Motor.ImpactGeneration + 1 };
+                    Revision = player.Revision + 1, ControlRevision = player.Motor.ControlRevision + 1,
+                    Immunity = player.Carry ? player.Carry.RemainingImmunity : 0f, Generation = player.Motor.ImpactGeneration + 1 };
                 if (player.Cart == this) occupants[player.SeatIndex] = new CartOccupant { Player = -1 };
                 if (change.Seat >= 0) occupants[change.Seat] = new CartOccupant { Player = player.ObjectId,
-                    Revision = transition.Revision, Generation = transition.Generation };
+                    Revision = transition.Revision, ControlRevision = transition.ControlRevision, Generation = transition.Generation };
                 transitions.Add(transition);
+                if (change.Partner)
+                {
+                    var partner = change.Partner;
+                    var paired = new SeatTransition { Player = partner.ObjectId, Cart = ObjectId, Seat = (sbyte)change.PartnerSeat,
+                        Revision = partner.Revision + 1, ControlRevision = partner.Motor.ControlRevision + 1,
+                        Generation = partner.Motor.ImpactGeneration + 1, Immunity = partner.Carry ? partner.Carry.RemainingImmunity : 0f };
+                    occupants[change.PartnerSeat] = new CartOccupant { Player = partner.ObjectId, Revision = paired.Revision,
+                        ControlRevision = paired.ControlRevision, Generation = paired.Generation };
+                    transitions.Add(paired);
+                    partner.ServerRequestPending = false;
+                }
             }
             pending = null;
             if (handoff)
@@ -253,7 +301,8 @@ namespace TwoBirds
             if (clear) reservedExits.Add(position);
             Vector3 outward = Vector3.ProjectOnPlane(riderPosition - center, Vector3.up).normalized;
             return new SeatTransition { Player = player.ObjectId, Cart = ObjectId, Seat = -1,
-                Revision = player.Revision + 1, Generation = player.Motor.ImpactGeneration + 1,
+                Revision = player.Revision + 1, ControlRevision = player.Motor.ControlRevision + 1,
+                    Immunity = player.Carry ? player.Carry.RemainingImmunity : 0f, Generation = player.Motor.ImpactGeneration + 1,
                 Position = position, Rotation = Quaternion.Euler(0f, controller.Heading, 0f), Velocity = velocity,
                 Ejection = forced ? outward * controller.Settings.EjectionSpeed + Vector3.up * controller.Settings.EjectionLift : Vector3.zero,
                 PlacementPending = !clear };
@@ -288,7 +337,7 @@ namespace TwoBirds
                 if (occupants[i].Player >= 0) PlayerSeating.Receive(new SeatTransition
                 {
                     Player = occupants[i].Player, Cart = ObjectId, Seat = (sbyte)i,
-                    Revision = occupants[i].Revision, Generation = occupants[i].Generation
+                    Revision = occupants[i].Revision, ControlRevision = occupants[i].ControlRevision, Generation = occupants[i].Generation
                 }, false);
         }
 
@@ -323,6 +372,7 @@ namespace TwoBirds
                 if (recovery != CartRecovery.None) pending.Recovery = recovery;
                 return;
             }
+            if (pending != null && pending.Partner) pending.Partner.ServerRequestPending = false;
             pending?.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
             pending = new PendingChange { Eject = true, Recovery = recovery, RiderVelocities = velocities };
         }
@@ -339,7 +389,12 @@ namespace TwoBirds
             for (int i = 0; i < 4; i++)
                 if (PlayerSeating.Players.TryGetValue(occupants[i].Player, out var player) && player.Owner == connection)
                     disconnectedSeats |= (byte)(1 << i);
-            if (pending != null && pending.Player && pending.Player.Owner == connection) pending = null;
+            if (pending != null && (pending.Player && pending.Player.Owner == connection || pending.Partner && pending.Partner.Owner == connection))
+            {
+                if (pending.Partner) pending.Partner.ServerRequestPending = false;
+                pending.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
+                pending = null;
+            }
         }
 
         private void CommitDisconnects()
@@ -422,6 +477,11 @@ namespace TwoBirds
             TimeManager.OnPrePhysicsSimulation -= BeforePhysics;
             TimeManager.OnPostPhysicsSimulation -= AfterPhysics;
             ServerManager.Objects.OnPreDestroyClientObjects -= Disconnect;
+            if (pending != null)
+            {
+                if (pending.Partner) pending.Partner.ServerRequestPending = false;
+                pending.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
+            }
             Carts.Remove(ObjectId);
             PlayerSeating.ForgetCart(ObjectId);
             pending = null;

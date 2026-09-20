@@ -23,9 +23,17 @@ MonoBehaviour:
   Braking: 25
   AirAcceleration: 4
   JumpSpeed: 4
+  CarryOffset: {x: 0, y: -0.1, z: 0.7}
+  PlayerThrowChargeTime: 1
+  PlayerThrowMinSpeed: 3
+  PlayerThrowMaxSpeed: 15
+  PlayerThrowVelocityInheritance: 0.5
+  PlayerThrowRecoveryMin: 0.2
+  PlayerThrowRecoveryMax: 1.5
+  CarryImmunityDuration: 2
   FallBoundary: -15
   GroundLayers:
     serializedVersion: 2
-    m_Bits: 128
+    m_Bits: 8320
   ConnectTimeout: 10
   LoadTimeout: 30

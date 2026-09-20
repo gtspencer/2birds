@@ -10,6 +10,7 @@ namespace TwoBirds
         private PlayerPresentation presentation;
         private PlayerInventory inventory;
         private PlayerNetworkState networkState;
+        private PlayerCarry carry;
         private WorldItemRegistry registry;
         private Transform viewmodelSlot;
         private WorldItem activeItem;
@@ -17,14 +18,15 @@ namespace TwoBirds
         private sbyte activeSlot = -1;
         private bool subscribed;
         public Transform HeldTransform => IsOwner && viewmodelSlot != null ? viewmodelSlot : equipSlot;
-        public bool IsCharging => activeItem != null && activeItem.IsCharging;
-        public float Charge01 => activeItem != null ? activeItem.Charge01 : 0f;
+        public bool IsCharging => carry && carry.IsCarrying ? carry.IsCharging : activeItem != null && activeItem.IsCharging;
+        public float Charge01 => carry && carry.IsCarrying ? carry.Charge01 : activeItem != null ? activeItem.Charge01 : 0f;
 
         private void Awake()
         {
             presentation = GetComponent<PlayerPresentation>();
             inventory = GetComponent<PlayerInventory>();
             networkState = GetComponent<PlayerNetworkState>();
+            carry = GetComponent<PlayerCarry>();
         }
 
         public override void OnStartNetwork() => registry = WorldItemRegistry.Instance;
@@ -53,6 +55,7 @@ namespace TwoBirds
 
         public void BeginUse()
         {
+            if (carry && carry.IsCarrying) { carry.BeginUse(); return; }
             if (!IsOwner || !inventory.CanEquip || activeItem != null) return;
             var equipped = inventory.GetEquipped();
             if (equipped.IsEmpty || !registry.TryGetItem(equipped.WorldIds[0], out var item) ||
@@ -66,6 +69,7 @@ namespace TwoBirds
 
         public void EndUse()
         {
+            if (carry && carry.IsCarrying) { carry.EndUse(); return; }
             if (!inventory.CanEquip) { CancelUse(); return; }
             var item = ClearActiveUse();
             if (item != null) item.EndUse();
@@ -73,6 +77,7 @@ namespace TwoBirds
 
         public void CancelUse()
         {
+            if (carry) carry.CancelUse();
             var item = ClearActiveUse();
             if (item != null) item.CancelUse();
         }

@@ -46,7 +46,7 @@ namespace TwoBirds
             session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen &&
             !input.InputSuppressed && !ControlsRemapPanel.SuppressMenuInput &&
             suppressedFrame != UnityEngine.Time.frameCount;
-        private bool CanSelect => Available && !input.InventoryOpen && inventory.CanEquip;
+        private bool CanSelect => Available && inventory.CanAct && !input.InventoryOpen && inventory.CanEquip;
 
         private void Toggle(InputAction.CallbackContext context)
         {

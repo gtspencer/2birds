@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace TwoBirds
 {
-    public enum SeatRequestResult : byte { Completed, Occupied, Busy, Blocked }
+    public enum SeatRequestResult : byte { Completed, Occupied, Busy, Blocked, NoPairSeat }
 
     [DefaultExecutionOrder(20)]
     public sealed class PlayerSeating : NetworkBehaviour
@@ -19,6 +19,8 @@ namespace TwoBirds
         private PlayerInventory inventory;
         private PlayerPresentation presentation;
         private PlayerNetworkState networkState;
+        internal PlayerCarry Carry { get; private set; }
+        internal bool ServerRequestPending { get; set; }
         private SeatTransition current;
         private GolfCartNetwork exitCart;
         private uint requestId;
@@ -34,10 +36,11 @@ namespace TwoBirds
         public bool Seated => Cart != null && SeatIndex >= 0;
         public bool IsDriver => Seated && SeatIndex == 0;
         public bool PlacementPending { get; private set; }
+        public bool AwaitingReference { get; private set; }
         public bool TransitionPending { get; private set; }
         public PlayerInputReader Input { get; private set; }
         public PlayerMotor Motor { get; private set; }
-        public bool CanEquip => !IsDriver && !PlacementPending && !TransitionPending;
+        public bool CanEquip => !AwaitingReference && (!Carry || !Carry.IsCarried) && !IsDriver && !PlacementPending && !TransitionPending;
         internal float WorldYaw => Seated ? UpdateSeatHeading() + lookOffset : Input.Yaw;
 
         private void Awake()
@@ -49,6 +52,7 @@ namespace TwoBirds
             inventory = GetComponent<PlayerInventory>();
             presentation = GetComponent<PlayerPresentation>();
             networkState = GetComponent<PlayerNetworkState>();
+            Carry = GetComponent<PlayerCarry>();
             capsule = GetComponent<CapsuleCollider>();
             clearanceMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("CartSeat", "ItemHeld", "PlayerItemHitbox", "BirdBody", "BirdQuery");
             groundMask = clearanceMask & ~LayerMask.GetMask("Player", "GolfCart", "ItemWorld");
@@ -62,15 +66,28 @@ namespace TwoBirds
         public override void OnStartClient() { if (IsOwner) Local = this; }
         public override void OnSpawnServer(NetworkConnection connection)
         {
+            TargetCurrent(connection, CaptureCurrent());
+        }
+
+        internal SeatTransition CaptureCurrent()
+        {
             var state = current;
             state.Player = ObjectId;
+            state.Revision = Revision;
+            state.ControlRevision = Motor.ControlRevision;
+            state.Cart = Cart ? Cart.ObjectId : -1;
             state.Seat = (sbyte)SeatIndex;
             state.Generation = Motor.ImpactGeneration;
             state.Position = Motor.Body.position;
             state.Rotation = Motor.Body.rotation;
-            state.Velocity = Seated ? Vector3.zero : Motor.Body.linearVelocity;
+            state.Velocity = Motor.Suspended ? Vector3.zero : Motor.Body.linearVelocity;
             state.Ejection = Vector3.zero;
-            TargetCurrent(connection, state);
+            state.Recovery = Motor.RemainingRecovery;
+            state.ContextOnly = false;
+            state.Role = Carry ? Carry.Role : CarryRole.Free;
+            state.Partner = Carry && Carry.Partner ? Carry.Partner.ObjectId : -1;
+            state.Immunity = Carry ? Carry.RemainingImmunity : 0f;
+            return state;
         }
         [TargetRpc] private void TargetCurrent(NetworkConnection connection, SeatTransition state)
         {
@@ -79,12 +96,25 @@ namespace TwoBirds
 
         internal static void Receive(SeatTransition state, bool impulse)
         {
-            if (Players.TryGetValue(state.Player, out var player) && (state.Seat < 0 || GolfCartNetwork.Carts.ContainsKey(state.Cart)))
+            if (Players.TryGetValue(state.Player, out var player))
             {
-                player.Apply(state, impulse);
-                if (unresolved.TryGetValue(state.Player, out var queued) && queued.state.Revision <= state.Revision) unresolved.Remove(state.Player);
+                if (player.receivedState && state.ControlRevision <= player.current.ControlRevision) return;
+                if (unresolved.TryGetValue(state.Player, out var newer) && newer.state.ControlRevision > state.ControlRevision) return;
+                bool ready = (state.Seat < 0 || GolfCartNetwork.Carts.ContainsKey(state.Cart)) &&
+                    (state.Role == CarryRole.Free || PlayerCarry.Players.ContainsKey(state.Partner));
+                if (ready)
+                {
+                    player.Apply(state, impulse);
+                    unresolved.Remove(state.Player);
+                    return;
+                }
+                player.AwaitingReference = true;
+                player.Motor.ApplyPlacement(true, state.ControlRevision, state.Generation, state.Position, state.Rotation, Vector3.zero);
+                player.inventory.Hitbox.SetSuspended(true);
+                player.presentation.SetSeated(true);
+                player.Input.ClearContext();
             }
-            else if (!unresolved.TryGetValue(state.Player, out var old) || state.Revision > old.state.Revision)
+            if (!unresolved.TryGetValue(state.Player, out var old) || state.ControlRevision >= old.state.ControlRevision)
                 unresolved[state.Player] = (state, impulse);
         }
 
@@ -106,21 +136,25 @@ namespace TwoBirds
 
         internal void Request(GolfCartNetwork cart, int destination)
         {
-            if (!IsOwner || TransitionPending || PlacementPending || !Input.GameplayActive) return;
+            if (!IsOwner || AwaitingReference || TransitionPending || PlacementPending || !Input.GameplayActive ||
+                Carry && (Carry.IsCarried || Carry.RequestPending)) return;
+            int partner = Carry && Carry.IsCarrying && Carry.Partner ? Carry.Partner.ObjectId : -1;
+            uint partnerRevision = partner >= 0 ? Carry.Partner.Seating.Motor.ControlRevision : 0;
             TransitionPending = true;
             Input.ClearContext();
-            if (IsServerInitialized) cart.Request(this, ++requestId, Revision, cart.StateRevision, cart.Epoch, destination);
-            else ServerRequest(++requestId, Revision, cart.ObjectId, cart.StateRevision, cart.Epoch, destination);
+            if (IsServerInitialized) cart.Request(this, ++requestId, Revision, Motor.ControlRevision, cart.StateRevision, cart.Epoch, destination, partner, partnerRevision);
+            else ServerRequest(++requestId, Revision, Motor.ControlRevision, cart.ObjectId, cart.StateRevision, cart.Epoch, destination, partner, partnerRevision);
         }
 
         public void RequestExit() { if (Seated) Request(Cart, -1); }
-        [ServerRpc] private void ServerRequest(uint request, uint revision, int cartId, uint cartRevision, uint epoch, int destination)
+        [ServerRpc] private void ServerRequest(uint request, uint revision, uint controlRevision, int cartId, uint cartRevision, uint epoch, int destination, int partner, uint partnerRevision)
         {
-            if (GolfCartNetwork.Carts.TryGetValue(cartId, out var cart)) cart.Request(this, request, revision, cartRevision, epoch, destination);
+            if (GolfCartNetwork.Carts.TryGetValue(cartId, out var cart)) cart.Request(this, request, revision, controlRevision, cartRevision, epoch, destination, partner, partnerRevision);
             else CompleteRequest(request, SeatRequestResult.Busy);
         }
         internal void CompleteRequest(uint request, SeatRequestResult result = SeatRequestResult.Completed)
         {
+            ServerRequestPending = false;
             if (IsOwner) FinishRequest(request, result);
             else if (Owner.IsActive) TargetRequest(Owner, request, result);
         }
@@ -132,6 +166,7 @@ namespace TwoBirds
             Input.ClearContext();
             requestFeedback = result switch
             {
+                SeatRequestResult.NoPairSeat => "No seat for carried player.",
                 SeatRequestResult.Occupied => "That seat is occupied.",
                 SeatRequestResult.Busy => "Cart is busy. Try again.",
                 SeatRequestResult.Blocked => "No clear space to exit or recover the cart.",
@@ -142,8 +177,9 @@ namespace TwoBirds
 
         private void Apply(SeatTransition state, bool impulse)
         {
-            if (receivedState && state.Revision <= Revision) return;
+            if (receivedState && state.ControlRevision <= current.ControlRevision) return;
             receivedState = true;
+            AwaitingReference = false;
             float worldYaw = WorldYaw;
             bool wasDriver = IsDriver;
             exitCart = Cart;
@@ -154,6 +190,8 @@ namespace TwoBirds
             Cart = state.Seat >= 0 ? GolfCartNetwork.Carts[state.Cart] : null;
             if (state.Seat < 0 && exitCart == null) GolfCartNetwork.Carts.TryGetValue(state.Cart, out exitCart);
             TransitionPending = false;
+            ServerRequestPending = false;
+            if (Carry) Carry.Install(state.Role, state.Partner, state.Immunity);
             Input.ClearContext();
             if (Seated)
             {
@@ -164,14 +202,66 @@ namespace TwoBirds
                 state.Rotation = anchor.rotation;
             }
             else Input.SetWorldYaw(worldYaw);
-            Motor.ApplySeating(Seated || PlacementPending, state.Revision, state.Generation, state.Position, state.Rotation, state.Velocity);
-            if (!Seated) Motor.SuppressExitLaunch(exitCart);
-            inventory.Hitbox.SetSuspended(Seated || PlacementPending);
-            presentation.SetSeated(Seated || PlacementPending);
+            bool suspended = Seated || PlacementPending || Carry && Carry.IsCarried;
+            if (state.ContextOnly && !Motor.Suspended) Motor.SetControlRevision(state.ControlRevision);
+            else
+            {
+                Motor.ApplyPlacement(suspended, state.ControlRevision, state.Generation, state.Position, state.Rotation, state.Velocity,
+                    state.Recovery > 0f ? state.Recovery : 0.2f);
+                inventory.Hitbox.SetSuspended(suspended);
+                presentation.SetSeated(suspended);
+            }
+            if (!suspended && !state.ContextOnly) Motor.SuppressExitLaunch(exitCart);
+            inventory.ApplyControlPermissions();
             if (IsDriver || wasDriver) inventory.ApplySeatPermissions();
-            if (IsDriver) networkState.ClearChargingForSeat();
+            networkState.ClearChargingForSeat();
             if (impulse && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
                 Motor.SubmitWorldImpact(state.Ejection, 0.2f);
+        }
+
+        internal void ResetToSpawn()
+        {
+            var state = CaptureCurrent();
+            state.Role = CarryRole.Free;
+            state.Partner = -1;
+            state.ControlRevision++;
+            state.Generation++;
+            state.Position = Motor.SpawnPoint;
+            state.Rotation = Quaternion.identity;
+            state.Velocity = Vector3.zero;
+            state.PlacementPending = !CapsuleClear(state.Position, null);
+            state.CarryPlacement = true;
+            Apply(state, false);
+            ObserversPlacement(state);
+        }
+
+        internal void ShowFeedback(string message)
+        {
+            requestFeedback = message;
+            feedbackUntil = Time.unscaledTime + 3f;
+        }
+
+        internal bool TryCarryPlacement(Vector3 origin, float yaw, CapsuleCollider carrier, bool forced, out Vector3 position)
+        {
+            float spacing = capsule.radius + (carrier ? carrier.radius : capsule.radius) + 0.12f;
+            var rotation = Quaternion.Euler(0f, yaw, 0f);
+            Vector3 start = origin + Vector3.up * 0.06f;
+            for (int i = 0; i < 5; i++)
+            {
+                float angle = i switch { 0 => 0f, 1 => 45f, 2 => -45f, 3 => 90f, _ => -90f };
+                position = start + rotation * (Quaternion.Euler(0f, angle, 0f) * Vector3.forward) * spacing;
+                if (!CapsuleClear(position, null)) continue;
+                Vector3 travel = position - start;
+                CapsulePoints(start, out var bottom, out var top);
+                int count = Physics.CapsuleCastNonAlloc(bottom, top, capsule.radius, travel.normalized, pathHits,
+                    travel.magnitude, clearanceMask, QueryTriggerInteraction.Ignore);
+                bool clear = count < pathHits.Length;
+                for (int j = 0; j < count && clear; j++)
+                    if (pathHits[j].collider != capsule && pathHits[j].collider != carrier) clear = false;
+                if (clear) return true;
+            }
+            position = Motor.SpawnPoint;
+            return forced && CapsuleClear(position, null);
         }
 
         internal void AddLook(float yaw) => lookOffset = Mathf.Repeat(lookOffset + yaw + 180f, 360f) - 180f;
@@ -206,13 +296,17 @@ namespace TwoBirds
             if (PlacementPending && IsServerInitialized && Time.unscaledTime >= retryTime)
             {
                 retryTime = Time.unscaledTime + 0.25f;
-                if (TryExit(current.Position, current.Position, exitCart, true, null, out var position))
+                if (current.CarryPlacement ? TryCarryPlacement(current.Position, current.Rotation.eulerAngles.y, null, true, out var position) :
+                    TryExit(current.Position, current.Position, exitCart, true, null, out position))
                 {
                     var state = current;
                     state.Revision++;
+                    state.ControlRevision = Motor.ControlRevision + 1;
+                    state.ContextOnly = false;
                     state.Generation = Motor.ImpactGeneration + 1;
                     state.Position = position;
                     state.PlacementPending = false;
+                    state.Immunity = Carry ? Carry.RemainingImmunity : 0f;
                     Apply(state, true);
                     ObserversPlacement(state);
                 }
@@ -256,7 +350,7 @@ namespace TwoBirds
             return true;
         }
 
-        private bool CapsuleClear(Vector3 position, List<Vector3> reserved)
+        internal bool CapsuleClear(Vector3 position, List<Vector3> reserved)
         {
             if (reserved != null)
                 foreach (var other in reserved)
@@ -267,7 +361,7 @@ namespace TwoBirds
             for (int i = 0; i < count; i++) if (query[i] != capsule) return false;
             return true;
         }
-        private void CapsulePoints(Vector3 position, out Vector3 bottom, out Vector3 top)
+        internal void CapsulePoints(Vector3 position, out Vector3 bottom, out Vector3 top)
         {
             Vector3 center = position + capsule.center;
             float half = Mathf.Max(0f, capsule.height * 0.5f - capsule.radius);
@@ -275,10 +369,18 @@ namespace TwoBirds
             top = center + Vector3.up * half;
         }
 
+        public override void OnOwnershipClient(NetworkConnection previousOwner)
+        {
+            if (IsOwner) Local = this;
+            else if (Local == this) Local = null;
+        }
+
         public override void OnStopNetwork()
         {
             Players.Remove(ObjectId);
             unresolved.Remove(ObjectId);
+            foreach (int id in new List<int>(unresolved.Keys))
+                if (unresolved[id].state.Role != CarryRole.Free && unresolved[id].state.Partner == ObjectId) unresolved.Remove(id);
             if (Local == this) Local = null;
         }
     }

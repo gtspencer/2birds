@@ -13,7 +13,7 @@ namespace TwoBirds
     {
         public uint Operation;
         public InventoryOperation Kind;
-        public uint SeatingRevision;
+        public uint ControlRevision;
         public ItemReleaseIntent ReleaseIntent;
         public bool AutoSelect;
         public int From;
@@ -34,6 +34,7 @@ namespace TwoBirds
         private WorldItemRegistry registry;
         private PlayerMotor motor;
         private PlayerSeating seating;
+        private PlayerCarry carry;
         private PlayerPresentation presentation;
         private uint nextOperation;
         private uint lastOperation;
@@ -45,7 +46,8 @@ namespace TwoBirds
         public PlayerEquipment Equipment { get; private set; }
         public PlayerItemHitbox Hitbox { get; private set; }
         public int Count => SlotCount;
-        public bool CanEquip => seating == null || seating.CanEquip;
+        public bool CanAct => (!carry || !carry.IsCarried) && (!seating || !seating.PlacementPending && !seating.AwaitingReference);
+        public bool CanEquip => CanAct && (!seating || seating.CanEquip);
         public sbyte SelectedSlot => !CanEquip ? (sbyte)-1 : IsServerInitialized && !IsOwner ? serverSelection : viewSelection;
         public event Action InventoryChanged;
 
@@ -53,6 +55,7 @@ namespace TwoBirds
         {
             motor = GetComponent<PlayerMotor>();
             seating = GetComponent<PlayerSeating>();
+            carry = GetComponent<PlayerCarry>();
             presentation = GetComponent<PlayerPresentation>();
             Equipment = GetComponent<PlayerEquipment>();
             Hitbox = GetComponentInChildren<PlayerItemHitbox>(true);
@@ -88,19 +91,20 @@ namespace TwoBirds
 
         public void SelectSlot(sbyte slot)
         {
-            if (!CanEquip || slot < -1 || slot >= HotbarSize) return;
+            if (!CanAct || !CanEquip || slot < -1 || slot >= HotbarSize) return;
+            Equipment.CancelUse();
             Submit(new InventoryRequest { Kind = InventoryOperation.Select, From = viewSelection == slot ? -1 : slot });
         }
 
         public void SwapSlots(int from, int to)
         {
-            if (from < 0 || from >= SlotCount || to < 0 || to >= SlotCount || from == to) return;
+            if (!CanAct || from < 0 || from >= SlotCount || to < 0 || to >= SlotCount || from == to) return;
             Submit(new InventoryRequest { Kind = InventoryOperation.Swap, From = from, To = to });
         }
 
         public void Collect(WorldItem item)
         {
-            if (!IsOwner || !item.CanInteract) return;
+            if (!IsOwner || !CanAct || !item.CanInteract) return;
             var request = new InventoryRequest { Kind = InventoryOperation.Pickup, DefinitionId = item.Record.DefinitionId,
                 Ids = new[] { item.Record.Motion.Id } };
             if (FindSpace(viewSlots, request.DefinitionId) < 0) return;
@@ -108,12 +112,16 @@ namespace TwoBirds
             Submit(request);
         }
 
-        public void DropSelected() => DropSlot(SelectedSlot, false);
+        public void DropSelected()
+        {
+            if (carry && carry.IsCarrying) carry.Drop();
+            else DropSlot(SelectedSlot, false);
+        }
         public void DropSlot(int index) => DropSlot(index, true);
 
         private void DropSlot(int index, bool wholeStack)
         {
-            if (!IsOwner) return;
+            if (!IsOwner || !CanAct) return;
             Equipment.CancelUse();
             var stack = GetSlot(index);
             if (!stack.IsEmpty) ReleaseSlot(index, registry.GetDefinition(stack.ItemId).DropSpeed, wholeStack, ItemReleaseIntent.Drop);
@@ -121,7 +129,7 @@ namespace TwoBirds
 
         public void ReleaseEquipped(uint id, float launchSpeed)
         {
-            if (!IsOwner || !CanEquip) return;
+            if (!IsOwner || !CanEquip || carry && carry.IsCarrying) return;
             var equipped = GetEquipped();
             if (equipped.IsEmpty || equipped.WorldIds[0] != id) return;
             ReleaseSlot(SelectedSlot, launchSpeed, false, ItemReleaseIntent.Throw);
@@ -129,7 +137,7 @@ namespace TwoBirds
 
         private void ReleaseSlot(int index, float launchSpeed, bool wholeStack, ItemReleaseIntent intent)
         {
-            if (!IsOwner || intent == ItemReleaseIntent.Throw && !CanEquip ||
+            if (!IsOwner || !CanAct || intent == ItemReleaseIntent.Throw && !CanEquip ||
                 seating != null && (seating.TransitionPending || seating.PlacementPending)) return;
             var stack = GetSlot(index);
             if (stack.IsEmpty) return;
@@ -164,9 +172,9 @@ namespace TwoBirds
 
         private void Submit(InventoryRequest request)
         {
-            if (!IsOwner) return;
+            if (!IsOwner || !CanAct) return;
             request.Operation = ++nextOperation;
-            request.SeatingRevision = seating != null ? seating.Revision : 0;
+            request.ControlRevision = motor.ControlRevision;
             request.AutoSelect = CanEquip;
             pending.Add(request);
             if (request.Kind == InventoryOperation.Release)
@@ -190,15 +198,17 @@ namespace TwoBirds
             bool accepted = Commit(request);
             lastOperation = request.Operation;
             serverRevision++;
-            registry.UpdateEquipment(this, EquippedId(serverSlots, serverSelection));
+            registry.UpdateEquipment(this, CanEquip ? EquippedId(serverSlots, serverSelection) : 0);
             ReplyInventory(accepted, request.Operation);
         }
 
         private bool Commit(InventoryRequest request)
         {
+            if (!CanAct || request.ControlRevision != motor.ControlRevision ||
+                carry && carry.IsCarrying && request.Kind == InventoryOperation.Release && request.ReleaseIntent == ItemReleaseIntent.Throw) return false;
             if (request.Kind == InventoryOperation.Select || request.Kind == InventoryOperation.Release)
             {
-                if (seating != null && request.SeatingRevision != seating.Revision) return false;
+                if (request.ControlRevision != motor.ControlRevision) return false;
                 if (!CanEquip && (request.Kind == InventoryOperation.Select || request.ReleaseIntent != ItemReleaseIntent.Drop)) return false;
             }
             switch (request.Kind)
@@ -217,7 +227,7 @@ namespace TwoBirds
                     int slot = FindSpace(serverSlots, request.DefinitionId);
                     if (slot < 0) return false;
                     AddId(serverSlots, slot, item.DefinitionId, request.Ids[0]);
-                    if (CanEquip && request.AutoSelect && (seating == null || request.SeatingRevision == seating.Revision) &&
+                    if (CanEquip && request.AutoSelect && (request.ControlRevision == motor.ControlRevision) &&
                         serverSelection < 0 && slot < HotbarSize) serverSelection = (sbyte)slot;
                     registry.SetHeld(request.Ids[0], this, EquippedId(serverSlots, serverSelection) == request.Ids[0]);
                     return true;
@@ -270,7 +280,11 @@ namespace TwoBirds
                     foreach (uint id in request.Ids)
                         BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, accepted || request.Operation != operation);
                 if (!accepted && request.Operation == operation && request.Ids != null)
-                    foreach (uint id in request.Ids) registry.Rollback(id, request.Operation);
+                    foreach (uint id in request.Ids)
+                    {
+                        if (request.Kind == InventoryOperation.Release) BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, false);
+                        registry.Rollback(id, request.Operation);
+                    }
                 pending.RemoveAt(i);
             }
             RebuildView();
@@ -282,8 +296,7 @@ namespace TwoBirds
             viewSelection = confirmedSelection;
             foreach (var request in pending)
             {
-                if (seating != null && request.SeatingRevision != seating.Revision &&
-                    (request.Kind == InventoryOperation.Select || request.Kind == InventoryOperation.Release)) continue;
+                if (!CanAct || request.ControlRevision != motor.ControlRevision) continue;
                 switch (request.Kind)
                 {
                     case InventoryOperation.Select:
@@ -296,7 +309,7 @@ namespace TwoBirds
                         int slot = FindSpace(viewSlots, request.DefinitionId);
                         if (slot < 0) break;
                         AddId(viewSlots, slot, request.DefinitionId, request.Ids[0]);
-                        if (CanEquip && request.AutoSelect && (seating == null || request.SeatingRevision == seating.Revision) &&
+                        if (CanEquip && request.AutoSelect && (request.ControlRevision == motor.ControlRevision) &&
                             viewSelection < 0 && slot < HotbarSize) viewSelection = (sbyte)slot;
                         break;
                     case InventoryOperation.Release:
@@ -307,6 +320,26 @@ namespace TwoBirds
             if (!CanEquip) viewSelection = -1;
             RefreshHeldPresentation();
             InventoryChanged?.Invoke();
+        }
+
+        internal void ApplyControlPermissions()
+        {
+            Equipment.CancelUse();
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                var request = pending[i];
+                if (request.ControlRevision == motor.ControlRevision) continue;
+                if (request.Ids != null)
+                    foreach (uint id in request.Ids)
+                    {
+                        if (request.Kind == InventoryOperation.Release) BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, false);
+                        registry.Rollback(id, request.Operation);
+                    }
+                pending.RemoveAt(i);
+            }
+            if (IsServerInitialized) registry.UpdateEquipment(this, CanEquip ? EquippedId(serverSlots, serverSelection) : 0);
+            RebuildView();
+            registry.RefreshHolders();
         }
 
         internal void ApplySeatPermissions()
@@ -321,7 +354,7 @@ namespace TwoBirds
                 ReplyInventory(true, 0);
             }
             foreach (var request in pending)
-                if (request.Kind == InventoryOperation.Release && request.SeatingRevision != seating.Revision)
+                if (request.Kind == InventoryOperation.Release && request.ControlRevision != motor.ControlRevision)
                     foreach (uint id in request.Ids) registry.Rollback(id, request.Operation);
             RebuildView();
             registry.RefreshHolders();
