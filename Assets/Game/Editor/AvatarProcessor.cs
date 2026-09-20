@@ -46,6 +46,7 @@ namespace TwoBirds.Editor
             {
                 EditorGUILayout.LabelField("Identity", settings.Id.ToString());
                 EditorGUILayout.ObjectField("Settings", settings, typeof(AvatarSettings), false);
+                if (GUILayout.Button("Edit Settings / Spring Chains")) Selection.activeObject = settings;
                 var registry = AssetDatabase.LoadAssetAtPath<AvatarRegistry>(RegistryPath);
                 if (registry && registry.TryResolve(settings.Id, out var entry))
                     EditorGUILayout.ObjectField("Prefab", entry.Prefab, typeof(GameObject), false);
@@ -108,6 +109,7 @@ namespace TwoBirds.Editor
                 draft = settings ? Instantiate(settings) : CreateInstance<AvatarSettings>();
                 if (!settings) draft.Id = NewId(registry);
                 else if (!draft.Id.IsValid) throw new InvalidOperationException("Existing settings have an invalid identity; use Assign New Identity explicitly.");
+                if (string.IsNullOrWhiteSpace(draft.DisplayName)) draft.DisplayName = sourceAsset.name;
                 stage = "source content checks";
                 root = (GameObject)PrefabUtility.InstantiatePrefab(sourceAsset, scene);
                 root.SetActive(false);
@@ -127,7 +129,10 @@ namespace TwoBirds.Editor
                 root.transform.localScale = Vector3.one;
                 foreach (var bone in AvatarContentValidation.RequiredBones)
                     if (!animator.GetBoneTransform(bone)) throw new InvalidOperationException($"Missing required Humanoid mapping: {bone}.");
+                stage = "spring authoring";
+                AvatarSpringAuthoring.Apply(vrm, draft);
                 CheckWriters(root, animator, vrm);
+                stage = "source measurements";
                 var renderers = root.GetComponentsInChildren<Renderer>(true);
                 draft.Generated = Measure(root, animator, renderers, sourceAsset, guid);
                 if (!settings) draft.VisualHeight = draft.Generated.Height;
@@ -158,7 +163,7 @@ namespace TwoBirds.Editor
                 }
                 else changes.Capture(settings);
                 EditorUtility.CopySerialized(draft, settings);
-                settings.name = sourceAsset.name;
+                settings.name = Path.GetFileNameWithoutExtension(settingsPath);
                 EditorUtility.SetDirty(settings);
                 stage = "registry save";
                 if (!registry)
@@ -548,6 +553,7 @@ namespace TwoBirds.Editor
             var old = settings.Id;
             var id = NewId(registry);
             string oldSettings = AssetDatabase.GetAssetPath(settings);
+            string oldSettingsName = settings.name;
             string oldPrefab = ExistingPrefabPath(registry, old) ?? $"{PrefabFolder}/{old}.prefab";
             string newSettings = $"{SettingsFolder}/{id}.asset", newPrefab = $"{PrefabFolder}/{id}.prefab";
             bool movedSettings = false, movedPrefab = false;
@@ -563,6 +569,7 @@ namespace TwoBirds.Editor
                     movedPrefab = true;
                 }
                 settings.Id = id;
+                settings.name = Path.GetFileNameWithoutExtension(newSettings);
                 EditorUtility.SetDirty(settings);
                 if (registry)
                 {
@@ -583,6 +590,7 @@ namespace TwoBirds.Editor
                 }
                 if (movedPrefab) AssetDatabase.MoveAsset(newPrefab, oldPrefab);
                 if (movedSettings) AssetDatabase.MoveAsset(newSettings, oldSettings);
+                settings.name = oldSettingsName;
                 throw;
             }
         }

@@ -104,6 +104,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 380696378112061420}
+  - component: {fileID: 7244637365670049781}
   m_Layer: 6
   m_Name: tail02
   m_TagString: Untagged
@@ -127,6 +128,27 @@ Transform:
   - {fileID: 1972356334869815786}
   m_Father: {fileID: 3681690516222426757}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7244637365670049781
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 275189721723025832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a942e03b39600e41a1b161e958048f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VRM10::UniVRM10.VRM10SpringBoneJoint
+  m_stiffnessForce: 0.5
+  m_gravityPower: 0
+  m_gravityDir: {x: 0, y: -1, z: 0}
+  m_dragForce: 0.4
+  m_jointRadius: 0.02
+  m_anglelimitType: 0
+  m_limitSpaceOffset: {x: 0, y: 0, z: 0, w: 1}
+  m_pitch: 3.1415927
+  m_yaw: 0
 --- !u!1 &396466717007991383
 GameObject:
   m_ObjectHideFlags: 0
@@ -1041,7 +1063,14 @@ MonoBehaviour:
   Vrm: {fileID: 5929401533440927806, guid: 4637b162658b79848ac548f75e304935, type: 3}
   SpringBone:
     ColliderGroups: []
-    Springs: []
+    Springs:
+    - Name: Tail
+      ColliderGroups: []
+      Joints:
+      - {fileID: 6726857999511654359}
+      - {fileID: 7244637365670049781}
+      - {fileID: 7698425379468933666}
+      Center: {fileID: 0}
   UpdateType: 0
   DrawLookAtGizmo: 1
   LookAtTarget: {fileID: 0}
@@ -1236,6 +1265,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3681690516222426757}
+  - component: {fileID: 6726857999511654359}
   m_Layer: 6
   m_Name: tail01
   m_TagString: Untagged
@@ -1259,6 +1289,27 @@ Transform:
   - {fileID: 380696378112061420}
   m_Father: {fileID: 5374766086049494042}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6726857999511654359
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4076716135283292720}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a942e03b39600e41a1b161e958048f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VRM10::UniVRM10.VRM10SpringBoneJoint
+  m_stiffnessForce: 0.5
+  m_gravityPower: 0
+  m_gravityDir: {x: 0, y: -1, z: 0}
+  m_dragForce: 0.4
+  m_jointRadius: 0.02
+  m_anglelimitType: 0
+  m_limitSpaceOffset: {x: 0, y: 0, z: 0, w: 1}
+  m_pitch: 3.1415927
+  m_yaw: 0
 --- !u!1 &4194263907675138048
 GameObject:
   m_ObjectHideFlags: 0
@@ -1522,6 +1573,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1972356334869815786}
+  - component: {fileID: 7698425379468933666}
   m_Layer: 6
   m_Name: tail03
   m_TagString: Untagged
@@ -1544,6 +1596,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 380696378112061420}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7698425379468933666
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5631277495431749534}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a942e03b39600e41a1b161e958048f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VRM10::UniVRM10.VRM10SpringBoneJoint
+  m_stiffnessForce: 0.5
+  m_gravityPower: 0
+  m_gravityDir: {x: 0, y: -1, z: 0}
+  m_dragForce: 0.4
+  m_jointRadius: 0.02
+  m_anglelimitType: 0
+  m_limitSpaceOffset: {x: 0, y: 0, z: 0, w: 1}
+  m_pitch: 3.1415927
+  m_yaw: 0
 --- !u!1 &5798349638033147369
 GameObject:
   m_ObjectHideFlags: 0

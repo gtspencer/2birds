@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UniVRM10;
 
@@ -9,6 +10,7 @@ namespace TwoBirds
     {
         public const int CurrentFormatVersion = 1;
         [Header("Authored tuning")]
+        public string DisplayName;
         [Min(0.01f)] public float VisualHeight = 1.8f;
         public Vector3 StandingOffset, SeatedPelvisOffset, CarriedOffset;
         public float YawOffset;
@@ -18,12 +20,34 @@ namespace TwoBirds
         [Range(0f, 1f)] public float FootCorrection = 1f, PelvisCorrection = 1f;
         public HumanBodyBones LeftHandFollowBone = HumanBodyBones.LeftHand;
         public HumanBodyBones RightHandFollowBone = HumanBodyBones.RightHand;
+        public List<SpringChain> AdditionalSprings = new();
         [Header("Generated source and skeleton")]
         public AvatarId Id;
         public GeneratedSkeleton Generated;
         public float Scale => VisualHeight / Generated.Height;
         public event Action ContentChanged;
         private void OnValidate() => ContentChanged?.Invoke();
+
+        [Serializable]
+        public sealed class SpringChain
+        {
+            public string Name = "Spring";
+            [AvatarBonePath] public string Root, Tip;
+            [Min(0f)] public float Stiffness = 1f;
+            [Range(0f, 1f)] public float Drag = 0.4f;
+            [Min(0f)] public float GravityPower;
+            public Vector3 GravityDirection = Vector3.down;
+            [Min(0f)] public float JointRadius = 0.02f;
+            public List<SpringCollider> Colliders = new();
+        }
+
+        [Serializable]
+        public sealed class SpringCollider
+        {
+            [AvatarBonePath] public string Bone;
+            public Vector3 Offset;
+            [Min(0f)] public float Radius = 0.05f;
+        }
 
         [Serializable]
         public struct GeneratedSkeleton
@@ -40,6 +64,8 @@ namespace TwoBirds
             public Quaternion LeftFootRestRotation, RightFootRestRotation;
         }
     }
+
+    public sealed class AvatarBonePathAttribute : PropertyAttribute { }
 
     public static class AvatarContentValidation
     {
