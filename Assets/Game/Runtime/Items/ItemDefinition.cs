@@ -54,6 +54,8 @@ namespace TwoBirds
         public HeldItemPoseSettings HandPose = HeldItemPoseSettings.Default;
 
         [Header("Player Impacts")]
+        [Tooltip("When true, the item bounces off players without shoving them.")]
+        public bool DontPushPlayer;
         [Tooltip("Minimum incoming contact speed (m/s) that shoves a player.")]
         [Min(0f)] public float MinimumImpactSpeed = 1f;
         [Tooltip("Scales the shove received by a player. Requires a non-trigger sphere collider. Zero disables shove and recovery.")]

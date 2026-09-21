@@ -751,7 +751,7 @@ namespace TwoBirds
             : gameplayVisualPosition + gameplayVisualRotation * Vector3.Scale(sphereCenter, visualRoot.lossyScale);
 
         private bool ContactEligible => impactSphere != null && impactSphere.enabled && !impactSphere.isTrigger &&
-            Definition.ImpulseMultiplier > 0f &&
+            !Definition.DontPushPlayer && Definition.ImpulseMultiplier > 0f &&
             Record.State == WorldItemState.World && !Record.Sleeping &&
             !optimisticPickup && Record.Motion.Id != 0;
 
