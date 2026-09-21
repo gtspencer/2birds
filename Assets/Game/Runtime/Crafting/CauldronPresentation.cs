@@ -117,7 +117,7 @@ namespace TwoBirds
             Quaternion rotation = cauldron.OutputAnchor.rotation;
             if (available)
             {
-                position += Vector3.up * (Mathf.Sin(elapsed * Mathf.PI * 2f) * 0.12f);
+                position += Vector3.up * (Mathf.Sin(elapsed * Mathf.PI * .75f) * 0.05f);
                 rotation *= Quaternion.Euler(0f, elapsed * 90f, 0f);
             }
             item.PresentOutput(new Pose(position, rotation), available);
