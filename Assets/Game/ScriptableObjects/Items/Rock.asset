@@ -28,7 +28,7 @@ MonoBehaviour:
     HoldWristEuler: {x: 0, y: 0, z: 0}
     ChargeControlPosition: {x: 0.35, y: 0.25, z: 0.45}
     ChargedPosition: {x: 0.2, y: 0.65, z: -0.25}
-    ChargedWristEuler: {x: -70, y: 0, z: 15}
+    ChargedWristEuler: {x: -70, y: 0, z: 195}
     ChargePoseDuration: 0.35
     FollowReachFraction: 0.85
     MaximumFollowDuration: 0.2

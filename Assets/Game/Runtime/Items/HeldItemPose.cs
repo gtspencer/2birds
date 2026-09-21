@@ -22,7 +22,7 @@ namespace TwoBirds
             HoldPosition = new Vector3(0.15f, -0.40f, 0.50f),
             ChargeControlPosition = new Vector3(0.35f, 0.25f, 0.45f),
             ChargedPosition = new Vector3(0.20f, 0.65f, -0.25f),
-            ChargedWristEuler = new Vector3(-70f, 0f, 15f),
+            ChargedWristEuler = new Vector3(-70f, 0f, 195f),
             ChargePoseDuration = 0.35f, FollowReachFraction = 0.85f,
             MaximumFollowDuration = 0.20f, ReturnBlendDuration = 0.20f
         };
