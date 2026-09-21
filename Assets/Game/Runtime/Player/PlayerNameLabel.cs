@@ -20,12 +20,6 @@ namespace TwoBirds
             var networkObject = GetComponentInParent<NetworkObject>();
             if (!networkObject) return;
 
-            if (networkObject.IsOwner)
-            {
-                gameObject.SetActive(false);
-                return;
-            }
-
             string displayName = null;
             int clientId = networkObject.Owner.ClientId;
             var roster = SessionController.Instance.Roster;

@@ -65,6 +65,8 @@ namespace TwoBirds
         {
             if (!IsOwner) return;
             CreateCamera();
+            var nameLabel = GetComponentInChildren<PlayerNameLabel>(true);
+            if (nameLabel) nameLabel.gameObject.SetActive(false);
         }
 
         private void CreateCamera()
