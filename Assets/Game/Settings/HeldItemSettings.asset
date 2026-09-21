@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e653c5fe530a58f41823073a89a9aa8d, type: 3}
+  m_Name: HeldItemSettings
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.HeldItemSettings
+  HoldSettings:
+    HoldPosition: {x: 0.15, y: -0.4, z: 0.5}
+    HoldWristEuler: {x: 0, y: 0, z: 0}
+    ChargeControlPosition: {x: 0.35, y: 0.25, z: 0.45}
+    ChargedPosition: {x: 0.2, y: 0.65, z: -0.25}
+    ChargedWristEuler: {x: -70, y: 0, z: 195}
+    ChargePoseDuration: 0.35
+    FollowReachFraction: 0.85
+    MaximumFollowDuration: 0.2
+    EndPosePauseDuration: 0
+    ReturnBlendDuration: 0.2

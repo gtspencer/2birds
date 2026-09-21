@@ -42,7 +42,12 @@ namespace TwoBirds
         [Tooltip("Gameplay seconds to reach full throw speed. Full charge waits for release.")]
         [Min(0.01f)] public float ThrowChargeTime = 1f;
 
+        [Header("Held Item Grip")]
+        [Tooltip("Item origin in metres along the palm axes: right, out of palm, toward fingers.")] public Vector3 GripPosition;
+        [Tooltip("Item rotation in degrees relative to the palm. Recompute the held offset after changing this.")] public Vector3 GripEuler;
+
         [Header("Held Hand Pose")]
+        public bool OverrideHoldSettings;
         public HeldItemPoseSettings HandPose = HeldItemPoseSettings.Default;
 
         [Header("Player Impacts")]

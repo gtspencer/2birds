@@ -38,7 +38,7 @@ namespace TwoBirds
         internal bool ReadyForUse => running && inventory.CanEquip && networkState.CanCharge &&
             networkState.ItemAction.State != ItemActionState.Recovering;
         internal Transform Attachment => fallback;
-        internal HeldItemPoseData Grip(ItemDefinition definition) => definition == selectedDefinition ? selectedData : new HeldItemPoseData(definition);
+        internal HeldItemPoseData Grip(ItemDefinition definition) => definition == selectedDefinition ? selectedData : registry.GetHeldPose(definition);
 
         private void Awake()
         {
@@ -190,7 +190,7 @@ namespace TwoBirds
             if (id == selectedId && definition == selectedDefinition) return;
             selectedId = id;
             selectedDefinition = definition;
-            if (definition) selectedData = new HeldItemPoseData(definition);
+            if (definition) selectedData = registry.GetHeldPose(definition);
             if (action.State == ItemActionState.Recovering)
             {
                 if (stage == RecoveryStage.Return && hasPose)
@@ -253,7 +253,7 @@ namespace TwoBirds
             tracking = false;
             releaseUnavailable = false;
             actionDefinition = action.DefinitionId == 0 ? null : registry.GetDefinition(action.DefinitionId);
-            if (actionDefinition) actionData = new HeldItemPoseData(actionDefinition);
+            if (actionDefinition) actionData = registry.GetHeldPose(actionDefinition);
             if (action.State == ItemActionState.Charging)
             {
                 chargeStart = actionData.Settings.HoldPosition;
@@ -350,7 +350,7 @@ namespace TwoBirds
             release = default;
             progress = 0;
             if (!ReadyForUse || !item || !TryBody(true, out var body, out var settings)) return false;
-            var data = new HeldItemPoseData(item.Definition);
+            var data = registry.GetHeldPose(item.Definition);
             float arc = action.State == ItemActionState.Charging ? ChargeProgress(CurrentAge()) : 0f;
             var current = action.State == ItemActionState.Charging
                 ? HeldItemPoseCalculation.Charge(body, settings, data, chargeStart, chargeRotation, arc)

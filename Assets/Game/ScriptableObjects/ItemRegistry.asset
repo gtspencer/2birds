@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2b99fe8194546fd40b7d3f7468135f39, type: 3}
   m_Name: ItemRegistry
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.ItemRegistry
+  HeldItemDefaults: {fileID: 11400000, guid: 4f237cae0f287dc4db034ac74edce57a, type: 2}
   Items:
   - {fileID: 11400000, guid: 9f574bf6e57f89d4cb07ba4618076463, type: 2}
   - {fileID: 11400000, guid: cba8528fd3cf31f46853e0cfad7755a4, type: 2}

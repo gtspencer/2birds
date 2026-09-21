@@ -5,6 +5,7 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/Item Registry")]
     public sealed class ItemRegistry : ScriptableObject
     {
+        public HeldItemSettings HeldItemDefaults;
         public ItemDefinition[] Items = System.Array.Empty<ItemDefinition>();
 
         public ItemDefinition Get(byte id)

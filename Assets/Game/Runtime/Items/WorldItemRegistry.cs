@@ -59,6 +59,9 @@ namespace TwoBirds
         public PlayerInventory LocalInventory { get; private set; }
         internal event System.Action<uint, int, int> PresentationChanged;
 
+        internal HeldItemPoseData GetHeldPose(ItemDefinition definition) =>
+            new(definition, itemRegistry.HeldItemDefaults.HoldSettings);
+
         private void NotifyPresentation(uint id, int previousHolder)
         {
             int holder = items.TryGetValue(id, out var item) && item && item.Record.State == WorldItemState.Held

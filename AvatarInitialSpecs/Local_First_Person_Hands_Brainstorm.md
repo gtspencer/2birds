@@ -99,6 +99,8 @@ Processing should remain repeatable and should preserve the avatar's stable ID.
 
 If additional generated first-person assets are required, they should be produced automatically or with minimal explicit authoring.
 
+If there is not suitable overlap with the existing avatar processing script, we can create a new one for the first person processing.
+
 ---
 
 ## Runtime Behavior

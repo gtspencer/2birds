@@ -6,8 +6,6 @@ namespace TwoBirds
     [Serializable]
     public struct HeldItemPoseSettings
     {
-        [Tooltip("Item origin in metres along the palm axes: right, out of palm, toward fingers.")] public Vector3 GripPosition;
-        [Tooltip("Item rotation in degrees relative to the palm. Recompute the held offset after changing this.")] public Vector3 GripEuler;
         [Tooltip("Palm point relative to the shoulder in arm lengths: right, up, torso forward.")] public Vector3 HoldPosition;
         [Tooltip("Palm rotation in degrees relative to the torso.")] public Vector3 HoldWristEuler;
         [Tooltip("Charge curve control point in shoulder-relative arm lengths.")] public Vector3 ChargeControlPosition;
@@ -40,18 +38,20 @@ namespace TwoBirds
             WristRotation = wrist;
             WristPosition = follow - wrist * (avatar.Generated.RightWristToPalmPosition * avatar.Scale);
             FollowRotation = wrist * avatar.Generated.RightWristToPalmRotation;
-            Item = new Pose(follow + FollowRotation * item.Settings.GripPosition, FollowRotation * item.GripRotation);
+            Item = new Pose(follow + FollowRotation * item.GripPosition, FollowRotation * item.GripRotation);
         }
     }
 
     internal readonly struct HeldItemPoseData
     {
         internal readonly HeldItemPoseSettings Settings;
+        internal readonly Vector3 GripPosition;
         internal readonly Quaternion GripRotation, HoldRotation, ChargedRotation;
-        internal HeldItemPoseData(ItemDefinition definition)
+        internal HeldItemPoseData(ItemDefinition definition, HeldItemPoseSettings defaults)
         {
-            Settings = definition.HandPose;
-            GripRotation = Quaternion.Euler(Settings.GripEuler);
+            Settings = definition.OverrideHoldSettings ? definition.HandPose : defaults;
+            GripPosition = definition.GripPosition;
+            GripRotation = Quaternion.Euler(definition.GripEuler);
             HoldRotation = Quaternion.Euler(Settings.HoldWristEuler);
             ChargedRotation = Quaternion.Euler(Settings.ChargedWristEuler);
         }
