@@ -21,7 +21,7 @@ namespace TwoBirds
         private float scale;
         internal AvatarBinding Binding { get; private set; }
         internal AvatarSettings Settings { get; private set; }
-        internal float VisualHeight { get; private set; }
+        internal float NameAnchorOffset { get; private set; }
         internal Transform Head { get; private set; }
         internal bool Initialized { get; private set; }
         private bool physical;
@@ -39,7 +39,7 @@ namespace TwoBirds
             AvatarContentValidation.Validate(gameObject, entry.Settings);
             host = owner; Settings = entry.Settings;
             scale = Settings.Scale;
-            VisualHeight = Settings.VisualHeight;
+            NameAnchorOffset = (Settings.Generated.Height - Settings.Generated.Head.y) * scale + Settings.NamePanelOffset;
             animator = GetComponent<Animator>(); vrm = GetComponent<Vrm10Instance>();
             animator.runtimeAnimatorController = null;
             animator.applyRootMotion = false;

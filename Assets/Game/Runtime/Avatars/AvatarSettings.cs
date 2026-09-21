@@ -12,6 +12,8 @@ namespace TwoBirds
         [Header("Authored tuning")]
         public string DisplayName;
         [Min(0.01f)] public float VisualHeight = 1.8f;
+        [Tooltip("Additional name panel height in world units.")]
+        public float NamePanelOffset;
         public Vector3 StandingOffset, SeatedPelvisOffset, CarriedOffset;
         public float YawOffset;
         [Range(0.5f, 2f)] public float PlaybackMultiplier = 1f;
@@ -103,7 +105,7 @@ namespace TwoBirds
                 throw new InvalidOperationException("Avatar body measurements are invalid; process the source again.");
             if (!Finite(settings.FirstPersonPlacementOffset) || !Finite(settings.FirstPersonReachOffset) ||
                 !Finite(settings.StandingOffset) || !Finite(settings.SeatedPelvisOffset) || !Finite(settings.CarriedOffset) ||
-                !float.IsFinite(settings.YawOffset) || !Positive(settings.PlaybackMultiplier) ||
+                !float.IsFinite(settings.YawOffset) || !float.IsFinite(settings.NamePanelOffset) || !Positive(settings.PlaybackMultiplier) ||
                 !float.IsFinite(settings.LeftSoleAdjustment) || !float.IsFinite(settings.RightSoleAdjustment) ||
                 !float.IsFinite(settings.FootCorrection) || !float.IsFinite(settings.PelvisCorrection) ||
                 !Rotation(settings.LeftFootRotation) || !Rotation(settings.RightFootRotation))

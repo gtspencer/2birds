@@ -168,7 +168,7 @@ namespace TwoBirds
         {
             if (active)
             {
-                position = active.Head.position + Vector3.up * (0.12f * active.VisualHeight);
+                position = active.Head.position + Vector3.up * active.NameAnchorOffset;
                 return true;
             }
             position = default;

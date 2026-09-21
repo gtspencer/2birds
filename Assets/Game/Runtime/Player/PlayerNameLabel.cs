@@ -7,6 +7,7 @@ namespace TwoBirds
     [DefaultExecutionOrder(210)]
     public sealed class PlayerNameLabel : MonoBehaviour
     {
+        private const float PanelClearance = 0.3f;
         [SerializeField] private TMP_Text label;
         [SerializeField] private Transform healthBarFill;
         private PlayerHealth health;
@@ -76,7 +77,7 @@ namespace TwoBirds
         private void LateUpdate()
         {
             if (health.IsDowned) transform.position = ragdoll.RootPosition + Vector3.up * 0.9f;
-            else if (avatar && avatar.Presentation.TryGetNameAnchor(out var anchor)) transform.position = anchor;
+            else if (avatar && avatar.Presentation.TryGetNameAnchor(out var anchor)) transform.position = anchor + Vector3.up * PanelClearance;
             else transform.localPosition = fallbackPosition;
             if (!cameraTransform) return;
 
