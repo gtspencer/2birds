@@ -134,7 +134,7 @@ namespace TwoBirds.Editor
                 CheckWriters(root, animator, vrm);
                 stage = "source measurements";
                 var renderers = root.GetComponentsInChildren<Renderer>(true);
-                draft.Generated = Measure(root, animator, renderers, sourceAsset, guid);
+                draft.Generated = Measure(root, animator, renderers, sourceAsset, guid, draft);
                 if (!settings) draft.VisualHeight = draft.Generated.Height;
                 if (draft.VisualHeight <= 0f || !float.IsFinite(draft.VisualHeight)) throw new InvalidOperationException("VisualHeight must be positive and finite.");
                 stage = "shared animation preparation";
@@ -274,8 +274,11 @@ namespace TwoBirds.Editor
                 }
         }
 
-        private static AvatarSettings.GeneratedSkeleton Measure(GameObject root, Animator animator, Renderer[] renderers, GameObject source, string guid)
+        private static AvatarSettings.GeneratedSkeleton Measure(GameObject root, Animator animator, Renderer[] renderers, GameObject source, string guid, AvatarSettings settings)
         {
+            var wrist = animator.GetBoneTransform(HumanBodyBones.RightHand);
+            var follow = animator.GetBoneTransform(settings.RightHandFollowBone);
+            if (!follow) throw new InvalidOperationException($"Missing configured hand follow bone: {settings.RightHandFollowBone}.");
             Bounds bounds = default;
             bool found = false;
             foreach (var renderer in renderers)
@@ -313,6 +316,9 @@ namespace TwoBirds.Editor
             return new AvatarSettings.GeneratedSkeleton
             {
                 Source = source, SourceGuid = guid, FormatVersion = AvatarSettings.CurrentFormatVersion, HumanoidAvatar = animator.avatar,
+                RightHandFollowBone = settings.RightHandFollowBone,
+                RightWristToFollowPosition = Quaternion.Inverse(wrist.rotation) * (follow.position - wrist.position),
+                RightWristToFollowRotation = Quaternion.Inverse(wrist.rotation) * follow.rotation,
                 Bounds = bounds, Height = height, SolePlane = sole, HumanScale = animator.humanScale,
                 Hips = Position(HumanBodyBones.Hips) - Vector3.up * sole, Head = Position(HumanBodyBones.Head) - Vector3.up * sole,
                 LeftShoulder = Position(HumanBodyBones.LeftUpperArm) - Vector3.up * sole,

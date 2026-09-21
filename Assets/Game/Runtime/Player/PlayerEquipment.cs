@@ -17,6 +17,7 @@ namespace TwoBirds
         private uint activeId;
         private sbyte activeSlot = -1;
         private bool subscribed;
+        public PlayerHeldItemPresentation HeldPresentation { get; private set; }
         public Transform HeldTransform => IsOwner && viewmodelSlot != null ? viewmodelSlot : equipSlot;
         public bool IsCharging => carry && carry.IsCarrying ? carry.IsCharging : activeItem != null && activeItem.IsCharging;
         public float Charge01 => carry && carry.IsCarrying ? carry.Charge01 : activeItem != null ? activeItem.Charge01 : 0f;
@@ -27,6 +28,7 @@ namespace TwoBirds
             inventory = GetComponent<PlayerInventory>();
             networkState = GetComponent<PlayerNetworkState>();
             carry = GetComponent<PlayerCarry>();
+            HeldPresentation = GetComponent<PlayerHeldItemPresentation>();
         }
 
         public override void OnStartNetwork() => registry = WorldItemRegistry.Instance;
@@ -34,6 +36,7 @@ namespace TwoBirds
         public override void OnStartClient()
         {
             if (IsOwner) InitializeOwner();
+            HeldPresentation.StartPresentation();
             registry?.RefreshHolders();
         }
 
@@ -56,7 +59,7 @@ namespace TwoBirds
         public void BeginUse()
         {
             if (carry && carry.IsCarrying) { carry.BeginUse(); return; }
-            if (!IsOwner || !inventory.CanEquip || activeItem != null) return;
+            if (!IsOwner || !HeldPresentation.ReadyForUse || activeItem) return;
             var equipped = inventory.GetEquipped();
             if (equipped.IsEmpty || !registry.TryGetItem(equipped.WorldIds[0], out var item) ||
                 item == null || !item.isActiveAndEnabled) return;
@@ -64,7 +67,7 @@ namespace TwoBirds
             activeId = equipped.WorldIds[0];
             activeSlot = inventory.SelectedSlot;
             item.BeginUse(this);
-            networkState.SetChargingUse(IsCharging);
+            if (item.IsCharging) networkState.BeginItemCharge(item.Definition.ItemId, activeId);
         }
 
         public void EndUse()
@@ -72,14 +75,18 @@ namespace TwoBirds
             if (carry && carry.IsCarrying) { carry.EndUse(); return; }
             if (!inventory.CanEquip) { CancelUse(); return; }
             var item = ClearActiveUse();
-            if (item != null) item.EndUse();
+            if (!item) return;
+            item.EndUse();
+            networkState.CancelItemCharge();
         }
 
         public void CancelUse()
         {
             if (carry) carry.CancelUse();
             var item = ClearActiveUse();
-            if (item != null) item.CancelUse();
+            if (!item) return;
+            item.CancelUse();
+            networkState.CancelItemCharge();
         }
 
         private WorldItem ClearActiveUse()
@@ -88,7 +95,6 @@ namespace TwoBirds
             activeItem = null;
             activeId = 0;
             activeSlot = -1;
-            networkState.SetChargingUse(false);
             return item;
         }
 
@@ -100,19 +106,25 @@ namespace TwoBirds
                 CancelUse();
         }
 
-        public void ReleaseItem(uint id, float launchSpeed)
-        {
-            if (inventory.CanEquip) inventory.ReleaseEquipped(id, launchSpeed);
-        }
+        public bool TryReleaseItem(uint id, float launchSpeed) =>
+            HeldPresentation.ReadyForUse && inventory.TryReleaseEquipped(id, launchSpeed);
 
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
+            HeldPresentation.StopPresentation();
             if (IsOwner) InitializeOwner();
             else ReleaseOwner();
+            HeldPresentation.StartPresentation();
             registry?.RefreshHolders();
         }
 
-        public override void OnStopClient() => ReleaseOwner();
+        public override void OnStopClient()
+        {
+            HeldPresentation.StopPresentation();
+            ReleaseOwner();
+        }
+
+        public override void OnStopNetwork() => HeldPresentation.StopPresentation();
 
         private void ReleaseOwner()
         {

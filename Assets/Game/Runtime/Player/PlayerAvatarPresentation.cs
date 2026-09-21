@@ -174,7 +174,10 @@ namespace TwoBirds
                 pitch = Mathf.Lerp(pitch, received.Pitch, alpha);
                 relativeYaw = Mathf.LerpAngle(relativeYaw, received.Attached ? received.Yaw : 0f, alpha);
             }
-            return new AvatarPresentationInput
+            return CurrentPlacement;
+        }
+
+        internal AvatarPresentationInput CurrentPlacement => new AvatarPresentationInput
             {
                 Facing = new Pose(graphics.position, graphics.rotation), SolePosition = graphics.TransformPoint(capsuleSole),
                 WorldVelocity = carry.ReleasePreview ? carry.PreviewVelocity : motor.Body.linearVelocity,
@@ -185,7 +188,6 @@ namespace TwoBirds
                 WalkSpeed = motor.WalkSpeed, SprintSpeed = motor.SprintSpeed, GroundMask = motor.GroundLayers,
                 ControlRevision = motor.ControlRevision, ResetRevision = motor.ResetRevision
             };
-        }
 
         private void OnDestroy()
         {

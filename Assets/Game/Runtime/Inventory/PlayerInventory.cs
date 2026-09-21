@@ -21,6 +21,9 @@ namespace TwoBirds
         public byte DefinitionId;
         public uint[] Ids;
         public ItemMotion[] Releases;
+        public ushort ActionSequence;
+        public uint ActionStartedTick;
+        public byte ActionStartedFraction, ReleaseArcProgress;
     }
 
     public sealed class PlayerInventory : NetworkBehaviour
@@ -36,6 +39,7 @@ namespace TwoBirds
         private PlayerSeating seating;
         private PlayerCarry carry;
         private PlayerPresentation presentation;
+        private PlayerNetworkState networkState;
         private uint nextOperation;
         private uint lastOperation;
         private uint serverRevision;
@@ -58,6 +62,7 @@ namespace TwoBirds
             seating = GetComponent<PlayerSeating>();
             carry = GetComponent<PlayerCarry>();
             presentation = GetComponent<PlayerPresentation>();
+            networkState = GetComponent<PlayerNetworkState>();
             Equipment = GetComponent<PlayerEquipment>();
             Hitbox = GetComponentInChildren<PlayerItemHitbox>(true);
         }
@@ -128,20 +133,20 @@ namespace TwoBirds
             if (!stack.IsEmpty) ReleaseSlot(index, registry.GetDefinition(stack.ItemId).DropSpeed, wholeStack, ItemReleaseIntent.Drop);
         }
 
-        public void ReleaseEquipped(uint id, float launchSpeed)
+        public bool TryReleaseEquipped(uint id, float launchSpeed)
         {
-            if (!IsOwner || !CanEquip || carry && carry.IsCarrying) return;
+            if (!IsOwner || !CanEquip || carry && carry.Role != CarryRole.Free || !Equipment.HeldPresentation.ReadyForUse) return false;
             var equipped = GetEquipped();
-            if (equipped.IsEmpty || equipped.WorldIds[0] != id) return;
-            ReleaseSlot(SelectedSlot, launchSpeed, false, ItemReleaseIntent.Throw);
+            if (equipped.IsEmpty || equipped.WorldIds[0] != id) return false;
+            return ReleaseSlot(SelectedSlot, launchSpeed, false, ItemReleaseIntent.Throw);
         }
 
-        private void ReleaseSlot(int index, float launchSpeed, bool wholeStack, ItemReleaseIntent intent)
+        private bool ReleaseSlot(int index, float launchSpeed, bool wholeStack, ItemReleaseIntent intent)
         {
             if (!IsOwner || !CanAct || intent == ItemReleaseIntent.Throw && !CanEquip ||
-                seating != null && (seating.TransitionPending || seating.PlacementPending)) return;
+                seating != null && (seating.TransitionPending || seating.PlacementPending)) return false;
             var stack = GetSlot(index);
-            if (stack.IsEmpty) return;
+            if (stack.IsEmpty) return false;
             int count = wholeStack ? stack.Count : 1;
             var ids = new uint[count];
             Array.Copy(stack.WorldIds, ids, count);
@@ -149,6 +154,17 @@ namespace TwoBirds
             var aimPose = presentation.AimPose;
             var aim = aimPose.rotation;
             Vector3 forward = aim * Vector3.forward;
+            if (intent == ItemReleaseIntent.Throw)
+            {
+                if (!registry.TryGetItem(ids[0], out var item) ||
+                    !Equipment.HeldPresentation.TryPrepareRelease(item, out var release, out byte progress)) return false;
+                var motion = new ItemMotion { Id = ids[0], Position = release.position, Rotation = release.rotation,
+                    PositionIsSphereCenter = false,
+                    Velocity = forward * launchSpeed + (seating ? seating.PointVelocity : motor.Body.linearVelocity) * definition.VelocityInheritance,
+                    AngularVelocity = aim * definition.InitialSpin };
+                return Submit(new InventoryRequest { Kind = InventoryOperation.Release, From = index, DefinitionId = stack.ItemId,
+                    Ids = ids, Releases = new[] { motion }, ReleaseIntent = intent, ReleaseArcProgress = progress });
+            }
             Vector3 origin = aimPose.position;
             Vector3 position = origin + forward * 0.65f;
             if (Physics.SphereCast(origin, 0.12f, forward, out var wall, 0.65f, registry.EnvironmentMask, QueryTriggerInteraction.Ignore))
@@ -167,40 +183,52 @@ namespace TwoBirds
                     Velocity = forward * launchSpeed + (seating != null ? seating.PointVelocity : motor.Body.linearVelocity) * definition.VelocityInheritance,
                     AngularVelocity = aim * definition.InitialSpin };
             }
-            Submit(new InventoryRequest { Kind = InventoryOperation.Release, From = index, DefinitionId = stack.ItemId,
+            return Submit(new InventoryRequest { Kind = InventoryOperation.Release, From = index, DefinitionId = stack.ItemId,
                 Ids = ids, Releases = releases, ReleaseIntent = intent });
         }
 
-        private void Submit(InventoryRequest request)
+        private bool Submit(InventoryRequest request)
         {
-            if (!IsOwner || !CanAct) return;
+            if (!IsOwner || !CanAct) return false;
             request.Operation = ++nextOperation;
             request.ControlRevision = motor.ControlRevision;
             request.AutoSelect = CanEquip;
+            bool throwing = request.Kind == InventoryOperation.Release && request.ReleaseIntent == ItemReleaseIntent.Throw;
+            if (throwing)
+            {
+                var action = networkState.PredictRecovery(request.DefinitionId, request.Ids[0], request.Operation, request.ReleaseArcProgress);
+                request.ActionSequence = action.TransitionSequence;
+                request.ActionStartedTick = action.StartedTick;
+                request.ActionStartedFraction = action.StartedFraction;
+            }
             pending.Add(request);
             if (request.Kind == InventoryOperation.Release)
                 for (int i = 0; i < request.Ids.Length; i++)
                     registry.PredictRelease(request.Ids[i], request.Operation, request.Releases[i], this);
             RebuildView();
-            if (IsServerInitialized) ProcessRequest(request);
+            bool accepted = true;
+            if (IsServerInitialized) accepted = ProcessRequest(request);
             else CmdOperate(request);
+            if (throwing && accepted) Equipment.HeldPresentation.ReleaseSubmitted();
+            return accepted;
         }
 
         [ServerRpc]
         private void CmdOperate(InventoryRequest request) => ProcessRequest(request);
 
-        private void ProcessRequest(InventoryRequest request)
+        private bool ProcessRequest(InventoryRequest request)
         {
             if (request.Operation <= lastOperation)
             {
                 ReplyInventory(true, 0);
-                return;
+                return false;
             }
             bool accepted = Commit(request);
             lastOperation = request.Operation;
             serverRevision++;
             registry.UpdateEquipment(this, CanEquip ? EquippedId(serverSlots, serverSelection) : 0);
             ReplyInventory(accepted, request.Operation);
+            return accepted;
         }
 
         private bool Commit(InventoryRequest request)
@@ -243,6 +271,15 @@ namespace TwoBirds
                             !registry.TryGetRecord(request.Ids[i], out var record) || record.State != WorldItemState.Held || record.Holder != ObjectId ||
                             !ValidRelease(request.Releases[i])) return false;
                     }
+                    if (request.ReleaseIntent == ItemReleaseIntent.Throw)
+                    {
+                        if (request.Ids.Length != 1 || request.From != serverSelection || stack.WorldIds[0] != request.Ids[0]) return false;
+                        networkState.AcceptRecovery(new ItemActionSnapshot { State = ItemActionState.Recovering,
+                            DefinitionId = request.DefinitionId, WorldId = request.Ids[0], Operation = request.Operation,
+                            ControlRevision = request.ControlRevision, TransitionSequence = request.ActionSequence,
+                            StartedTick = request.ActionStartedTick, StartedFraction = request.ActionStartedFraction,
+                            ReleaseArcProgress = request.ReleaseArcProgress });
+                    }
                     foreach (uint id in request.Ids) RemoveId(serverSlots, id);
                     for (int i = 0; i < request.Ids.Length; i++) registry.Release(request.Ids[i], request.Operation, request.Releases[i], this);
                     return true;
@@ -281,8 +318,12 @@ namespace TwoBirds
                     foreach (uint id in request.Ids)
                         BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, accepted || request.Operation != operation);
                 if (!accepted && request.Operation == operation && request.Ids != null)
+                {
                     foreach (uint id in request.Ids)
                         registry.Rollback(id, request.Operation);
+                    if (request.Kind == InventoryOperation.Release && request.ReleaseIntent == ItemReleaseIntent.Throw)
+                        Equipment.HeldPresentation.RejectRelease(request.Ids[0], request.Operation);
+                }
                 pending.RemoveAt(i);
             }
             RebuildView();
@@ -328,6 +369,8 @@ namespace TwoBirds
             {
                 var request = pending[i];
                 if (request.ControlRevision == motor.ControlRevision) continue;
+                if (request.Kind == InventoryOperation.Release && request.ReleaseIntent == ItemReleaseIntent.Throw)
+                    Equipment.HeldPresentation.RejectRelease(request.Ids[0], request.Operation);
                 if (request.Ids != null)
                     foreach (uint id in request.Ids)
                     {

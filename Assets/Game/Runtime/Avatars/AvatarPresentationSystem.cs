@@ -64,6 +64,7 @@ namespace TwoBirds
                                 try { host.Prepare(system.staging); }
                                 catch (Exception exception) { host.PreparationFailed(exception); }
                         }
+                        host.PrepareTargets();
                         using (EvaluateMarker.Auto()) host.Evaluate(dt);
                     }
                     catch (Exception exception) { host.PresentationFailed(exception); }

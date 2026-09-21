@@ -29,8 +29,7 @@ namespace TwoBirds
             uint id = item.Record.Motion.Id;
             float speed = Mathf.Lerp(item.Definition.MinThrowSpeed, item.Definition.MaxThrowSpeed, Charge01);
             CancelUse();
-            equipment.ReleaseItem(id, speed);
-            item.StartPickupCooldown();
+            if (equipment.TryReleaseItem(id, speed) && item && item.Record.Motion.Id == id) item.StartPickupCooldown();
         }
 
         public override void CancelUse()

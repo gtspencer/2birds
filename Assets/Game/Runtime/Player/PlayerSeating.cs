@@ -69,7 +69,7 @@ namespace TwoBirds
         public override void OnSpawnServer(NetworkConnection connection)
         {
             var state = CaptureCurrent();
-            state.ChargingUse = networkState.IsChargingUse;
+            state.ItemAction = networkState.ItemAction;
             TargetCurrent(connection, state);
         }
 
@@ -88,7 +88,7 @@ namespace TwoBirds
             state.Ejection = Vector3.zero;
             state.Recovery = Motor.RemainingRecovery;
             state.ContextOnly = false;
-            state.ChargingUse = false;
+            state.ItemAction = default;
             state.Role = Carry ? Carry.Role : CarryRole.Free;
             state.Partner = Carry && Carry.Partner ? Carry.Partner.ObjectId : -1;
             state.Immunity = Carry ? Carry.RemainingImmunity : 0f;
@@ -96,7 +96,10 @@ namespace TwoBirds
         }
         [TargetRpc] private void TargetCurrent(NetworkConnection connection, PlayerControlTransition state)
         {
-            if (!IsServerInitialized) Receive(state, false);
+            if (IsServerInitialized) return;
+            if (receivedState && state.ControlRevision == current.ControlRevision && !AwaitingReference)
+                networkState.ApplyControlState(state.ItemAction);
+            else Receive(state, false);
         }
 
         internal static void Receive(PlayerControlTransition state, bool impulse)
@@ -148,6 +151,8 @@ namespace TwoBirds
             uint partnerRevision = partner >= 0 ? Carry.Partner.Seating.Motor.ControlRevision : 0;
             TransitionPending = true;
             Input.ClearContext();
+            inventory.ApplyControlPermissions();
+            PresentationContextChanged?.Invoke();
             if (IsServerInitialized) cart.Request(this, ++requestId, Revision, Motor.ControlRevision, cart.StateRevision, cart.Epoch, destination, partner, partnerRevision);
             else ServerRequest(++requestId, Revision, Motor.ControlRevision, cart.ObjectId, cart.StateRevision, cart.Epoch, destination, partner, partnerRevision);
         }
@@ -170,6 +175,8 @@ namespace TwoBirds
             if (request != requestId) return;
             TransitionPending = false;
             Input.ClearContext();
+            inventory.ApplyControlPermissions();
+            PresentationContextChanged?.Invoke();
             requestFeedback = result switch
             {
                 SeatRequestResult.NoPairSeat => "No seat for carried player.",
@@ -222,7 +229,7 @@ namespace TwoBirds
             if (!suspended && !state.ContextOnly) Motor.SuppressExitLaunch(exitCart);
             inventory.ApplyControlPermissions();
             if (IsDriver || wasDriver) inventory.ApplySeatPermissions();
-            networkState.ApplyControlState(state.ChargingUse);
+            networkState.ApplyControlState(state.ItemAction);
             if (impulse && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
                 Motor.SubmitWorldImpact(state.Ejection, 0.2f);
             PresentationContextChanged?.Invoke();

@@ -8,7 +8,7 @@ using UnityEngine.SceneManagement;
 
 namespace TwoBirds
 {
-    [DefaultExecutionOrder(200)]
+    [DefaultExecutionOrder(150)]
     public sealed partial class WorldItemRegistry : MonoBehaviour
     {
         private const int BatchSize = 8;
@@ -57,6 +57,22 @@ namespace TwoBirds
         public int HeldLayer { get; private set; }
         public int EnvironmentMask { get; private set; }
         public PlayerInventory LocalInventory { get; private set; }
+        internal event System.Action<uint, int, int> PresentationChanged;
+
+        private void NotifyPresentation(uint id, int previousHolder)
+        {
+            int holder = items.TryGetValue(id, out var item) && item && item.Record.State == WorldItemState.Held
+                ? item.Record.Holder : -1;
+            PresentationChanged?.Invoke(id, previousHolder, holder);
+        }
+
+        internal WorldItem EquippedPresentation(int holder)
+        {
+            foreach (var item in items.Values)
+                if (item && item.Definition && item.Record.State == WorldItemState.Held &&
+                    item.Record.Holder == holder && item.Record.Equipped) return item;
+            return null;
+        }
 
         private void Awake()
         {
@@ -209,6 +225,7 @@ namespace TwoBirds
                 }
                 else item.ApplyRecord(record);
                 if (earlyMotion.Remove(id, out var motion)) ApplyMotion(motion);
+                NotifyPresentation(id, previous.State == WorldItemState.Held ? previous.Holder : -1);
             }
             LocalInventory?.RefreshHeldPresentation();
         }
@@ -255,6 +272,7 @@ namespace TwoBirds
             if (player.IsOwner) LocalInventory = player;
             else if (LocalInventory == player) LocalInventory = null;
             RefreshHolders();
+            player.Equipment.HeldPresentation.StartPresentation();
         }
 
         internal void UnregisterPlayer(PlayerInventory player)
@@ -395,9 +413,25 @@ namespace TwoBirds
             LocalInventory?.RefreshHeldPresentation();
         }
 
+        internal void RefreshHolder(PlayerInventory holder)
+        {
+            foreach (var item in items.Values)
+                if (item && item.Definition && item.Record.State == WorldItemState.Held && item.Record.Holder == holder.ObjectId)
+                    item.AttachHolder();
+            holder.RefreshHeldPresentation();
+        }
+
+        internal void DetachHolder(PlayerInventory holder)
+        {
+            foreach (var item in items.Values)
+                if (item && item.PresentedHolder == holder.ObjectId)
+                    item.DetachHeldPresentation();
+        }
+
         internal void SetHeld(uint id, PlayerInventory holder, bool equipped)
         {
             var record = records[id];
+            int previousHolder = record.State == WorldItemState.Held ? record.Holder : -1;
             BirdRegistry.Instance?.CompleteRelease(record);
             record.Motion = items[id].Capture(ServerTick);
             record.Motion.Revision++;
@@ -412,6 +446,7 @@ namespace TwoBirds
             records[id] = record;
             items[id].ApplyRecord(record);
             Publish(record);
+            NotifyPresentation(id, previousHolder);
         }
 
         internal void UpdateEquipment(PlayerInventory holder, uint equipped)
@@ -442,6 +477,7 @@ namespace TwoBirds
                 ? player.Owner.ClientId : -1;
             items[id].Initialize(this, itemRegistry.Get(record.DefinitionId), record, true);
             items[id].Launch(motion);
+            NotifyPresentation(id, player.ObjectId);
         }
 
         internal void Release(uint id, uint operation, ItemMotion motion, PlayerInventory player)
@@ -450,6 +486,7 @@ namespace TwoBirds
         private void Release(uint id, uint operation, ItemMotion motion, int releaser)
         {
             var record = records[id];
+            int previousHolder = record.State == WorldItemState.Held ? record.Holder : -1;
             BirdRegistry.Instance?.CompleteRelease(record);
             motion.Id = id;
             motion.Tick = ServerTick;
@@ -472,6 +509,7 @@ namespace TwoBirds
             BirdRegistry.Instance?.AcceptRelease(record);
             items[id].ApplyRecord(record);
             Publish(record);
+            NotifyPresentation(id, previousHolder);
         }
 
         internal void Rollback(uint id, uint operation)
@@ -479,7 +517,11 @@ namespace TwoBirds
             if (pendingReleases.TryGetValue(id, out uint pending) && pending != operation) return;
             pendingReleases.Remove(id);
             if (items.TryGetValue(id, out var item) && records.TryGetValue(id, out var record))
+            {
+                int previousHolder = item.Record.State == WorldItemState.Held ? item.Record.Holder : -1;
                 item.Initialize(this, itemRegistry.Get(record.DefinitionId), record, false);
+                NotifyPresentation(id, previousHolder);
+            }
         }
 
         public void Remove(uint id)
@@ -573,7 +615,9 @@ namespace TwoBirds
                 return;
             }
             byte definition = item.Record.DefinitionId;
+            int previousHolder = item.Record.State == WorldItemState.Held ? item.Record.Holder : -1;
             item.ReturnToPool();
+            NotifyPresentation(id, previousHolder);
             if (!pools.TryGetValue(definition, out var pool)) pools[definition] = pool = new Stack<WorldItem>();
             pool.Push(item);
         }

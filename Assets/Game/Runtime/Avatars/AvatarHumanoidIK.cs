@@ -40,10 +40,7 @@ namespace TwoBirds
             var leftFollow = binding.GetBone(settings.LeftHandFollowBone);
             leftHandOffset = leftFollow && leftFollow != leftHand
                 ? Quaternion.Inverse(leftHand.rotation) * (leftFollow.position - leftHand.position) : Vector3.zero;
-            var rightHand = binding.GetBone(HumanBodyBones.RightHand);
-            var rightFollow = binding.GetBone(settings.RightHandFollowBone);
-            rightHandOffset = rightFollow && rightFollow != rightHand
-                ? Quaternion.Inverse(rightHand.rotation) * (rightFollow.position - rightHand.position) : Vector3.zero;
+            rightHandOffset = data.RightWristToFollowPosition * settings.Scale;
             left = new Foot { Goal = AvatarIKGoal.LeftFoot, Hip = binding.GetBone(HumanBodyBones.LeftUpperLeg),
                 Length = (data.LeftLeg.x + data.LeftLeg.y) * settings.Scale, Offset = data.LeftSoleToGoal * settings.Scale,
                 Bone = binding.GetBone(HumanBodyBones.LeftFoot), RestRotation = data.LeftFootRestRotation,
@@ -168,6 +165,7 @@ namespace TwoBirds
             if (!target.Target) { animator.SetIKPositionWeight(goal, 0f); animator.SetIKRotationWeight(goal, 0f); return; }
             Vector3 wristTarget = target.Target.position - target.Target.rotation * followOffset;
             Vector3 delta = wristTarget - shoulder.position;
+            if (target.MaximumReach > 0f) delta = Vector3.ClampMagnitude(delta, length * target.MaximumReach);
             float fade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.88f, 0.98f, delta.magnitude / length));
             animator.SetIKPositionWeight(goal, target.Position * fade);
             animator.SetIKRotationWeight(goal, target.Rotation * fade);

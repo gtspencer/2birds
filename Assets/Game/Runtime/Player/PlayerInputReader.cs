@@ -104,7 +104,7 @@ namespace TwoBirds
             if (hornBlocked && !ButtonHeld(horn)) hornBlocked = false;
             if (!GameplayActive || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount)
             {
-                if (carry && carry.IsCharging) CancelUse();
+                if (equipment.IsCharging || carry && carry.IsCharging) CancelUse();
                 return;
             }
             movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);

@@ -36,6 +36,9 @@ namespace TwoBirds
         public event Action<AvatarRegistry.Entry> IdentityResolved;
         public event Action<AvatarBinding> WillUnbind, DidBind;
         public event Action<bool> FallbackChanged;
+        public event Action BeforeEvaluation;
+        internal bool EvaluatesTargets => system && !Failed && Binding != null;
+        internal void PrepareTargets() => BeforeEvaluation?.Invoke();
         internal readonly AvatarAnimationState State = new();
         internal AvatarPresentationInput Input;
         internal bool AnimationEnabled { get; private set; } = true;
@@ -46,7 +49,7 @@ namespace TwoBirds
         internal uint RequestGeneration { get; private set; }
         internal bool NeedsPreparation { get; private set; }
         internal bool Failed { get; private set; }
-        internal struct HandTarget { internal Transform Target; internal float Position, Rotation; }
+        internal struct HandTarget { internal Transform Target; internal float Position, Rotation, MaximumReach; }
         internal HandTarget LeftHand, RightHand;
         private AvatarInstance active, candidate;
         private AvatarRegistry.Entry candidateEntry;
@@ -162,9 +165,10 @@ namespace TwoBirds
             if (candidate && candidate.Initialized) candidate.ApplyFeatures();
         }
 
-        public void SetHandTarget(AvatarIKGoal hand, Transform target, float positionWeight, float rotationWeight)
+        public void SetHandTarget(AvatarIKGoal hand, Transform target, float positionWeight, float rotationWeight, float maximumReach = 0f)
         {
-            var value = new HandTarget { Target = target, Position = Mathf.Clamp01(positionWeight), Rotation = Mathf.Clamp01(rotationWeight) };
+            var value = new HandTarget { Target = target, Position = Mathf.Clamp01(positionWeight), Rotation = Mathf.Clamp01(rotationWeight),
+                MaximumReach = Mathf.Clamp(maximumReach, 0f, 0.85f) };
             if (hand == AvatarIKGoal.LeftHand) LeftHand = value;
             else if (hand == AvatarIKGoal.RightHand) RightHand = value;
             else throw new ArgumentException("Only hand goals are supported.", nameof(hand));

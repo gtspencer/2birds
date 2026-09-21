@@ -42,6 +42,9 @@ namespace TwoBirds
         [Tooltip("Gameplay seconds to reach full throw speed. Full charge waits for release.")]
         [Min(0.01f)] public float ThrowChargeTime = 1f;
 
+        [Header("Held Hand Pose")]
+        public HeldItemPoseSettings HandPose = HeldItemPoseSettings.Default;
+
         [Header("Player Impacts")]
         [Tooltip("Minimum incoming contact speed (m/s) that shoves a player.")]
         [Min(0f)] public float MinimumImpactSpeed = 1f;

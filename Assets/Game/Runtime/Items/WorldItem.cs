@@ -49,6 +49,9 @@ namespace TwoBirds
         private Vector3 bodySphereCenter;
         private float sphereRadius;
         internal float DropDiameter { get; private set; }
+        internal bool ReleaseAvailable => isActiveAndEnabled && Record.State == WorldItemState.World && !optimisticPickup && !RemovalPending;
+        internal Vector3 PresentedOrigin => visualRoot.position;
+        internal int PresentedHolder { get; private set; } = -1;
         private Vector3 incomingVelocity;
         private bool incomingSampled;
         private Vector3 physicsStartSphere;
@@ -157,6 +160,8 @@ namespace TwoBirds
             registry = owner;
             Definition = definition;
             defaultScale = definition.WorldPrefab.transform.localScale;
+            if (firstInitialization)
+                DropDiameter = Mathf.Max(DropDiameter, 2f * ItemReleaseClearance.EnvelopeRadius(transform, defaultScale, colliders));
             birdRegistry = BirdRegistry.Instance;
             birdRock = birdRegistry && birdRegistry.IsRock(definition);
             ResetPresentation();
@@ -217,6 +222,7 @@ namespace TwoBirds
                 return;
             }
 
+            PresentedHolder = -1;
             transform.SetParent(null, true);
             transform.localScale = defaultScale;
             offlineRigidbody.SetPredictionManager(registry.PredictionManager);
@@ -246,19 +252,8 @@ namespace TwoBirds
         internal void AttachHolder()
         {
             if (Record.State != WorldItemState.Held) return;
-            bool equipped = Record.Equipped && registry.TryGetPlayer(Record.Holder, out var player) && player.CanEquip;
-            SetVisible(equipped);
-            if (!equipped)
-            {
-                transform.SetParent(null, true);
-                return;
-            }
             registry.TryGetPlayer(Record.Holder, out var holder);
-            transform.SetParent(holder.Equipment.HeldTransform, false);
-            transform.localPosition = Vector3.zero;
-            transform.localRotation = Definition.WorldPrefab.transform.localRotation;
-            transform.localScale = defaultScale;
-            ClearVisualOffset();
+            ApplyHeldAttachment(holder, Record.Equipped);
         }
 
         internal void PredictPickup()
@@ -299,19 +294,50 @@ namespace TwoBirds
 
         internal void PresentHeld(PlayerInventory holder, bool equipped)
         {
-            equipped &= holder.CanEquip;
             if (Predicted) return;
             ResetContactState();
             ClearIgnore();
             StopBody();
             SetLayer(registry.HeldLayer);
             foreach (var collider in colliders) collider.enabled = false;
-            SetVisible(equipped);
-            if (!equipped) return;
-            transform.SetParent(holder.Equipment.HeldTransform, false);
-            transform.localPosition = Vector3.zero;
-            transform.localRotation = Definition.WorldPrefab.transform.localRotation;
-            transform.localScale = defaultScale;
+            ApplyHeldAttachment(holder, equipped);
+        }
+
+        private void ApplyHeldAttachment(PlayerInventory holder, bool equipped)
+        {
+            PresentedHolder = holder ? holder.ObjectId : -1;
+            bool visible = holder && equipped && holder.Equipment.HeldPresentation.CanShowHeldItem;
+            SetVisible(visible);
+            if (!visible)
+            {
+                transform.SetParent(null, true);
+                ClearVisualOffset();
+                return;
+            }
+            var equipment = holder.Equipment;
+            Transform parent = holder.IsOwner ? equipment.HeldTransform : equipment.HeldPresentation.Attachment;
+            transform.SetParent(parent, false);
+            if (holder.IsOwner)
+            {
+                transform.localPosition = Vector3.zero;
+                transform.localRotation = Definition.WorldPrefab.transform.localRotation;
+                transform.localScale = defaultScale;
+            }
+            else
+            {
+                var grip = equipment.HeldPresentation.Grip(Definition);
+                Vector3 scale = parent.lossyScale;
+                transform.localScale = new Vector3(defaultScale.x / scale.x, defaultScale.y / scale.y, defaultScale.z / scale.z);
+                transform.position = parent.position + parent.rotation * grip.Settings.GripPosition;
+                transform.localRotation = grip.GripRotation;
+            }
+            ClearVisualOffset();
+        }
+
+        internal void DetachHeldPresentation()
+        {
+            transform.SetParent(null, true);
+            SetVisible(false);
             ClearVisualOffset();
         }
 
@@ -600,6 +626,7 @@ namespace TwoBirds
 
         private void ResetPresentation()
         {
+            PresentedHolder = -1;
             ClearIgnore();
             ClearVisualOffset();
             presentedMotionTick = previousMotionTick = 0d;

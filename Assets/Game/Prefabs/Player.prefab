@@ -383,6 +383,7 @@ GameObject:
   - component: {fileID: 8475090742766612689}
   - component: {fileID: 7269423768695021793}
   - component: {fileID: 3281165424732076801}
+  - component: {fileID: 5931737503454572013}
   m_Layer: 6
   m_Name: Player
   m_TagString: Untagged
@@ -675,6 +676,18 @@ MonoBehaviour:
   _addedNetworkObject: {fileID: 7591321746754792407}
   _networkObjectCache: {fileID: 0}
   presentation: {fileID: 4494965520924537209}
+--- !u!114 &5931737503454572013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5304375756855324889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 861a72cd3e625d14fb66b7c1eda14264, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.PlayerHeldItemPresentation
 --- !u!1 &6305434835808884537
 GameObject:
   m_ObjectHideFlags: 0
