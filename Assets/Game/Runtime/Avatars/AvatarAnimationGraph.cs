@@ -106,6 +106,7 @@ namespace TwoBirds
     internal sealed class AvatarAnimationGraph : IDisposable
     {
         private PlayableGraph graph;
+        internal AvatarFingerLayers Fingers { get; private set; }
         private readonly AnimationClipPlayable[] locomotion = new AnimationClipPlayable[8];
         private AnimationClipPlayable idle, jump, fall, seated;
         private AnimationMixerPlayable walk, run, gait, motion, states;
@@ -134,11 +135,9 @@ namespace TwoBirds
                 states = AnimationMixerPlayable.Create(graph, (int)AvatarPose.Count);
                 graph.Connect(motion, 0, states, (int)AvatarPose.Locomotion); graph.Connect(jump, 0, states, (int)AvatarPose.Jump);
                 graph.Connect(fall, 0, states, (int)AvatarPose.Fall); graph.Connect(seated, 0, states, (int)AvatarPose.Seated);
-                var layers = AnimationLayerMixerPlayable.Create(graph, 1);
-                graph.Connect(states, 0, layers, 0);
-                layers.SetInputWeight(0, 1f);
+                Fingers = new AvatarFingerLayers(graph, states);
                 var output = AnimationPlayableOutput.Create(graph, "Humanoid", animator);
-                output.SetSourcePlayable(layers);
+                output.SetSourcePlayable(Fingers.Output);
                 graph.Play();
             }
             catch { Dispose(); throw; }
@@ -178,6 +177,6 @@ namespace TwoBirds
             graph.Evaluate(0f);
         }
 
-        public void Dispose() { if (graph.IsValid()) graph.Destroy(); }
+        public void Dispose() { Fingers?.Dispose(); if (graph.IsValid()) graph.Destroy(); }
     }
 }

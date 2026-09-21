@@ -34,7 +34,7 @@ namespace TwoBirds.Editor
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
-            DrawPropertiesExcluding(serializedObject, "m_Script", "Id", "Generated", "AdditionalSprings");
+            DrawPropertiesExcluding(serializedObject, "m_Script", "Id", "Generated", "FirstPersonGenerated", "AdditionalSprings");
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Additional Spring Chains", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox("Drag Root and Tip bones from this avatar's hierarchy. Process to apply changes. Source springs are preserved. Collider offsets and radii use the source model's units.", MessageType.Info);
@@ -44,6 +44,7 @@ namespace TwoBirds.Editor
             {
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("Id"), true);
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("Generated"), true);
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("FirstPersonGenerated"), true);
             }
             serializedObject.ApplyModifiedProperties();
             var settings = (AvatarSettings)target;

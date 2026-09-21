@@ -20,9 +20,14 @@ namespace TwoBirds
         public AvatarSettings Settings { get; }
         public Animator Animator { get; }
         public ulong Generation { get; }
+        public AvatarSettings.GeneratedSkeleton Measurements { get; }
+        public float Scale => Settings.Scale;
         private readonly Transform[] bones;
-        internal AvatarBinding(AvatarId id, AvatarSettings settings, Animator animator, Transform[] bones, ulong generation)
-        { Id = id; Settings = settings; Animator = animator; this.bones = bones; Generation = generation; }
+        internal AvatarBinding(AvatarId id, AvatarSettings settings, Animator animator, Transform[] bones, ulong generation, bool firstPerson = false)
+        {
+            Id = id; Settings = settings; Animator = animator; this.bones = bones; Generation = generation;
+            Measurements = firstPerson ? settings.FirstPersonGenerated : settings.Generated;
+        }
         public Transform GetBone(HumanBodyBones bone) => bones[(int)bone];
     }
 
@@ -37,6 +42,8 @@ namespace TwoBirds
         public event Action<AvatarBinding> WillUnbind, DidBind;
         public event Action<bool> FallbackChanged;
         public event Action BeforeEvaluation;
+        internal event Action<AvatarBinding, float> PreparingHands;
+        internal event Action<AvatarBinding> HandsEvaluated;
         internal bool EvaluatesTargets => system && !Failed && Binding != null;
         internal void PrepareTargets() => BeforeEvaluation?.Invoke();
         internal readonly AvatarAnimationState State = new();
@@ -49,8 +56,7 @@ namespace TwoBirds
         internal uint RequestGeneration { get; private set; }
         internal bool NeedsPreparation { get; private set; }
         internal bool Failed { get; private set; }
-        internal struct HandTarget { internal Transform Target; internal float Position, Rotation, MaximumReach; }
-        internal HandTarget LeftHand, RightHand;
+        public AvatarHandTargets HandTargets { get; } = new();
         private AvatarInstance active, candidate;
         private AvatarRegistry.Entry candidateEntry;
         private AvatarSettings subscribedSettings;
@@ -167,13 +173,9 @@ namespace TwoBirds
 
         public void SetHandTarget(AvatarIKGoal hand, Transform target, float positionWeight, float rotationWeight, float maximumReach = 0f)
         {
-            var value = new HandTarget { Target = target, Position = Mathf.Clamp01(positionWeight), Rotation = Mathf.Clamp01(rotationWeight),
-                MaximumReach = Mathf.Clamp(maximumReach, 0f, 0.85f) };
-            if (hand == AvatarIKGoal.LeftHand) LeftHand = value;
-            else if (hand == AvatarIKGoal.RightHand) RightHand = value;
-            else throw new ArgumentException("Only hand goals are supported.", nameof(hand));
+            HandTargets.Set(hand, AvatarHandSource.Item, target, positionWeight, rotationWeight, maximumReach);
         }
-        public void ClearHandTarget(AvatarIKGoal hand) => SetHandTarget(hand, null, 0f, 0f);
+        public void ClearHandTarget(AvatarIKGoal hand) => HandTargets.Clear(hand, AvatarHandSource.Item);
 
         internal void UpdateInput(float dt, bool gap)
         {
@@ -235,7 +237,11 @@ namespace TwoBirds
         internal void Evaluate(float dt)
         {
             if (candidate && candidateRequest != RequestGeneration) CancelCandidate();
-            if (active) active.Evaluate(dt);
+            if (active)
+            {
+                PreparingHands?.Invoke(active.Binding, dt);
+                active.Evaluate(dt);
+            }
             if (!candidate || Time.frameCount <= candidateFrame) return;
             try
             {
@@ -244,20 +250,25 @@ namespace TwoBirds
                     candidate.gameObject.SetActive(true);
                     candidate.Initialize(registry.Animations);
                 }
-                candidate.Evaluate(dt, true);
+                PreparingHands?.Invoke(candidate.Binding, 0f);
+                candidate.Evaluate(0f, true);
             }
             catch (Exception exception) { PreparationFailed(exception); }
         }
 
         internal void Commit()
         {
-            if (!candidate || !candidate.Initialized || Time.frameCount <= candidateFrame + 1 || candidateRequest != RequestGeneration) return;
+            if (!candidate || !candidate.Initialized || Time.frameCount <= candidateFrame + 1 || candidateRequest != RequestGeneration)
+            { if (active) HandsEvaluated?.Invoke(active.Binding); return; }
             using (AvatarPresentationSystem.CommitMarker.Auto())
             {
                 var old = active;
                 if (old) WillUnbind?.Invoke(old.Binding);
                 active = candidate; candidate = null;
                 DidBind?.Invoke(active.Binding);
+                PreparingHands?.Invoke(active.Binding, 0f);
+                active.Evaluate(0f, true);
+                HandsEvaluated?.Invoke(active.Binding);
                 if (old) old.SetVisible(false);
                 active.SetVisible(true);
                 FallbackChanged?.Invoke(false);

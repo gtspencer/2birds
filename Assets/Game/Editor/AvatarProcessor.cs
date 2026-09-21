@@ -14,6 +14,7 @@ namespace TwoBirds.Editor
     {
         public const string RegistryPath = "Assets/Game/Settings/Avatars/AvatarRegistry.asset";
         public const string AnimationPath = "Assets/Game/Settings/Avatars/AvatarAnimationSet.asset";
+        private const string FirstPersonSettingsPath = "Assets/Game/Settings/FirstPersonHandsSettings.asset";
         private const string SettingsFolder = "Assets/Game/Settings/Avatars";
         private const string PrefabFolder = "Assets/Game/Prefabs/Avatars";
         private static readonly (string File, int Locomotion)[] ClipFiles =
@@ -49,7 +50,10 @@ namespace TwoBirds.Editor
                 if (GUILayout.Button("Edit Settings / Spring Chains")) Selection.activeObject = settings;
                 var registry = AssetDatabase.LoadAssetAtPath<AvatarRegistry>(RegistryPath);
                 if (registry && registry.TryResolve(settings.Id, out var entry))
+                {
                     EditorGUILayout.ObjectField("Prefab", entry.Prefab, typeof(GameObject), false);
+                    EditorGUILayout.ObjectField("First Person Prefab", entry.FirstPersonPrefab, typeof(GameObject), false);
+                }
             }
             using (new EditorGUI.DisabledScope(!source || EditorApplication.isPlaying))
             {
@@ -154,6 +158,8 @@ namespace TwoBirds.Editor
                 stage = "prefab save";
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out bool success);
                 if (!success || !prefab) throw new InvalidOperationException($"Could not save {prefabPath}.");
+                stage = "first-person processing";
+                var localPrefab = PrepareFirstPerson(sourceAsset, draft, scene, changes);
                 stage = "settings save";
                 if (!settings)
                 {
@@ -173,7 +179,18 @@ namespace TwoBirds.Editor
                     AssetDatabase.CreateAsset(registry, RegistryPath);
                 }
                 else changes.Capture(registry);
-                var entry = new AvatarRegistry.Entry { Id = settings.Id, Source = sourceAsset, SourceGuid = guid, Prefab = prefab, Settings = settings };
+                if (!registry.FirstPerson)
+                {
+                    var firstPerson = AssetDatabase.LoadAssetAtPath<FirstPersonHandsSettings>(FirstPersonSettingsPath);
+                    if (!firstPerson)
+                    {
+                        firstPerson = CreateInstance<FirstPersonHandsSettings>();
+                        changes.Created.Add(FirstPersonSettingsPath);
+                        AssetDatabase.CreateAsset(firstPerson, FirstPersonSettingsPath);
+                    }
+                    registry.FirstPerson = firstPerson;
+                }
+                var entry = new AvatarRegistry.Entry { Id = settings.Id, Source = sourceAsset, SourceGuid = guid, Prefab = prefab, FirstPersonPrefab = localPrefab, Settings = settings };
                 int index = registry.Entries.FindIndex(e => e != null && e.SourceGuid == guid);
                 if (index < 0) registry.Entries.Add(entry); else registry.Entries[index] = entry;
                 registry.Animations = animations;
@@ -181,6 +198,15 @@ namespace TwoBirds.Editor
                 registry.Invalidate();
                 EditorUtility.SetDirty(registry);
                 AssetDatabase.SaveAssets();
+                string generatedFolder = $"Assets/Game/Generated/Avatars/{settings.Id}/FirstPerson";
+                var retainedMeshes = new HashSet<string>();
+                foreach (var skin in localPrefab.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                    if (skin.sharedMesh) retainedMeshes.Add(AssetDatabase.GetAssetPath(skin.sharedMesh));
+                foreach (var meshGuid in AssetDatabase.FindAssets("t:Mesh", new[] { generatedFolder }))
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(meshGuid);
+                    if (!retainedMeshes.Contains(path)) AssetDatabase.DeleteAsset(path);
+                }
                 string summary = ContentSummary(prefab);
                 Debug.Log($"Avatar {sourceAsset.name}: {summary}", settings);
                 return entry;
@@ -274,19 +300,21 @@ namespace TwoBirds.Editor
                 }
         }
 
-        public static Pose MeasureRightPalm(Animator animator)
+        public static Pose MeasureRightPalm(Animator animator) => MeasurePalm(animator, true);
+
+        private static Pose MeasurePalm(Animator animator, bool right)
         {
-            var wrist = animator.GetBoneTransform(HumanBodyBones.RightHand);
-            var middle = animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
-            var index = animator.GetBoneTransform(HumanBodyBones.RightIndexProximal);
-            var little = animator.GetBoneTransform(HumanBodyBones.RightLittleProximal);
-            var elbow = animator.GetBoneTransform(HumanBodyBones.RightLowerArm);
+            var wrist = animator.GetBoneTransform((right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand));
+            var middle = animator.GetBoneTransform((right ? HumanBodyBones.RightMiddleProximal : HumanBodyBones.LeftMiddleProximal));
+            var index = animator.GetBoneTransform((right ? HumanBodyBones.RightIndexProximal : HumanBodyBones.LeftIndexProximal));
+            var little = animator.GetBoneTransform((right ? HumanBodyBones.RightLittleProximal : HumanBodyBones.LeftLittleProximal));
+            var elbow = animator.GetBoneTransform((right ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm));
             Vector3 fingers = middle ? middle.position - wrist.position :
                 index && little ? (index.position + little.position) * 0.5f - wrist.position :
                 (wrist.position - elbow.position) * 0.3f;
             float length = fingers.magnitude;
             Vector3 forward = fingers.normalized;
-            Vector3 normal = index && little ? Vector3.Cross(forward, index.position - little.position) : Vector3.zero;
+            Vector3 normal = index && little ? Vector3.Cross(forward, (index.position - little.position) * (right ? 1f : -1f)) : Vector3.zero;
             if (normal.sqrMagnitude < 0.000001f) normal = Vector3.ProjectOnPlane(-animator.transform.up, forward);
             if (normal.sqrMagnitude < 0.000001f) normal = Vector3.ProjectOnPlane(animator.transform.forward, forward);
             normal.Normalize();
@@ -298,6 +326,7 @@ namespace TwoBirds.Editor
         private static AvatarSettings.GeneratedSkeleton Measure(GameObject root, Animator animator, Renderer[] renderers, GameObject source, string guid)
         {
             Pose palm = MeasureRightPalm(animator);
+            Pose leftPalm = MeasurePalm(animator, false);
             Bounds bounds = default;
             bool found = false;
             foreach (var renderer in renderers)
@@ -335,6 +364,8 @@ namespace TwoBirds.Editor
             return new AvatarSettings.GeneratedSkeleton
             {
                 Source = source, SourceGuid = guid, FormatVersion = AvatarSettings.CurrentFormatVersion, HumanoidAvatar = animator.avatar,
+                LeftWristToPalmPosition = leftPalm.position,
+                LeftWristToPalmRotation = leftPalm.rotation,
                 RightWristToPalmPosition = palm.position,
                 RightWristToPalmRotation = palm.rotation,
                 Bounds = bounds, Height = height, SolePlane = sole, HumanScale = animator.humanScale,
@@ -350,6 +381,106 @@ namespace TwoBirds.Editor
                 LeftFootRestRotation = Quaternion.Inverse(root.transform.rotation) * animator.GetBoneTransform(HumanBodyBones.LeftFoot).rotation,
                 RightFootRestRotation = Quaternion.Inverse(root.transform.rotation) * animator.GetBoneTransform(HumanBodyBones.RightFoot).rotation
             };
+        }
+
+        private static GameObject PrepareFirstPerson(GameObject source, AvatarSettings settings,
+            UnityEngine.SceneManagement.Scene scene, ProcessingChanges changes)
+        {
+            bool companion = settings.FirstPersonSource;
+            if (companion) source = settings.FirstPersonSource;
+            var root = (GameObject)PrefabUtility.InstantiatePrefab(source, scene);
+            try
+            {
+                root.SetActive(false);
+                PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+                root.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                if ((root.transform.localScale - Vector3.one).sqrMagnitude > 0.0001f)
+                    throw new InvalidOperationException("First-person source must retain the original unit root scale.");
+                var animator = root.GetComponent<Animator>();
+                if (!animator || !animator.avatar || !animator.avatar.isValid || !animator.avatar.isHuman)
+                    throw new InvalidOperationException("First-person source needs its own valid root Humanoid Animator.");
+                foreach (var bone in AvatarContentValidation.RequiredBones)
+                    if (!animator.GetBoneTransform(bone)) throw new InvalidOperationException($"First-person source lacks {bone}.");
+                settings.FirstPersonGenerated = Measure(root, animator, root.GetComponentsInChildren<Renderer>(true), source,
+                    AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(source)));
+                var data = settings.FirstPersonGenerated;
+                if (companion)
+                {
+                    var remote = settings.Generated;
+                    if (Mathf.Abs(data.LeftArm.x / remote.LeftArm.x - 1f) > 0.05f ||
+                        Mathf.Abs(data.LeftArm.y / remote.LeftArm.y - 1f) > 0.05f ||
+                        Mathf.Abs(data.RightArm.x / remote.RightArm.x - 1f) > 0.05f ||
+                        Mathf.Abs(data.RightArm.y / remote.RightArm.y - 1f) > 0.05f ||
+                        Vector3.Distance(data.Head - data.Hips, remote.Head - remote.Hips) > remote.Height * 0.05f)
+                        throw new InvalidOperationException("Companion must preserve the original rest proportions and orientation.");
+                    data.Height = remote.Height;
+                    settings.FirstPersonGenerated = data;
+                }
+                var arms = AvatarArmMeshExtraction.ArmBones(animator);
+                string folder = $"Assets/Game/Generated/Avatars/{settings.Id}/FirstPerson";
+                EnsureFolder(folder);
+                foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+                {
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    foreach (var material in renderer.sharedMaterials)
+                        if (material && !AssetDatabase.Contains(material))
+                            throw new InvalidOperationException("First-person materials must be imported persistent assets.");
+                    if (companion) continue;
+                    if (renderer is SkinnedMeshRenderer skin)
+                    {
+                        var mesh = AvatarArmMeshExtraction.Extract(skin, arms);
+                        if (!mesh) { DestroyImmediate(skin); continue; }
+                        string hierarchy = "";
+                        for (var parent = skin.transform; parent != root.transform; parent = parent.parent)
+                            hierarchy = parent.GetSiblingIndex() + "/" + hierarchy;
+                        int componentIndex = Array.IndexOf(skin.GetComponents<SkinnedMeshRenderer>(), skin);
+                        string path = $"{folder}/{Hash128.Compute(hierarchy + ":" + componentIndex)}.asset";
+                        var existing = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+                        if (existing)
+                        {
+                            changes.CapturePrefab(path);
+                            EditorUtility.CopySerialized(mesh, existing); DestroyImmediate(mesh); mesh = existing;
+                            EditorUtility.SetDirty(mesh);
+                        }
+                        else { changes.Created.Add(path); AssetDatabase.CreateAsset(mesh, path); }
+                        skin.sharedMesh = mesh;
+                    }
+                    else if (!arms.Contains(renderer.transform))
+                    {
+                        var filter = renderer.GetComponent<MeshFilter>();
+                        if (filter) DestroyImmediate(filter);
+                        DestroyImmediate(renderer);
+                    }
+                }
+                foreach (var skin in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                {
+                    skin.updateWhenOffscreen = true;
+                    var bounds = skin.localBounds;
+                    bounds.Expand(settings.Generated.Height);
+                    skin.localBounds = bounds;
+                }
+                var vrm = root.GetComponent<Vrm10Instance>();
+                if (vrm) DestroyImmediate(vrm);
+                foreach (var script in root.GetComponentsInChildren<MonoBehaviour>(true)) DestroyImmediate(script);
+                foreach (var behaviour in root.GetComponentsInChildren<Behaviour>(true)) if (behaviour != animator) DestroyImmediate(behaviour);
+                foreach (var joint in root.GetComponentsInChildren<Joint>(true)) DestroyImmediate(joint);
+                foreach (var collider in root.GetComponentsInChildren<Collider>(true)) DestroyImmediate(collider);
+                foreach (var body in root.GetComponentsInChildren<Rigidbody>(true)) DestroyImmediate(body);
+                foreach (var t in root.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = LayerMask.NameToLayer("Player");
+                animator.runtimeAnimatorController = null; animator.applyRootMotion = false; animator.fireEvents = false;
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                root.AddComponent<LocalFirstPersonHands>();
+                AvatarContentValidation.Validate(root, settings, true);
+                root.SetActive(true);
+                EnsureFolder(PrefabFolder + "/FirstPerson");
+                string prefabPath = $"{PrefabFolder}/FirstPerson/{settings.Id}.prefab";
+                if (AssetDatabase.LoadMainAssetAtPath(prefabPath)) changes.CapturePrefab(prefabPath);
+                else changes.Created.Add(prefabPath);
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out bool success);
+                if (!success || !prefab) throw new InvalidOperationException($"Could not save {prefabPath}.");
+                return prefab;
+            }
+            finally { DestroyImmediate(root); }
         }
 
         private static void PrepareModel(GameObject root, Animator animator, Vrm10Instance vrm, float height)
@@ -474,8 +605,7 @@ namespace TwoBirds.Editor
             internal readonly List<string> Created = new();
             private readonly Dictionary<Object, string> assets = new();
             private readonly Dictionary<string, string> importers = new();
-            private string prefabPath;
-            private byte[] prefab;
+            private readonly Dictionary<string, byte[]> files = new();
 
             internal void Capture(Object asset)
             {
@@ -486,7 +616,7 @@ namespace TwoBirds.Editor
                 else if (!assets.ContainsKey(asset)) assets.Add(asset, EditorJsonUtility.ToJson(asset));
             }
 
-            internal void CapturePrefab(string path) { prefabPath = path; prefab = File.ReadAllBytes(path); }
+            internal void CapturePrefab(string path) { if (!files.ContainsKey(path)) files.Add(path, File.ReadAllBytes(path)); }
 
             internal void Restore()
             {
@@ -496,10 +626,10 @@ namespace TwoBirds.Editor
                     EditorJsonUtility.FromJsonOverwrite(pair.Value, importer);
                     importer.SaveAndReimport();
                 }
-                if (prefab != null)
+                foreach (var pair in files)
                 {
-                    File.WriteAllBytes(prefabPath, prefab);
-                    AssetDatabase.ImportAsset(prefabPath, ImportAssetOptions.ForceUpdate);
+                    File.WriteAllBytes(pair.Key, pair.Value);
+                    AssetDatabase.ImportAsset(pair.Key, ImportAssetOptions.ForceUpdate);
                 }
                 foreach (var pair in assets)
                 {
@@ -580,7 +710,9 @@ namespace TwoBirds.Editor
             string oldSettingsName = settings.name;
             string oldPrefab = ExistingPrefabPath(registry, old) ?? $"{PrefabFolder}/{old}.prefab";
             string newSettings = $"{SettingsFolder}/{id}.asset", newPrefab = $"{PrefabFolder}/{id}.prefab";
-            bool movedSettings = false, movedPrefab = false;
+            string oldLocal = $"{PrefabFolder}/FirstPerson/{old}.prefab", newLocal = $"{PrefabFolder}/FirstPerson/{id}.prefab";
+            string oldMeshes = $"Assets/Game/Generated/Avatars/{old}", newMeshes = $"Assets/Game/Generated/Avatars/{id}";
+            bool movedSettings = false, movedPrefab = false, movedLocal = false, movedMeshes = false;
             try
             {
                 string error = AssetDatabase.MoveAsset(oldSettings, newSettings);
@@ -591,6 +723,18 @@ namespace TwoBirds.Editor
                     error = AssetDatabase.MoveAsset(oldPrefab, newPrefab);
                     if (!string.IsNullOrEmpty(error)) throw new InvalidOperationException(error);
                     movedPrefab = true;
+                }
+                if (AssetDatabase.LoadMainAssetAtPath(oldLocal))
+                {
+                    error = AssetDatabase.MoveAsset(oldLocal, newLocal);
+                    if (!string.IsNullOrEmpty(error)) throw new InvalidOperationException(error);
+                    movedLocal = true;
+                }
+                if (AssetDatabase.IsValidFolder(oldMeshes))
+                {
+                    error = AssetDatabase.MoveAsset(oldMeshes, newMeshes);
+                    if (!string.IsNullOrEmpty(error)) throw new InvalidOperationException(error);
+                    movedMeshes = true;
                 }
                 settings.Id = id;
                 settings.name = Path.GetFileNameWithoutExtension(newSettings);
@@ -612,6 +756,8 @@ namespace TwoBirds.Editor
                     if (registry.DefaultId == id) registry.DefaultId = old;
                     registry.Invalidate();
                 }
+                if (movedMeshes) AssetDatabase.MoveAsset(newMeshes, oldMeshes);
+                if (movedLocal) AssetDatabase.MoveAsset(newLocal, oldLocal);
                 if (movedPrefab) AssetDatabase.MoveAsset(newPrefab, oldPrefab);
                 if (movedSettings) AssetDatabase.MoveAsset(newSettings, oldSettings);
                 settings.name = oldSettingsName;

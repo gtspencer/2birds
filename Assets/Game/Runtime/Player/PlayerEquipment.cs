@@ -7,24 +7,21 @@ namespace TwoBirds
     public sealed class PlayerEquipment : NetworkBehaviour
     {
         [SerializeField] private Transform equipSlot;
-        private PlayerPresentation presentation;
         private PlayerInventory inventory;
         private PlayerNetworkState networkState;
         private PlayerCarry carry;
         private WorldItemRegistry registry;
-        private Transform viewmodelSlot;
         private WorldItem activeItem;
         private uint activeId;
         private sbyte activeSlot = -1;
         private bool subscribed;
         public PlayerHeldItemPresentation HeldPresentation { get; private set; }
-        public Transform HeldTransform => IsOwner && viewmodelSlot != null ? viewmodelSlot : equipSlot;
+        public Transform HeldTransform => HeldPresentation.Attachment ? HeldPresentation.Attachment : equipSlot;
         public bool IsCharging => carry && carry.IsCarrying ? carry.IsCharging : activeItem != null && activeItem.IsCharging;
         public float Charge01 => carry && carry.IsCarrying ? carry.Charge01 : activeItem != null ? activeItem.Charge01 : 0f;
 
         private void Awake()
         {
-            presentation = GetComponent<PlayerPresentation>();
             inventory = GetComponent<PlayerInventory>();
             networkState = GetComponent<PlayerNetworkState>();
             carry = GetComponent<PlayerCarry>();
@@ -47,13 +44,7 @@ namespace TwoBirds
                 inventory.InventoryChanged += OnInventoryChanged;
                 subscribed = true;
             }
-            if (viewmodelSlot == null && presentation.ViewCamera != null)
-            {
-                viewmodelSlot = new GameObject("ViewmodelSlot").transform;
-                viewmodelSlot.SetParent(presentation.ViewCamera.transform, false);
-                viewmodelSlot.localPosition = new Vector3(0.35f, -0.3f, 0.6f);
-                viewmodelSlot.localScale = Vector3.one * 0.5f;
-            }
+
         }
 
         public void BeginUse()
@@ -131,8 +122,6 @@ namespace TwoBirds
             CancelUse();
             if (subscribed) inventory.InventoryChanged -= OnInventoryChanged;
             subscribed = false;
-            if (viewmodelSlot != null) Destroy(viewmodelSlot.gameObject);
-            viewmodelSlot = null;
         }
     }
 }

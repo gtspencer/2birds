@@ -30,7 +30,7 @@ namespace TwoBirds
             Vector3 target = (shoulderA + shoulderB) * 0.5f + origin.rotation * new Vector3(0f, -0.30f * length, 0.35f * length);
             if (Vector3.Distance(target, shoulderA) > 0.9f * lengthA || Vector3.Distance(target, shoulderB) > 0.9f * lengthB)
             { Debug.LogError($"Demo avatars {avatarA} and {avatarB} cannot reach shared target {target}; adjust their authored size/offset settings.", this); enabled = false; return; }
-            handTarget.SetPositionAndRotation(target, origin.rotation * Quaternion.LookRotation(Vector3.back, Vector3.up));
+            handTarget.SetPositionAndRotation(target, origin.rotation * Quaternion.LookRotation(Vector3.forward, Vector3.up));
             Frame(a.Settings, b.Settings);
             presentation.Configure(registry, true);
             presentation.InputSource = CaptureInput;

@@ -32,6 +32,20 @@ namespace TwoBirds
         private uint localLaunchTick;
         private uint historyStart;
         private Vector3 visualOffset;
+        private Pose lastHeldPose;
+        private int lastHeldBy = -1;
+        private bool hasHeldPose, releaseHandoff;
+        private uint handoffOperation, handoffPath;
+        private int handoffReleaser;
+        private float handoffEnd, handoffDuration;
+        private Vector3 handoffOffset, appliedHandoff;
+        private Quaternion handoffRotation = Quaternion.identity, appliedHandoffRotation = Quaternion.identity;
+        private Vector3 gameplayVisualPosition;
+        private Quaternion gameplayVisualRotation;
+        private Vector3 handoffBaseLocalPosition;
+        private Quaternion handoffBaseLocalRotation;
+        internal Vector3 PresentedRootPosition => visualRoot.position;
+        internal Quaternion PresentedRotation => visualRoot.rotation;
         private Quaternion visualRotation = Quaternion.identity;
         private Quaternion cosmeticRotation = Quaternion.identity;
         private Vector3 cosmeticSpin;
@@ -51,7 +65,7 @@ namespace TwoBirds
         internal float DropDiameter { get; private set; }
         internal float ReleaseRadius { get; private set; }
         internal bool ReleaseAvailable => isActiveAndEnabled && Record.State == WorldItemState.World && !optimisticPickup && !RemovalPending;
-        internal Vector3 PresentedFollowPosition => CenteredMotion ? PresentedSpherePosition : visualRoot.position;
+        internal Vector3 PresentedFollowPosition => CenteredMotion ? visualRoot.TransformPoint(sphereCenter) : visualRoot.position;
         internal Vector3 FollowAnchorOffset(Quaternion rotation) =>
             CenteredMotion ? rotation * Vector3.Scale(sphereCenter, defaultScale) : Vector3.zero;
         internal int PresentedHolder { get; private set; } = -1;
@@ -153,7 +167,7 @@ namespace TwoBirds
             CancelUse();
         }
 
-        private void OnDisable() => InterruptUse();
+        private void OnDisable() { InterruptUse(); CancelHandoff(); hasHeldPose = false; }
 
         internal void Initialize(WorldItemRegistry owner, ItemDefinition definition, ItemRecord record, bool predicted)
         {
@@ -202,6 +216,11 @@ namespace TwoBirds
 
         internal void ApplyRecord(ItemRecord record)
         {
+            RemoveHandoffPose();
+            bool beginHandoff = record.State == WorldItemState.World && Record.State == WorldItemState.Held &&
+                hasHeldPose && lastHeldBy == record.Releaser && !record.Sleeping &&
+                (!registry.LocalInventory || registry.LocalInventory.ObjectId != record.Releaser);
+            Pose departure = lastHeldPose;
             bool wasPredicted = Predicted;
             bool activeSimulation = !optimisticPickup && !Body.isKinematic && Record.State == WorldItemState.World;
             bool preserveMotion = activeSimulation &&
@@ -253,6 +272,17 @@ namespace TwoBirds
             }
             if (newRelease && !record.Sleeping && registry.TryGetPlayer(record.Releaser, out var releaser))
                 IgnorePlayer(releaser.Hitbox);
+            if (beginHandoff)
+            {
+                hasHeldPose = false;
+                releaseHandoff = true;
+                handoffOperation = record.Operation; handoffReleaser = record.Releaser; handoffPath = record.Motion.Path;
+                handoffDuration = registry.CorrectionDuration;
+                handoffEnd = Time.unscaledTime + handoffDuration;
+                handoffOffset = departure.position - visualRoot.position;
+                handoffRotation = departure.rotation * Quaternion.Inverse(visualRoot.rotation);
+                ApplyHandoffPose();
+            }
         }
 
         internal void AttachHolder()
@@ -264,6 +294,8 @@ namespace TwoBirds
 
         internal void PredictPickup()
         {
+            CancelHandoff();
+            hasHeldPose = false;
             ResetContactState();
             ClearIgnore();
             optimisticPickup = true;
@@ -274,6 +306,10 @@ namespace TwoBirds
 
         internal void SetRecord(ItemRecord record)
         {
+            if (releaseHandoff && (record.State != WorldItemState.World || record.Sleeping || record.Releaser != handoffReleaser ||
+                record.Operation != handoffOperation || record.Motion.Path != handoffPath || record.Motion.Boundary)) CancelHandoff();
+            if (record.State == WorldItemState.Removed || record.State == WorldItemState.Held && record.Holder != lastHeldBy)
+                hasHeldPose = false;
             if (record.State != WorldItemState.World || record.Sleeping ||
                 record.Releaser != releasePlayer || record.Operation != releaseOperation)
             {
@@ -321,23 +357,53 @@ namespace TwoBirds
                 return;
             }
             var equipment = holder.Equipment;
-            Transform parent = holder.IsOwner ? equipment.HeldTransform : equipment.HeldPresentation.Attachment;
+            Transform parent = equipment.HeldPresentation.Attachment;
             transform.SetParent(parent, false);
-            if (holder.IsOwner)
-            {
-                transform.localPosition = Vector3.zero;
-                transform.localRotation = Definition.WorldPrefab.transform.localRotation;
-                transform.localScale = defaultScale;
-            }
-            else
-            {
-                var grip = equipment.HeldPresentation.Grip(Definition);
-                Vector3 scale = parent.lossyScale;
-                transform.localScale = new Vector3(defaultScale.x / scale.x, defaultScale.y / scale.y, defaultScale.z / scale.z);
-                transform.position = parent.position + parent.rotation * grip.GripPosition;
-                transform.localRotation = grip.GripRotation;
-            }
+            var grip = equipment.HeldPresentation.Grip(Definition);
+            Vector3 scale = parent.lossyScale;
+            transform.localScale = new Vector3(defaultScale.x / scale.x, defaultScale.y / scale.y, defaultScale.z / scale.z);
+            transform.position = parent.position + parent.rotation * grip.GripPosition;
+            transform.localRotation = grip.GripRotation;
             ClearVisualOffset();
+        }
+
+        internal void CommitHeldPose(Pose pose, int holder)
+        {
+            if (Record.State != WorldItemState.Held || PresentedHolder != holder) return;
+            transform.SetPositionAndRotation(pose.position, pose.rotation);
+            lastHeldPose = new Pose(visualRoot.position, visualRoot.rotation);
+            lastHeldBy = holder; hasHeldPose = true;
+        }
+
+        private void RemoveHandoffPose()
+        {
+            if (appliedHandoff == Vector3.zero && appliedHandoffRotation == Quaternion.identity) return;
+            visualRoot.SetLocalPositionAndRotation(handoffBaseLocalPosition, handoffBaseLocalRotation);
+            appliedHandoff = Vector3.zero; appliedHandoffRotation = Quaternion.identity;
+        }
+
+        private void CancelHandoff()
+        {
+            RemoveHandoffPose(); releaseHandoff = false;
+        }
+
+        private void ApplyHandoffPose()
+        {
+            if (!releaseHandoff) return;
+            float remaining = Mathf.Clamp01((handoffEnd - Time.unscaledTime) / handoffDuration);
+            if (remaining <= 0f || Record.Sleeping || MotionBoundary || !Body.isKinematic && Body.IsSleeping())
+            { CancelHandoff(); return; }
+            Vector3 offset = handoffOffset * remaining;
+            Vector3 physical = visualRoot.position;
+            if (Physics.CheckSphere(physical + offset, ReleaseRadius, registry.EnvironmentMask, QueryTriggerInteraction.Ignore) ||
+                offset.sqrMagnitude > 0.000001f && Physics.SphereCast(physical, ReleaseRadius, offset.normalized,
+                    out _, offset.magnitude, registry.EnvironmentMask, QueryTriggerInteraction.Ignore))
+            { CancelHandoff(); return; }
+            gameplayVisualPosition = physical; gameplayVisualRotation = visualRoot.rotation;
+            handoffBaseLocalPosition = visualRoot.localPosition; handoffBaseLocalRotation = visualRoot.localRotation;
+            appliedHandoff = offset;
+            appliedHandoffRotation = Quaternion.Slerp(Quaternion.identity, handoffRotation, remaining);
+            visualRoot.SetPositionAndRotation(physical + offset, appliedHandoffRotation * gameplayVisualRotation);
         }
 
         internal void DetachHeldPresentation()
@@ -413,6 +479,7 @@ namespace TwoBirds
 
         private void CorrectBody(ItemMotion motion, bool smooth)
         {
+            RemoveHandoffPose();
             ResetBirdContact(true);
             ResetIncomingMotion();
             rebaseContactPose = true;
@@ -468,6 +535,7 @@ namespace TwoBirds
 
         internal void Present()
         {
+            RemoveHandoffPose();
             if (registry == null || optimisticPickup || Record.State != WorldItemState.World) return;
             Vector3 presentedVelocity = Vector3.zero;
             if (!Simulating && sampleCount > 0)
@@ -495,7 +563,7 @@ namespace TwoBirds
                     visualRoot.localRotation = Quaternion.Slerp(Quaternion.identity, visualRotation, remaining);
                 }
             }
-            if (!CosmeticRotation || sampleCount == 0) return;
+            if (!CosmeticRotation || sampleCount == 0) { ApplyHandoffPose(); return; }
             if (!Record.Sleeping)
             {
                 float radius = impactSphere ? sphereRadius : DropDiameter * 0.25f;
@@ -516,6 +584,7 @@ namespace TwoBirds
             }
             Vector3 center = BodySpherePosition + visualOffset * remaining;
             visualRoot.SetPositionAndRotation(center - cosmeticRotation * bodySphereCenter, cosmeticRotation);
+            ApplyHandoffPose();
         }
 
         private ItemMotion PresentedMotionAt(double tick, out Vector3 velocity)
@@ -621,6 +690,7 @@ namespace TwoBirds
 
         private void ClearVisualOffset()
         {
+            RemoveHandoffPose();
             visualRoot.localPosition = Vector3.zero;
             visualRoot.localRotation = Quaternion.identity;
             visualOffset = Vector3.zero;
@@ -632,6 +702,8 @@ namespace TwoBirds
 
         private void ResetPresentation()
         {
+            CancelHandoff();
+            hasHeldPose = false; lastHeldBy = -1;
             PresentedHolder = -1;
             ClearIgnore();
             ClearVisualOffset();
@@ -669,7 +741,9 @@ namespace TwoBirds
         }
 
         private Vector3 BodySpherePosition => Body.position + Body.rotation * bodySphereCenter;
-        private Vector3 PresentedSpherePosition => visualRoot.TransformPoint(sphereCenter);
+        private Vector3 PresentedSpherePosition => appliedHandoff == Vector3.zero && appliedHandoffRotation == Quaternion.identity
+            ? visualRoot.TransformPoint(sphereCenter)
+            : gameplayVisualPosition + gameplayVisualRotation * Vector3.Scale(sphereCenter, visualRoot.lossyScale);
 
         private bool ContactEligible => impactSphere != null && impactSphere.enabled && !impactSphere.isTrigger &&
             Definition.ImpulseMultiplier > 0f &&
@@ -857,6 +931,7 @@ namespace TwoBirds
 
         private void OnCollisionEnter(Collision collision)
         {
+            CancelHandoff();
             BirdContact(collision);
             if (birdRock && registry && Simulating && !registry.Replaying && !optimisticPickup &&
                 Record.State == WorldItemState.World && collision.impulse.sqrMagnitude > 0.000001f &&

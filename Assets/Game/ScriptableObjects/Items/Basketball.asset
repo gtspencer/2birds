@@ -24,6 +24,14 @@ MonoBehaviour:
   GripPosition: {x: -0.0000017285347, y: 0.19424716, z: -0.000000029802322}
   GripEuler: {x: 270.01978, y: 0, z: 0}
   OverrideHoldSettings: 0
+  OverrideFirstPersonPose: 1
+  FirstPersonPose:
+    HoldPosition: {x: 0.1, y: 0, z: 0.78}
+    HoldWristEuler: {x: 0, y: 0, z: 15}
+    ChargeControlPosition: {x: 0.05, y: -0.05, z: 0.72}
+    ChargedPosition: {x: 0.18, y: 0.12, z: 0.5}
+    ChargedWristEuler: {x: -35, y: 0, z: 100}
+  GripFingers: {fileID: 0}
   HandPose:
     HoldPosition: {x: 0.15, y: -0.4, z: 0.5}
     HoldWristEuler: {x: 0, y: 0, z: 0}

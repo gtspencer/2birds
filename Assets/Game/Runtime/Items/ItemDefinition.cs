@@ -48,6 +48,9 @@ namespace TwoBirds
 
         [Header("Held Hand Pose")]
         public bool OverrideHoldSettings;
+        public bool OverrideFirstPersonPose;
+        public HeldItemSpatialSettings FirstPersonPose = HeldItemSpatialSettings.FirstPersonDefault;
+        public AnimationClip GripFingers;
         public HeldItemPoseSettings HandPose = HeldItemPoseSettings.Default;
 
         [Header("Player Impacts")]
@@ -82,6 +85,8 @@ namespace TwoBirds
         [Tooltip("Energy below which the rigidbody sleeps (only when OverrideSleepThreshold is on). Lower = simulates longer before resting.")]
         [Min(0f)] public float SleepThreshold = 0.005f;
 
+        public event System.Action ContentChanged;
+
         private void OnValidate()
         {
             MinThrowSpeed = Mathf.Max(0f, MinThrowSpeed);
@@ -89,6 +94,7 @@ namespace TwoBirds
             ThrowChargeTime = Mathf.Max(0.01f, ThrowChargeTime);
             MinimumImpactSpeed = Mathf.Max(0f, MinimumImpactSpeed);
             ImpulseMultiplier = Mathf.Max(0f, ImpulseMultiplier);
+            ContentChanged?.Invoke();
         }
     }
 }

@@ -6,6 +6,7 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/Avatar Animation Set")]
     public sealed class AvatarAnimationSet : ScriptableObject
     {
+        public AnimationClip RelaxedFingers, GripFingers, OpenFingers;
         public const float MinimumPlayback = 0.65f, MaximumPlayback = 1.8f;
         public event Action ContentChanged;
         private void OnValidate() => ContentChanged?.Invoke();

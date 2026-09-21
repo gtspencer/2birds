@@ -33,6 +33,7 @@ namespace TwoBirds
     [DefaultExecutionOrder(100)]
     public sealed class PlayerAvatarPresentation : NetworkBehaviour
     {
+        internal PlayerHandPresentation Hands { get; private set; }
         [SerializeField] private AvatarPresentation presentation;
         private readonly SyncVar<AvatarId> selected = new();
         private PlayerMotor motor;
@@ -62,6 +63,8 @@ namespace TwoBirds
             carry.PresentationContextChanged += ContextChanged;
             presentation.FallbackChanged += player.SetFallbackVisible;
             presentation.InputSource = CaptureInput;
+            Hands = gameObject.AddComponent<PlayerHandPresentation>();
+            Hands.Initialize(this);
         }
 
         internal void Initialize() => selected.Value = presentation.Registry.DefaultId;
@@ -69,16 +72,19 @@ namespace TwoBirds
         {
             presentation.Configure(presentation.Registry, !IsOwner, state.Snapshot.SpawnSlot / 8f);
             ResolveSelected(selected.Value);
+            Hands.StartPresentation();
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
             contextDirty = IsOwner;
         }
-        public override void OnStopClient() => presentation.SetVisual(false);
+        public override void OnStopClient() { Hands.StopPresentation(); presentation.SetVisual(false); }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
+            Hands.StopPresentation();
             hasReceived = hasPending = false;
             presentation.SetVisual(!IsOwner && IsClientInitialized);
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
             contextDirty = IsOwner;
+            if (IsClientInitialized) Hands.StartPresentation();
         }
         public override void OnOwnershipServer(NetworkConnection previousOwner) => hasServerSample = false;
         public override void OnSpawnServer(NetworkConnection connection)

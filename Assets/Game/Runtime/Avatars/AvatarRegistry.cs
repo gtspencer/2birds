@@ -14,11 +14,13 @@ namespace TwoBirds
             public GameObject Source;
             public string SourceGuid;
             public GameObject Prefab;
+            public GameObject FirstPersonPrefab;
             public AvatarSettings Settings;
         }
 
         public AvatarId DefaultId;
         public AvatarAnimationSet Animations;
+        public FirstPersonHandsSettings FirstPerson;
         public List<Entry> Entries = new();
         private Dictionary<ulong, Entry> lookup;
         public event Action ContentChanged;

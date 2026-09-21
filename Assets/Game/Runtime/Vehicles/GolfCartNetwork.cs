@@ -35,6 +35,7 @@ namespace TwoBirds
         private float hornCooldown;
         private GolfCartController controller;
         private GolfCartPresentation presentation;
+        internal GolfCartPresentation Presentation => presentation;
         private CartSeat[] seats;
         private CartOccupant[] occupants = EmptySeats();
         private PendingChange pending;

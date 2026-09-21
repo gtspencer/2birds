@@ -8,7 +8,7 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/Avatar Settings")]
     public sealed class AvatarSettings : ScriptableObject
     {
-        public const int CurrentFormatVersion = 3;
+        public const int CurrentFormatVersion = 4;
         [Header("Authored tuning")]
         public string DisplayName;
         [Min(0.01f)] public float VisualHeight = 1.8f;
@@ -18,11 +18,15 @@ namespace TwoBirds
         public float LeftSoleAdjustment, RightSoleAdjustment;
         public Quaternion LeftFootRotation = Quaternion.identity, RightFootRotation = Quaternion.identity;
         [Range(0f, 1f)] public float FootCorrection = 1f, PelvisCorrection = 1f;
-        public HumanBodyBones LeftHandFollowBone = HumanBodyBones.LeftHand;
+        public GameObject FirstPersonSource;
+        public Vector3 FirstPersonPlacementOffset, FirstPersonReachOffset;
+        [Tooltip("Offset for the first-person item hold target in arm lengths: right, up, forward.")]
+        public Vector3 FirstPersonHoldOffset;
         public List<SpringChain> AdditionalSprings = new();
         [Header("Generated source and skeleton")]
         public AvatarId Id;
         public GeneratedSkeleton Generated;
+        public GeneratedSkeleton FirstPersonGenerated;
         public float Scale => VisualHeight / Generated.Height;
         public event Action ContentChanged;
         private void OnValidate() => ContentChanged?.Invoke();
@@ -63,6 +67,8 @@ namespace TwoBirds
             public Quaternion LeftFootRestRotation, RightFootRestRotation;
             public Vector3 RightWristToPalmPosition;
             public Quaternion RightWristToPalmRotation;
+            public Vector3 LeftWristToPalmPosition;
+            public Quaternion LeftWristToPalmRotation;
         }
     }
 
@@ -79,21 +85,24 @@ namespace TwoBirds
             HumanBodyBones.RightUpperArm, HumanBodyBones.RightLowerArm, HumanBodyBones.RightHand
         };
 
-        public static void Validate(GameObject root, AvatarSettings settings)
+        public static void Validate(GameObject root, AvatarSettings settings, bool firstPerson = false)
         {
             if (!root || !settings) throw new InvalidOperationException("Avatar prefab/settings are missing.");
-            var data = settings.Generated;
+            var data = firstPerson ? settings.FirstPersonGenerated : settings.Generated;
             if (data.FormatVersion != AvatarSettings.CurrentFormatVersion)
                 throw new InvalidOperationException("Unsupported generated skeleton version; process the source again.");
-            if (!Positive(data.Height) || !Positive(data.HumanScale) || !Positive(settings.VisualHeight) || !Positive(settings.Scale) ||
-                !Finite(data.Bounds.center) || !Positive(data.Bounds.size) || !float.IsFinite(data.SolePlane) ||
-                !Positive(data.LeftLeg) || !Positive(data.RightLeg) || !Positive(data.LeftArm) || !Positive(data.RightArm) ||
-                !Finite(data.Hips) || !Finite(data.Head) || !Finite(data.LeftShoulder) || !Finite(data.RightShoulder) ||
-                !Finite(data.LeftSoleToGoal) || !Finite(data.RightSoleToGoal) ||
-                !Rotation(data.LeftFootRestRotation) || !Rotation(data.RightFootRestRotation) ||
-                !Finite(data.RightWristToPalmPosition) || !Rotation(data.RightWristToPalmRotation))
-                throw new InvalidOperationException("Avatar dimensions or skeleton measurements are invalid; process the source again.");
-            if (!Finite(settings.StandingOffset) || !Finite(settings.SeatedPelvisOffset) || !Finite(settings.CarriedOffset) ||
+            if (!Positive(settings.VisualHeight) || !Positive(settings.Scale) || !Positive(data.HumanScale) ||
+                !Positive(data.LeftArm) || !Positive(data.RightArm) || !Finite(data.LeftShoulder) || !Finite(data.RightShoulder) ||
+                !Finite(data.RightWristToPalmPosition) || !Rotation(data.RightWristToPalmRotation) ||
+                !Finite(data.LeftWristToPalmPosition) || !Rotation(data.LeftWristToPalmRotation))
+                throw new InvalidOperationException("Avatar hand measurements are invalid; process the source again.");
+            if (!firstPerson && (!Positive(data.Height) || !Finite(data.Bounds.center) || !Positive(data.Bounds.size) ||
+                !float.IsFinite(data.SolePlane) || !Positive(data.LeftLeg) || !Positive(data.RightLeg) ||
+                !Finite(data.Hips) || !Finite(data.Head) || !Finite(data.LeftSoleToGoal) || !Finite(data.RightSoleToGoal) ||
+                !Rotation(data.LeftFootRestRotation) || !Rotation(data.RightFootRestRotation)))
+                throw new InvalidOperationException("Avatar body measurements are invalid; process the source again.");
+            if (!Finite(settings.FirstPersonPlacementOffset) || !Finite(settings.FirstPersonReachOffset) ||
+                !Finite(settings.StandingOffset) || !Finite(settings.SeatedPelvisOffset) || !Finite(settings.CarriedOffset) ||
                 !float.IsFinite(settings.YawOffset) || !Positive(settings.PlaybackMultiplier) ||
                 !float.IsFinite(settings.LeftSoleAdjustment) || !float.IsFinite(settings.RightSoleAdjustment) ||
                 !float.IsFinite(settings.FootCorrection) || !float.IsFinite(settings.PelvisCorrection) ||
@@ -104,7 +113,8 @@ namespace TwoBirds
             if (!animator || !animator.avatar || !animator.avatar.isValid || !animator.avatar.isHuman ||
                 animator.avatar != data.HumanoidAvatar)
                 throw new InvalidOperationException("Avatar prefab does not match its generated Humanoid Avatar.");
-            if (!vrm || !vrm.Vrm || !root.GetComponent<UniHumanoid.Humanoid>() ||
+            if (firstPerson ? !root.GetComponent<LocalFirstPersonHands>() :
+                !vrm || !vrm.Vrm || !root.GetComponent<UniHumanoid.Humanoid>() ||
                 !root.GetComponent<AvatarInstance>() || !root.GetComponent<AvatarSpringRuntimeProvider>())
                 throw new InvalidOperationException("Avatar prefab is missing required runtime components.");
             foreach (var bone in RequiredBones)

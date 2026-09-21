@@ -25,7 +25,9 @@ MonoBehaviour:
   RightFootRotation: {x: 0, y: 0, z: 0, w: 1}
   FootCorrection: 1
   PelvisCorrection: 1
-  LeftHandFollowBone: 17
+  FirstPersonSource: {fileID: 0}
+  FirstPersonPlacementOffset: {x: 0, y: 0, z: 0}
+  FirstPersonReachOffset: {x: 0, y: 0, z: 0}
   AdditionalSprings:
   - Name: Tail
     Root: mixamorig:Hips/tail01
@@ -43,7 +45,7 @@ MonoBehaviour:
     SourceGuid: 4637b162658b79848ac548f75e304935
     Source: {fileID: -1728013695380148634, guid: 4637b162658b79848ac548f75e304935, type: 3}
     HumanoidAvatar: {fileID: -7015762578403652589, guid: 4637b162658b79848ac548f75e304935, type: 3}
-    FormatVersion: 3
+    FormatVersion: 4
     Bounds:
       m_Center: {x: -0.00042390823, y: 0.74680203, z: -0.7219024}
       m_Extent: {x: 0.9378128, y: 0.75274545, z: 1.1791296}
@@ -64,3 +66,32 @@ MonoBehaviour:
     RightFootRestRotation: {x: 0, y: 0, z: 0, w: 1}
     RightWristToPalmPosition: {x: 0.05411407, y: -0.010823796, z: -0.00008282869}
     RightWristToPalmRotation: {x: 0.7071647, y: -0.0024036916, z: 0.7070407, w: -0.0023878505}
+    LeftWristToPalmPosition: {x: -0.057945732, y: -0.011589375, z: -0.00010905547}
+    LeftWristToPalmRotation: {x: -0.70709836, y: -0.0033340363, z: 0.7070995, w: 0.003325313}
+  FirstPersonGenerated:
+    SourceGuid: 4637b162658b79848ac548f75e304935
+    Source: {fileID: -1728013695380148634, guid: 4637b162658b79848ac548f75e304935, type: 3}
+    HumanoidAvatar: {fileID: -7015762578403652589, guid: 4637b162658b79848ac548f75e304935, type: 3}
+    FormatVersion: 4
+    Bounds:
+      m_Center: {x: -0.00042390823, y: 0.74680203, z: -0.7219024}
+      m_Extent: {x: 0.9378128, y: 0.75274545, z: 1.1791296}
+    Height: 1.4995475
+    SolePlane: 0
+    HumanScale: 0.5462332
+    Hips: {x: -0.00000041587003, y: 0.44600108, z: 0.0018930484}
+    Head: {x: -0.0000014383868, y: 0.95947504, z: -0.011026825}
+    LeftShoulder: {x: -0.2661112, y: 0.8705729, z: -0.022058437}
+    RightShoulder: {x: 0.26398027, y: 0.8705714, z: -0.021876575}
+    LeftLeg: {x: 0.20372686, y: 0.14313038}
+    RightLeg: {x: 0.20372675, y: 0.14312965}
+    LeftArm: {x: 0.25532788, y: 0.25318158}
+    RightArm: {x: 0.25745684, y: 0.25319952}
+    LeftSoleToGoal: {x: 0, y: 0.05666676, z: 0}
+    RightSoleToGoal: {x: 0, y: 0.05666688, z: 0}
+    LeftFootRestRotation: {x: 0, y: 0, z: 0, w: 1}
+    RightFootRestRotation: {x: 0, y: 0, z: 0, w: 1}
+    RightWristToPalmPosition: {x: 0.05411407, y: -0.010823796, z: -0.00008282869}
+    RightWristToPalmRotation: {x: 0.7071647, y: -0.0024036916, z: 0.7070407, w: -0.0023878505}
+    LeftWristToPalmPosition: {x: -0.057945732, y: -0.011589375, z: -0.00010905547}
+    LeftWristToPalmRotation: {x: -0.70709836, y: -0.0033340363, z: 0.7070995, w: 0.003325313}

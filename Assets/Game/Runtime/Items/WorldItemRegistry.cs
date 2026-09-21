@@ -59,8 +59,10 @@ namespace TwoBirds
         public PlayerInventory LocalInventory { get; private set; }
         internal event System.Action<uint, int, int> PresentationChanged;
 
-        internal HeldItemPoseData GetHeldPose(ItemDefinition definition) =>
-            new(definition, itemRegistry.HeldItemDefaults.HoldSettings);
+        internal HeldItemSettings HeldDefaults => itemRegistry.HeldItemDefaults;
+
+        internal HeldItemPoseData GetHeldPose(ItemDefinition definition, bool firstPerson = false) =>
+            new(definition, itemRegistry.HeldItemDefaults, firstPerson);
 
         private void NotifyPresentation(uint id, int previousHolder)
         {

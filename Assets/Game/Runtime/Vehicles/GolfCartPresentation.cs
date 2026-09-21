@@ -15,6 +15,7 @@ namespace TwoBirds
         }
         [SerializeField] private Transform[] wheels;
         [SerializeField] private Transform steeringWheel;
+        public AvatarHandContact LeftHandContact, RightHandContact;
         [SerializeField] private Transform gasPedal;
         [SerializeField] private Transform brakePedal;
         [Header("Lights and Horn")]

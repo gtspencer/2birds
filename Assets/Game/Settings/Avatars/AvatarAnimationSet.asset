@@ -12,6 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d976d6d885d1d4c40b49ecdc10d511ef, type: 3}
   m_Name: AvatarAnimationSet
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.AvatarAnimationSet
+  RelaxedFingers: {fileID: 7400000, guid: ee0139b25da533f4790b709b91f64de5, type: 2}
+  GripFingers: {fileID: 7400000, guid: 58d6f612604291f4d928a255be1a376b, type: 2}
+  OpenFingers: {fileID: 7400000, guid: 9a2baa787bc0a234bbc0881229bdd1a0, type: 2}
   Idle: {fileID: -203655887218126122, guid: 956fe3559564c8248992d53f47d97a7f, type: 3}
   Jump: {fileID: -203655887218126122, guid: ade56d94235dd244bb53d7f37c68ac27, type: 3}
   Fall: {fileID: -203655887218126122, guid: 412ca999563aeb444a18889a7bb55ca2, type: 3}
