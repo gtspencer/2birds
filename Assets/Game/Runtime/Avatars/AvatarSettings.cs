@@ -8,7 +8,7 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/Avatar Settings")]
     public sealed class AvatarSettings : ScriptableObject
     {
-        public const int CurrentFormatVersion = 2;
+        public const int CurrentFormatVersion = 3;
         [Header("Authored tuning")]
         public string DisplayName;
         [Min(0.01f)] public float VisualHeight = 1.8f;
@@ -19,8 +19,6 @@ namespace TwoBirds
         public Quaternion LeftFootRotation = Quaternion.identity, RightFootRotation = Quaternion.identity;
         [Range(0f, 1f)] public float FootCorrection = 1f, PelvisCorrection = 1f;
         public HumanBodyBones LeftHandFollowBone = HumanBodyBones.LeftHand;
-        [Tooltip("Changing this mapping requires Save and Process Avatar.")]
-        public HumanBodyBones RightHandFollowBone = HumanBodyBones.RightHand;
         public List<SpringChain> AdditionalSprings = new();
         [Header("Generated source and skeleton")]
         public AvatarId Id;
@@ -63,9 +61,8 @@ namespace TwoBirds
             public Vector2 LeftLeg, RightLeg, LeftArm, RightArm;
             public Vector3 LeftSoleToGoal, RightSoleToGoal;
             public Quaternion LeftFootRestRotation, RightFootRestRotation;
-            public HumanBodyBones RightHandFollowBone;
-            public Vector3 RightWristToFollowPosition;
-            public Quaternion RightWristToFollowRotation;
+            public Vector3 RightWristToPalmPosition;
+            public Quaternion RightWristToPalmRotation;
         }
     }
 
@@ -88,15 +85,13 @@ namespace TwoBirds
             var data = settings.Generated;
             if (data.FormatVersion != AvatarSettings.CurrentFormatVersion)
                 throw new InvalidOperationException("Unsupported generated skeleton version; process the source again.");
-            if (data.RightHandFollowBone != settings.RightHandFollowBone)
-                throw new InvalidOperationException("Hand follow mapping changed; process the source again.");
             if (!Positive(data.Height) || !Positive(data.HumanScale) || !Positive(settings.VisualHeight) || !Positive(settings.Scale) ||
                 !Finite(data.Bounds.center) || !Positive(data.Bounds.size) || !float.IsFinite(data.SolePlane) ||
                 !Positive(data.LeftLeg) || !Positive(data.RightLeg) || !Positive(data.LeftArm) || !Positive(data.RightArm) ||
                 !Finite(data.Hips) || !Finite(data.Head) || !Finite(data.LeftShoulder) || !Finite(data.RightShoulder) ||
                 !Finite(data.LeftSoleToGoal) || !Finite(data.RightSoleToGoal) ||
                 !Rotation(data.LeftFootRestRotation) || !Rotation(data.RightFootRestRotation) ||
-                !Finite(data.RightWristToFollowPosition) || !Rotation(data.RightWristToFollowRotation))
+                !Finite(data.RightWristToPalmPosition) || !Rotation(data.RightWristToPalmRotation))
                 throw new InvalidOperationException("Avatar dimensions or skeleton measurements are invalid; process the source again.");
             if (!Finite(settings.StandingOffset) || !Finite(settings.SeatedPelvisOffset) || !Finite(settings.CarriedOffset) ||
                 !float.IsFinite(settings.YawOffset) || !Positive(settings.PlaybackMultiplier) ||

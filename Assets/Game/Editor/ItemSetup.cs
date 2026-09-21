@@ -17,6 +17,7 @@ namespace TwoBirds.Editor
         private bool addThrowable = true;
         private bool captureIcon = true;
         private int iconResolution = 128;
+        private ItemDefinition existingItem;
 
         [MenuItem("Two Birds/Item Setup")]
         public static void ShowWindow() => GetWindow<ItemSetup>("Item Setup");
@@ -38,6 +39,15 @@ namespace TwoBirds.Editor
             EditorGUI.BeginDisabledGroup(source == null || string.IsNullOrWhiteSpace(itemName));
             if (GUILayout.Button("Create Item", GUILayout.Height(28))) CreateItem();
             EditorGUI.EndDisabledGroup();
+
+            EditorGUILayout.Space(6);
+            existingItem = (ItemDefinition)EditorGUILayout.ObjectField("Existing Item", existingItem, typeof(ItemDefinition), false);
+            using (new EditorGUI.DisabledScope(!existingItem || !existingItem.WorldPrefab))
+                if (GUILayout.Button("Recompute Held Offset"))
+                {
+                    Undo.RecordObject(existingItem, "Recompute Held Offset");
+                    if (GenerateHeldOffset(existingItem.WorldPrefab, existingItem)) AssetDatabase.SaveAssetIfDirty(existingItem);
+                }
         }
 
         private void CreateItem()
@@ -59,6 +69,8 @@ namespace TwoBirds.Editor
             var root = InstantiateSource(source);
             root.name = safeName;
             PrepareVisualRoot(root);
+            definition.HandPose.GripEuler = root.transform.localEulerAngles;
+            GenerateHeldOffset(root, definition);
             AddComponents(root, definition, addThrowable);
             root.hideFlags = HideFlags.None;
 
@@ -183,6 +195,38 @@ namespace TwoBirds.Editor
             updated[^1] = definition;
             registry.Items = updated;
             EditorUtility.SetDirty(registry);
+        }
+
+        public static bool GenerateHeldOffset(GameObject root, ItemDefinition definition)
+        {
+            Matrix4x4 toPalm = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(definition.HandPose.GripEuler),
+                root.transform.localScale) * root.transform.worldToLocalMatrix;
+            Bounds bounds = default;
+            bool found = false;
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!renderer.enabled) continue;
+                Mesh mesh = renderer is SkinnedMeshRenderer skin ? skin.sharedMesh : renderer.GetComponent<MeshFilter>()?.sharedMesh;
+                if (!mesh || mesh.vertexCount == 0) continue;
+                Bounds local = renderer is SkinnedMeshRenderer skinned ? skinned.localBounds : mesh.bounds;
+                Matrix4x4 matrix = toPalm * renderer.transform.localToWorldMatrix;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = local.center + Vector3.Scale(local.extents,
+                        new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                    Vector3 point = matrix.MultiplyPoint3x4(corner);
+                    if (found) bounds.Encapsulate(point);
+                    else { bounds = new Bounds(point, Vector3.zero); found = true; }
+                }
+            }
+            if (!found)
+            {
+                Debug.LogWarning($"No mesh bounds for '{root.name}'; held offset was kept.", definition);
+                return false;
+            }
+            definition.HandPose.GripPosition = -bounds.center + Vector3.up * (bounds.extents.y + 0.006f);
+            EditorUtility.SetDirty(definition);
+            return true;
         }
 
         private static Bounds CalculateBounds(GameObject root)

@@ -37,7 +37,7 @@ namespace TwoBirds
             networkState.ItemAction.State != ItemActionState.Recovering;
         internal bool ReadyForUse => running && inventory.CanEquip && networkState.CanCharge &&
             networkState.ItemAction.State != ItemActionState.Recovering;
-        internal Transform Attachment => followBone ? followBone : fallback;
+        internal Transform Attachment => fallback;
         internal HeldItemPoseData Grip(ItemDefinition definition) => definition == selectedDefinition ? selectedData : new HeldItemPoseData(definition);
 
         private void Awake()
@@ -131,11 +131,18 @@ namespace TwoBirds
         private void Bind(AvatarBinding binding)
         {
             boundSettings = binding.Settings;
-            followBone = binding.GetBone(boundSettings.RightHandFollowBone);
+            followBone = binding.GetBone(HumanBodyBones.RightHand);
+            fallback.SetParent(followBone, false);
+            Vector3 scale = followBone.lossyScale;
+            fallback.localScale = new Vector3(1f / scale.x, 1f / scale.y, 1f / scale.z);
+            fallback.SetPositionAndRotation(followBone.position + followBone.rotation *
+                (boundSettings.Generated.RightWristToPalmPosition * boundSettings.Scale),
+                followBone.rotation * boundSettings.Generated.RightWristToPalmRotation);
         }
 
         private void WillUnbind(AvatarBinding binding)
         {
+            fallback.SetParent(transform, true);
             followBone = null;
             boundSettings = null;
             ClearTarget();
@@ -256,7 +263,7 @@ namespace TwoBirds
                     if (hasPose)
                     {
                         chargeStart = lastBody.ToLocal(pose.FollowPosition);
-                        chargeRotation = Quaternion.Inverse(lastBody.Rotation) * pose.WristRotation;
+                        chargeRotation = Quaternion.Inverse(lastBody.Rotation) * pose.FollowRotation;
                     }
                     pose = HeldItemPoseCalculation.Charge(body, settings, actionData, chargeStart, chargeRotation, ChargeProgress(age));
                     lastBody = body;
@@ -372,6 +379,13 @@ namespace TwoBirds
         private void BeginBlend(float duration)
         {
             blendDuration = Mathf.Max(0f, duration);
+            if (!hasPose && followBone && TryBody(false, out var body, out var settings))
+            {
+                pose = new HeldItemPose(fallback.position, followBone.rotation, settings, selectedData);
+                lastBody = body;
+                weight = 0f;
+                hasPose = true;
+            }
             blending = hasPose && blendDuration > 0f;
             blendStart = Time.unscaledTimeAsDouble;
             if (!hasPose) return;
@@ -436,7 +450,7 @@ namespace TwoBirds
             if (hasPose)
             {
                 target.SetPositionAndRotation(pose.FollowPosition, pose.WristRotation);
-                fallback.SetPositionAndRotation(pose.FollowPosition, pose.FollowRotation);
+                if (!followBone) fallback.SetPositionAndRotation(pose.FollowPosition, pose.FollowRotation);
             }
             SetTarget(action.State == ItemActionState.Idle && selectedDefinition ? selectedData.Reach : actionData.Reach);
         }
@@ -450,7 +464,9 @@ namespace TwoBirds
                 bool unavailable = releaseUnavailable || tracking && !Matches(projectile);
                 bool beyond = false;
                 if (tracking && !unavailable)
-                    pose = HeldItemPoseCalculation.Resolve(projectile.PresentedFollowPosition + followOffset,
+                    pose = HeldItemPoseCalculation.Resolve(Vector3.Lerp(body.ToWorld(retainedPosition),
+                        projectile.PresentedFollowPosition + followOffset,
+                        LeanTween.easeOutSine(0f, 1f, Mathf.Clamp01((float)elapsed / 0.08f))),
                         body.Rotation * retainedRotation, body, settings, actionData, out beyond);
                 else if (tracking)
                     pose = HeldItemPoseCalculation.Resolve(pose.FollowPosition, body.Rotation * retainedRotation,
@@ -500,11 +516,11 @@ namespace TwoBirds
         private void Blend(in HeldItemBodyFrame body, AvatarSettings settings, float t, in HeldItemPoseData data)
         {
             bool holding = selectedDefinition && inventory.CanEquip;
-            var destination = holding ? HeldItemPoseCalculation.Hold(body, settings, selectedData) :
-                HeldItemPoseCalculation.Resolve(body.ToWorld(returnStart), body.Rotation * returnRotation, body, settings, data, out _);
-            pose = t >= 1f ? destination : HeldItemPoseCalculation.Resolve(Vector3.Lerp(body.ToWorld(returnStart), destination.FollowPosition, t),
-                Quaternion.Slerp(body.Rotation * returnRotation, destination.WristRotation, t), body, settings, data, out _);
-            weight = Mathf.Lerp(returnWeight, holding ? 1f : 0f, t);
+            var destination = HeldItemPoseCalculation.Hold(body, settings, data);
+            float movement = LeanTween.easeOutBack(0f, 1f, t, 0.5f);
+            pose = t >= 1f ? destination : HeldItemPoseCalculation.Resolve(Vector3.LerpUnclamped(body.ToWorld(returnStart), destination.FollowPosition, movement),
+                Quaternion.SlerpUnclamped(body.Rotation * returnRotation, destination.WristRotation, movement), body, settings, data, out _);
+            weight = Mathf.Lerp(returnWeight, holding ? 1f : 0f, LeanTween.easeInOutSine(0f, 1f, t));
             hasPose = true;
         }
 

@@ -134,7 +134,7 @@ namespace TwoBirds.Editor
                 CheckWriters(root, animator, vrm);
                 stage = "source measurements";
                 var renderers = root.GetComponentsInChildren<Renderer>(true);
-                draft.Generated = Measure(root, animator, renderers, sourceAsset, guid, draft);
+                draft.Generated = Measure(root, animator, renderers, sourceAsset, guid);
                 if (!settings) draft.VisualHeight = draft.Generated.Height;
                 if (draft.VisualHeight <= 0f || !float.IsFinite(draft.VisualHeight)) throw new InvalidOperationException("VisualHeight must be positive and finite.");
                 stage = "shared animation preparation";
@@ -274,11 +274,30 @@ namespace TwoBirds.Editor
                 }
         }
 
-        private static AvatarSettings.GeneratedSkeleton Measure(GameObject root, Animator animator, Renderer[] renderers, GameObject source, string guid, AvatarSettings settings)
+        public static Pose MeasureRightPalm(Animator animator)
         {
             var wrist = animator.GetBoneTransform(HumanBodyBones.RightHand);
-            var follow = animator.GetBoneTransform(settings.RightHandFollowBone);
-            if (!follow) throw new InvalidOperationException($"Missing configured hand follow bone: {settings.RightHandFollowBone}.");
+            var middle = animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
+            var index = animator.GetBoneTransform(HumanBodyBones.RightIndexProximal);
+            var little = animator.GetBoneTransform(HumanBodyBones.RightLittleProximal);
+            var elbow = animator.GetBoneTransform(HumanBodyBones.RightLowerArm);
+            Vector3 fingers = middle ? middle.position - wrist.position :
+                index && little ? (index.position + little.position) * 0.5f - wrist.position :
+                (wrist.position - elbow.position) * 0.3f;
+            float length = fingers.magnitude;
+            Vector3 forward = fingers.normalized;
+            Vector3 normal = index && little ? Vector3.Cross(forward, index.position - little.position) : Vector3.zero;
+            if (normal.sqrMagnitude < 0.000001f) normal = Vector3.ProjectOnPlane(-animator.transform.up, forward);
+            if (normal.sqrMagnitude < 0.000001f) normal = Vector3.ProjectOnPlane(animator.transform.forward, forward);
+            normal.Normalize();
+            Quaternion inverse = Quaternion.Inverse(wrist.rotation);
+            return new Pose(inverse * (fingers * 0.6f + normal * (length * 0.12f)),
+                inverse * Quaternion.LookRotation(forward, normal));
+        }
+
+        private static AvatarSettings.GeneratedSkeleton Measure(GameObject root, Animator animator, Renderer[] renderers, GameObject source, string guid)
+        {
+            Pose palm = MeasureRightPalm(animator);
             Bounds bounds = default;
             bool found = false;
             foreach (var renderer in renderers)
@@ -316,9 +335,8 @@ namespace TwoBirds.Editor
             return new AvatarSettings.GeneratedSkeleton
             {
                 Source = source, SourceGuid = guid, FormatVersion = AvatarSettings.CurrentFormatVersion, HumanoidAvatar = animator.avatar,
-                RightHandFollowBone = settings.RightHandFollowBone,
-                RightWristToFollowPosition = Quaternion.Inverse(wrist.rotation) * (follow.position - wrist.position),
-                RightWristToFollowRotation = Quaternion.Inverse(wrist.rotation) * follow.rotation,
+                RightWristToPalmPosition = palm.position,
+                RightWristToPalmRotation = palm.rotation,
                 Bounds = bounds, Height = height, SolePlane = sole, HumanScale = animator.humanScale,
                 Hips = Position(HumanBodyBones.Hips) - Vector3.up * sole, Head = Position(HumanBodyBones.Head) - Vector3.up * sole,
                 LeftShoulder = Position(HumanBodyBones.LeftUpperArm) - Vector3.up * sole,

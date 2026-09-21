@@ -15,12 +15,14 @@ namespace TwoBirds
         private readonly AvatarPresentation host;
         private readonly AvatarSettings settings;
         private readonly Animator animator;
-        private readonly Transform head, leftShoulder, rightShoulder;
+        private readonly Transform head, leftShoulder, rightShoulder, rightHand;
         private readonly float leftArm, rightArm;
         private readonly Vector3 leftHandOffset, rightHandOffset;
         private Foot left, right;
         private float groundedWeight, pelvis;
         private Vector3 lookDirection;
+        private Vector3 rightGoalOffset;
+        private Quaternion rightBoneToGoal;
         private bool calibrated;
         private readonly float height;
         internal float DeltaTime;
@@ -40,7 +42,8 @@ namespace TwoBirds
             var leftFollow = binding.GetBone(settings.LeftHandFollowBone);
             leftHandOffset = leftFollow && leftFollow != leftHand
                 ? Quaternion.Inverse(leftHand.rotation) * (leftFollow.position - leftHand.position) : Vector3.zero;
-            rightHandOffset = data.RightWristToFollowPosition * settings.Scale;
+            rightHand = binding.GetBone(HumanBodyBones.RightHand);
+            rightHandOffset = data.RightWristToPalmPosition * settings.Scale;
             left = new Foot { Goal = AvatarIKGoal.LeftFoot, Hip = binding.GetBone(HumanBodyBones.LeftUpperLeg),
                 Length = (data.LeftLeg.x + data.LeftLeg.y) * settings.Scale, Offset = data.LeftSoleToGoal * settings.Scale,
                 Bone = binding.GetBone(HumanBodyBones.LeftFoot), RestRotation = data.LeftFootRestRotation,
@@ -61,7 +64,14 @@ namespace TwoBirds
 
         internal void Apply()
         {
-            if (!calibrated) { Calibrate(ref left); Calibrate(ref right); calibrated = true; }
+            if (!calibrated)
+            {
+                Calibrate(ref left); Calibrate(ref right);
+                Quaternion inverse = Quaternion.Inverse(rightHand.rotation);
+                rightGoalOffset = inverse * (animator.GetIKPosition(AvatarIKGoal.RightHand) - rightHand.position);
+                rightBoneToGoal = inverse * animator.GetIKRotation(AvatarIKGoal.RightHand);
+                calibrated = true;
+            }
             bool attached = host.Input.Seated || host.Input.Carried && !host.Input.ReleasePreview || host.Input.Pending;
             bool grounded = host.Input.Grounded && host.Input.Mode != MovementMode.External && !host.Input.ReleasePreview;
             if (!host.FootIkEnabled || attached)
@@ -162,6 +172,7 @@ namespace TwoBirds
 
         private void ApplyHand(AvatarIKGoal goal, AvatarPresentation.HandTarget target, Transform shoulder, float length, Vector3 followOffset)
         {
+            if (goal == AvatarIKGoal.RightHand) animator.SetIKHintPositionWeight(AvatarIKHint.RightElbow, 0f);
             if (!target.Target) { animator.SetIKPositionWeight(goal, 0f); animator.SetIKRotationWeight(goal, 0f); return; }
             Vector3 wristTarget = target.Target.position - target.Target.rotation * followOffset;
             Vector3 delta = wristTarget - shoulder.position;
@@ -169,8 +180,18 @@ namespace TwoBirds
             float fade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.88f, 0.98f, delta.magnitude / length));
             animator.SetIKPositionWeight(goal, target.Position * fade);
             animator.SetIKRotationWeight(goal, target.Rotation * fade);
-            animator.SetIKPosition(goal, shoulder.position + Vector3.ClampMagnitude(delta, length * 0.98f));
-            animator.SetIKRotation(goal, target.Target.rotation);
+            Vector3 position = shoulder.position + Vector3.ClampMagnitude(delta, length * 0.98f);
+            Quaternion rotation = target.Target.rotation;
+            if (goal == AvatarIKGoal.RightHand)
+            {
+                position += rotation * rightGoalOffset;
+                rotation *= rightBoneToGoal;
+                animator.SetIKHintPositionWeight(AvatarIKHint.RightElbow, target.Position * fade * 0.4f);
+                animator.SetIKHintPosition(AvatarIKHint.RightElbow, shoulder.position + host.transform.rotation *
+                    (new Vector3(0.35f, -0.45f, -0.1f) * length));
+            }
+            animator.SetIKPosition(goal, position);
+            animator.SetIKRotation(goal, rotation);
         }
     }
 }

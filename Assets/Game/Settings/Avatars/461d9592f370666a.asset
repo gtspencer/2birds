@@ -26,7 +26,6 @@ MonoBehaviour:
   FootCorrection: 1
   PelvisCorrection: 1
   LeftHandFollowBone: 17
-  RightHandFollowBone: 45
   AdditionalSprings:
   - Name: Tail
     Root: mixamorig:Hips/tail01
@@ -44,7 +43,7 @@ MonoBehaviour:
     SourceGuid: 4637b162658b79848ac548f75e304935
     Source: {fileID: -1728013695380148634, guid: 4637b162658b79848ac548f75e304935, type: 3}
     HumanoidAvatar: {fileID: -7015762578403652589, guid: 4637b162658b79848ac548f75e304935, type: 3}
-    FormatVersion: 2
+    FormatVersion: 3
     Bounds:
       m_Center: {x: -0.00042390823, y: 0.74680203, z: -0.7219024}
       m_Extent: {x: 0.9378128, y: 0.75274545, z: 1.1791296}
@@ -63,6 +62,5 @@ MonoBehaviour:
     RightSoleToGoal: {x: 0, y: 0.05666688, z: 0}
     LeftFootRestRotation: {x: 0, y: 0, z: 0, w: 1}
     RightFootRestRotation: {x: 0, y: 0, z: 0, w: 1}
-    RightHandFollowBone: 45
-    RightWristToFollowPosition: {x: 0.09019053, y: -0.0000019669533, z: -0.000015817583}
-    RightWristToFollowRotation: {x: 0, y: 0, z: 0, w: 1}
+    RightWristToPalmPosition: {x: 0.05411407, y: -0.010823796, z: -0.00008282869}
+    RightWristToPalmRotation: {x: 0.7071647, y: -0.0024036916, z: 0.7070407, w: -0.0023878505}
