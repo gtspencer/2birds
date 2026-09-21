@@ -25,7 +25,7 @@ namespace TwoBirds
         private WorldItem projectile;
         private uint selectedId, preparedId;
         private Vector3 chargeStart, retainedPosition, followOffset, preparedOffset, returnStart;
-        private Quaternion chargeRotation, retainedRotation, returnRotation;
+        private Quaternion chargeRotation, retainedRotation, returnRotation, releaseRotation;
         private double age, clock, stageStart, blendStart, returnSegmentStart;
         private float weight, returnWeight, blendDuration, installedWeight = -1f, installedReach;
         private RecoveryStage stage;
@@ -207,18 +207,29 @@ namespace TwoBirds
 
         private void FindProjectile()
         {
-            if (tracking) return;
-            if (registry.TryGetItem(action.WorldId, out var item) && Matches(item))
+            if (tracking || releaseUnavailable || recoveryNeedsPose) return;
+            if (registry.TryGetItem(action.WorldId, out var item) && item)
             {
-                projectile = item;
-                tracking = true;
+                if (Matches(item))
+                {
+                    projectile = item;
+                    followOffset -= item.FollowAnchorOffset(releaseRotation);
+                    tracking = true;
+                    return;
+                }
+                if (MatchesRelease(item.Record)) releaseUnavailable = true;
             }
-            else if (registry.TryGetRecord(action.WorldId, out var record) && record.State == WorldItemState.Removed)
-                releaseUnavailable = true;
+            if (registry.TryGetRecord(action.WorldId, out var record))
+                releaseUnavailable |= record.State == WorldItemState.Removed ||
+                    record.State == WorldItemState.Held && record.Holder != inventory.ObjectId &&
+                        (int)(record.Motion.Tick - action.StartedTick) >= 0 ||
+                    record.State == WorldItemState.World && record.Releaser >= 0 && !MatchesRelease(record) &&
+                        (int)(record.LaunchTick - action.StartedTick) > 0;
         }
 
-        private bool Matches(WorldItem item) => item && item.ReleaseAvailable && item.Record.Motion.Id == action.WorldId &&
-            item.Record.Releaser == inventory.ObjectId && item.Record.Operation == action.Operation;
+        private bool MatchesRelease(in ItemRecord record) => record.Motion.Id == action.WorldId &&
+            record.Releaser == inventory.ObjectId && record.Operation == action.Operation;
+        private bool Matches(WorldItem item) => item && item.ReleaseAvailable && MatchesRelease(item.Record);
 
         private void ActionChanged()
         {
@@ -227,6 +238,7 @@ namespace TwoBirds
             if (networkState.HasActionSnapshot && next.State == action.State && next.ControlRevision == action.ControlRevision &&
                 next.TransitionSequence == action.TransitionSequence) { registry.RefreshHolder(inventory); return; }
             var previous = action;
+            float returnDuration = actionDefinition ? actionData.Settings.ReturnBlendDuration : blendDuration;
             action = next;
             age = !inventory.IsOwner && networkState.HasActionSnapshot ? networkState.ActionAge(action) : 0d;
             clock = Time.unscaledTimeAsDouble;
@@ -275,6 +287,7 @@ namespace TwoBirds
                             action.ReleaseArcProgress / 255f);
                         followOffset = pose.FollowPosition - pose.Item.position;
                     }
+                    releaseRotation = pose.Item.rotation;
                     lastBody = body;
                     retainedRotation = Quaternion.Inverse(body.Rotation) * pose.WristRotation;
                     retainedPosition = body.ToLocal(pose.FollowPosition);
@@ -294,7 +307,7 @@ namespace TwoBirds
                     hasPose = false;
                     RefreshPose();
                 }
-                else BeginBlend(actionDefinition ? actionData.Settings.ReturnBlendDuration : blendDuration);
+                else BeginBlend(returnDuration);
             }
             registry.RefreshHolder(inventory);
         }
@@ -335,7 +348,7 @@ namespace TwoBirds
             var current = action.State == ItemActionState.Charging
                 ? HeldItemPoseCalculation.Charge(body, settings, data, chargeStart, chargeRotation, arc)
                 : HeldItemPoseCalculation.Hold(body, settings, data);
-            if (!ItemReleaseClearance.TryResolve(current.Item, player.AimPose.position, item.DropDiameter * 0.5f,
+            if (!ItemReleaseClearance.TryResolve(current.Item, player.AimPose.position, item.ReleaseRadius,
                 body.Rotation, registry.EnvironmentMask, out release))
             {
                 networkState.CancelItemCharge();
@@ -394,9 +407,11 @@ namespace TwoBirds
                     pose = HeldItemPoseCalculation.Charge(body, settings, actionData, chargeStart, chargeRotation,
                         action.ReleaseArcProgress / 255f);
                     followOffset = pose.FollowPosition - pose.Item.position;
+                    releaseRotation = pose.Item.rotation;
                     retainedRotation = Quaternion.Inverse(body.Rotation) * pose.WristRotation;
                     retainedPosition = body.ToLocal(pose.FollowPosition);
                     recoveryNeedsPose = false;
+                    FindProjectile();
                 }
                 if (advanceAction) Recover(body, settings, CurrentAge());
                 else if (hasPose)
@@ -435,7 +450,7 @@ namespace TwoBirds
                 bool unavailable = releaseUnavailable || tracking && !Matches(projectile);
                 bool beyond = false;
                 if (tracking && !unavailable)
-                    pose = HeldItemPoseCalculation.Resolve(projectile.PresentedOrigin + followOffset,
+                    pose = HeldItemPoseCalculation.Resolve(projectile.PresentedFollowPosition + followOffset,
                         body.Rotation * retainedRotation, body, settings, actionData, out beyond);
                 else if (tracking)
                     pose = HeldItemPoseCalculation.Resolve(pose.FollowPosition, body.Rotation * retainedRotation,

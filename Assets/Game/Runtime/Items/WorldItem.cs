@@ -49,8 +49,11 @@ namespace TwoBirds
         private Vector3 bodySphereCenter;
         private float sphereRadius;
         internal float DropDiameter { get; private set; }
+        internal float ReleaseRadius { get; private set; }
         internal bool ReleaseAvailable => isActiveAndEnabled && Record.State == WorldItemState.World && !optimisticPickup && !RemovalPending;
-        internal Vector3 PresentedOrigin => visualRoot.position;
+        internal Vector3 PresentedFollowPosition => CenteredMotion ? PresentedSpherePosition : visualRoot.position;
+        internal Vector3 FollowAnchorOffset(Quaternion rotation) =>
+            CenteredMotion ? rotation * Vector3.Scale(sphereCenter, defaultScale) : Vector3.zero;
         internal int PresentedHolder { get; private set; } = -1;
         private Vector3 incomingVelocity;
         private bool incomingSampled;
@@ -161,7 +164,10 @@ namespace TwoBirds
             Definition = definition;
             defaultScale = definition.WorldPrefab.transform.localScale;
             if (firstInitialization)
-                DropDiameter = Mathf.Max(DropDiameter, 2f * ItemReleaseClearance.EnvelopeRadius(transform, defaultScale, colliders));
+            {
+                ReleaseRadius = ItemReleaseClearance.EnvelopeRadius(transform, defaultScale, colliders);
+                DropDiameter = Mathf.Max(DropDiameter, 2f * ReleaseRadius);
+            }
             birdRegistry = BirdRegistry.Instance;
             birdRock = birdRegistry && birdRegistry.IsRock(definition);
             ResetPresentation();
