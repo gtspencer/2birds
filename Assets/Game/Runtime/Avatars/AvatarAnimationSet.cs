@@ -48,7 +48,8 @@ namespace TwoBirds
         {
             get
             {
-                if (!Idle || !Jump || !Fall || !Seated || Idle.length <= 0f || Jump.length <= 0f || Fall.length <= 0f || Seated.length <= 0f ||
+                if (!RelaxedFingers || !GripFingers || !OpenFingers ||
+                    !Idle || !Jump || !Fall || !Seated || Idle.length <= 0f || Jump.length <= 0f || Fall.length <= 0f || Seated.length <= 0f ||
                     !float.IsFinite(AscentStart) || !float.IsFinite(AscentEnd) || !float.IsFinite(AscentDuration) ||
                     AscentStart < 0f || AscentEnd > 1f || AscentEnd <= AscentStart || AscentDuration <= 0f) return false;
                 float minimumCycles = 0f, maximumCycles = float.PositiveInfinity;

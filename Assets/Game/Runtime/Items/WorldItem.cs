@@ -34,7 +34,7 @@ namespace TwoBirds
         private Vector3 visualOffset;
         private Pose lastHeldPose;
         private int lastHeldBy = -1;
-        private bool hasHeldPose, releaseHandoff;
+        private bool hasHeldPose, heldVisible, releaseHandoff;
         private uint handoffOperation, handoffPath;
         private int handoffReleaser;
         private float handoffEnd, handoffDuration;
@@ -65,9 +65,6 @@ namespace TwoBirds
         internal float DropDiameter { get; private set; }
         internal float ReleaseRadius { get; private set; }
         internal bool ReleaseAvailable => isActiveAndEnabled && Record.State == WorldItemState.World && !optimisticPickup && !RemovalPending;
-        internal Vector3 PresentedFollowPosition => CenteredMotion ? visualRoot.TransformPoint(sphereCenter) : visualRoot.position;
-        internal Vector3 FollowAnchorOffset(Quaternion rotation) =>
-            CenteredMotion ? rotation * Vector3.Scale(sphereCenter, defaultScale) : Vector3.zero;
         internal int PresentedHolder { get; private set; } = -1;
         private Vector3 incomingVelocity;
         private bool incomingSampled;
@@ -219,6 +216,8 @@ namespace TwoBirds
             RemoveHandoffPose();
             bool beginHandoff = record.State == WorldItemState.World && Record.State == WorldItemState.Held &&
                 hasHeldPose && lastHeldBy == record.Releaser && !record.Sleeping &&
+                (heldVisible || registry.TryGetPlayer(record.Releaser, out var pendingHolder) &&
+                    pendingHolder.Equipment.HeldPresentation.MatchesPendingRelease(record)) &&
                 (!registry.LocalInventory || registry.LocalInventory.ObjectId != record.Releaser);
             Pose departure = lastHeldPose;
             bool wasPredicted = Predicted;
@@ -232,6 +231,7 @@ namespace TwoBirds
             bool smoothCosmetic = CosmeticRotation && !newRelease &&
                 Record.State == WorldItemState.World && sampleCount > 0;
             SetRecord(record);
+            if (record.State != WorldItemState.Held) { heldVisible = false; hasHeldPose = false; }
             optimisticPickup = false;
             if (record.State == WorldItemState.Held)
             {
@@ -308,7 +308,8 @@ namespace TwoBirds
         {
             if (releaseHandoff && (record.State != WorldItemState.World || record.Sleeping || record.Releaser != handoffReleaser ||
                 record.Operation != handoffOperation || record.Motion.Path != handoffPath || record.Motion.Boundary)) CancelHandoff();
-            if (record.State == WorldItemState.Removed || record.State == WorldItemState.Held && record.Holder != lastHeldBy)
+            if (record.State == WorldItemState.Removed || record.State == WorldItemState.Held &&
+                (record.Holder != lastHeldBy || !record.Equipped))
                 hasHeldPose = false;
             if (record.State != WorldItemState.World || record.Sleeping ||
                 record.Releaser != releasePlayer || record.Operation != releaseOperation)
@@ -349,6 +350,9 @@ namespace TwoBirds
         {
             PresentedHolder = holder ? holder.ObjectId : -1;
             bool visible = holder && equipped && holder.Equipment.HeldPresentation.CanShowHeldItem;
+            heldVisible = visible;
+            if (!holder || !equipped || !visible && !holder.Equipment.HeldPresentation.IsPendingRelease(Record.Motion.Id))
+                hasHeldPose = false;
             SetVisible(visible);
             if (!visible)
             {
@@ -408,6 +412,7 @@ namespace TwoBirds
 
         internal void DetachHeldPresentation()
         {
+            heldVisible = hasHeldPose = false;
             transform.SetParent(null, true);
             SetVisible(false);
             ClearVisualOffset();

@@ -114,8 +114,15 @@ namespace TwoBirds
 
     internal static class HeldItemPoseCalculation
     {
+        internal static HeldItemPose FromItem(Pose pose, in HeldItemBodyFrame body, in HeldItemPoseData item)
+        {
+            Quaternion palm = pose.rotation * Quaternion.Inverse(item.GripRotation);
+            return new HeldItemPose(pose.position - palm * item.GripPosition,
+                palm * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, item);
+        }
+
         internal static HeldItemPose Resolve(Vector3 follow, Quaternion wrist, in HeldItemBodyFrame body,
-            AvatarSettings avatar, in HeldItemPoseData item, out bool beyondReach)
+            AvatarSettings avatar, in HeldItemPoseData item, out bool beyondReach, bool soften = true)
         {
             Vector3 offset = wrist * (body.Measurements.RightWristToPalmPosition * body.Scale);
             Vector3 delta = follow - offset - body.Shoulder;
@@ -123,11 +130,12 @@ namespace TwoBirds
             beyondReach = delta.sqrMagnitude > reach * reach;
             float distance = delta.magnitude;
             float softStart = reach * 0.85f;
-            if (distance > softStart)
+            if (soften && distance > softStart)
             {
                 float softRange = reach - softStart;
                 delta *= (softStart + softRange * (1f - Mathf.Exp(-(distance - softStart) / softRange))) / distance;
             }
+            else delta = Vector3.ClampMagnitude(delta, reach);
             return new HeldItemPose(body.Shoulder + delta + offset, wrist, body.Measurements, body.Scale, item);
         }
 

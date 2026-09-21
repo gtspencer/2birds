@@ -582,7 +582,10 @@ namespace TwoBirds.Editor
                         default: throw new InvalidOperationException($"No animation assignment for {source.File}.");
                     }
                 }
-                if (!draft.IsComplete) throw new InvalidOperationException("Animation set has invalid calibration, jump intervals, or cycle durations incompatible with the shared playback limits.");
+                if (!draft.RelaxedFingers) draft.RelaxedFingers = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Art/Animations/Hands/Relaxed.anim");
+                if (!draft.GripFingers) draft.GripFingers = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Art/Animations/Hands/Grip.anim");
+                if (!draft.OpenFingers) draft.OpenFingers = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Art/Animations/Hands/Open.anim");
+                if (!draft.IsComplete) throw new InvalidOperationException("Animation set has missing finger poses, invalid calibration, jump intervals, or cycle durations incompatible with the shared playback limits.");
                 EnsureFolder(SettingsFolder);
                 if (!asset)
                 {

@@ -32,12 +32,6 @@ namespace TwoBirds
             left = Bind(false); right = Bind(true);
         }
 
-        internal Pose Palm(bool rightHand)
-        {
-            var hand = rightHand ? right : left;
-            return new Pose(hand.Wrist.position + hand.Wrist.rotation * hand.PalmOffset, hand.Wrist.rotation * hand.PalmRotation);
-        }
-
         internal void Apply(AvatarHandTargets targets, float dt)
         {
             if (!calibrated)

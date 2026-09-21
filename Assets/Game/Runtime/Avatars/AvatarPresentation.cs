@@ -29,6 +29,13 @@ namespace TwoBirds
             Measurements = firstPerson ? settings.FirstPersonGenerated : settings.Generated;
         }
         public Transform GetBone(HumanBodyBones bone) => bones[(int)bone];
+        internal Pose Palm(bool right)
+        {
+            var wrist = GetBone(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+            Vector3 offset = right ? Measurements.RightWristToPalmPosition : Measurements.LeftWristToPalmPosition;
+            Quaternion rotation = right ? Measurements.RightWristToPalmRotation : Measurements.LeftWristToPalmRotation;
+            return new Pose(wrist.position + wrist.rotation * (offset * Scale), wrist.rotation * rotation);
+        }
     }
 
     public sealed class AvatarPresentation : MonoBehaviour

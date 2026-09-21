@@ -33,7 +33,7 @@ namespace TwoBirds
         }
 
         internal static bool TryResolve(Pose desired, Vector3 reference, float envelopeRadius, Quaternion body,
-            int environmentMask, out Pose allowed)
+            int environmentMask, Vector3 reachCenter, float reachRadius, out Pose allowed)
         {
             allowed = desired;
             float radius = envelopeRadius + Padding;
@@ -48,10 +48,11 @@ namespace TwoBirds
                     !Physics.Linecast(reference, anchor, environmentMask, QueryTriggerInteraction.Ignore);
             }
             if (!clearAnchor) return false;
-            if (Accessible(anchor, desired.position, radius, environmentMask)) return true;
+            if (Reachable(desired.position) && Accessible(anchor, desired.position, radius, environmentMask)) return true;
 
             float nearest = float.PositiveInfinity;
             Vector3 best = default, route = desired.position - anchor;
+            Consider(reachCenter + Vector3.ClampMagnitude(desired.position - reachCenter, reachRadius));
             if (route.sqrMagnitude > 0f && Physics.SphereCast(anchor, radius, route.normalized, out var hit,
                 route.magnitude, environmentMask, QueryTriggerInteraction.Ignore))
                 Consider(anchor + route.normalized * Mathf.Max(0f, hit.distance - Padding));
@@ -75,11 +76,12 @@ namespace TwoBirds
             void Consider(Vector3 candidate)
             {
                 float distance = (candidate - desired.position).sqrMagnitude;
-                if (distance > MaximumCorrection * MaximumCorrection + 0.000001f || distance >= nearest ||
+                if (distance > MaximumCorrection * MaximumCorrection + 0.000001f || distance >= nearest || !Reachable(candidate) ||
                     !Accessible(anchor, candidate, radius, environmentMask)) return;
                 nearest = distance;
                 best = candidate;
             }
+            bool Reachable(Vector3 candidate) => (candidate - reachCenter).sqrMagnitude <= reachRadius * reachRadius + 0.000001f;
         }
 
         private static bool Clear(Vector3 position, float radius, int mask) =>

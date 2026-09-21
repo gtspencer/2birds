@@ -73,7 +73,6 @@ namespace TwoBirds
             applied = true; ik.Apply(targets, deltaTime);
         }
 
-        internal Pose Palm(bool right) => ik.Palm(right);
         internal void SetVisible(bool visible)
         {
             for (int i = 0; i < renderers.Length; i++) if (renderers[i]) renderers[i].enabled = visible && rendererStates[i];

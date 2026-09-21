@@ -1,4 +1,4 @@
-# Local First-Person Hands Spec
+# Local First-Person Hands Brainstorm
 
 ## Goal
 
@@ -289,9 +289,9 @@ The first-person representation should avoid unnecessary duplication of expensiv
 
 In particular, the planner should assess whether the local first-person representation needs:
 
-- spring bones;
+- spring bones; (editor note -- it does not need spring bones)
 - a full duplicate Animator/PlayableGraph;
-- hidden full-body renderers;
+- hidden full-body renderers; (editor note -- ideally we don't have this)
 - duplicate physics.
 
 Only systems required for the visible first-person presentation should run.

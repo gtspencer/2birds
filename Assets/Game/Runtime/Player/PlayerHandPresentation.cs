@@ -46,7 +46,7 @@ namespace TwoBirds
 
         internal void StartPresentation()
         {
-            if (running) return;
+            if (running || !isActiveAndEnabled || !owner || !owner.IsClientInitialized) return;
             running = true;
             avatar.IdentityResolved += IdentityResolved;
             avatar.PreparingHands += PrepareRemote;
@@ -71,10 +71,21 @@ namespace TwoBirds
             seeded = false; falling = descent = landing = 0f;
             bool driver = seating.IsDriver && !seating.TransitionPending && !seating.AwaitingReference && !seating.PlacementPending;
             var cart = driver ? seating.Cart : null;
-            leftContact = cart ? cart.Presentation.LeftHandContact : null;
-            rightContact = cart ? cart.Presentation.RightHandContact : null;
+            leftContact = rightContact = null;
+            if (cart)
+            {
+                BindContact(cart.Presentation.LeftHandContact);
+                BindContact(cart.Presentation.RightHandContact);
+            }
             CacheContacts();
             movement = owner.CurrentPlacement;
+        }
+
+        private void BindContact(AvatarHandContact contact)
+        {
+            if (!contact) return;
+            if (contact.Hand == AvatarIKGoal.LeftHand) leftContact = contact;
+            else if (contact.Hand == AvatarIKGoal.RightHand) rightContact = contact;
         }
 
         private void CacheContacts()
@@ -272,6 +283,7 @@ namespace TwoBirds
             if (active) Destroy(active.gameObject);
             active = null; pending = null; seeded = placed = false;
         }
+        private void OnEnable() => StartPresentation();
         private void OnDisable() => StopPresentation();
         private void OnDestroy() => StopPresentation();
     }
