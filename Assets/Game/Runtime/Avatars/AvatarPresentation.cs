@@ -65,6 +65,7 @@ namespace TwoBirds
         internal float BodyYaw { get; private set; }
         internal uint RequestGeneration { get; private set; }
         internal bool NeedsPreparation { get; private set; }
+        internal bool CanPrepare => NeedsPreparation && (!lifeLocked || !active);
         internal bool Failed { get; private set; }
         public AvatarHandTargets HandTargets { get; } = new();
         private AvatarInstance active, candidate;

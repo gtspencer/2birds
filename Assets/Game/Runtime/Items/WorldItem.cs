@@ -785,8 +785,7 @@ namespace TwoBirds
             ? visualRoot.TransformPoint(sphereCenter)
             : gameplayVisualPosition + gameplayVisualRotation * Vector3.Scale(sphereCenter, visualRoot.lossyScale);
 
-        private bool ContactEligible => impactSphere != null && impactSphere.enabled && !impactSphere.isTrigger &&
-            !Definition.DontPushPlayer && Definition.ImpulseMultiplier > 0f &&
+        private bool ContactEligible => impactSphere && impactSphere.enabled && !impactSphere.isTrigger &&
             Record.State == WorldItemState.World && !Record.Sleeping &&
             !optimisticPickup && Record.Motion.Id != 0;
 
@@ -967,8 +966,8 @@ namespace TwoBirds
         private void ReportImpact(PlayerItemHitbox player, Vector3 rockVelocity, Vector3 playerVelocity, Vector3 intoPlayer)
         {
             float speed = Mathf.Max(0f, Vector3.Dot(rockVelocity - playerVelocity, intoPlayer));
-            if (speed < Definition.MinimumImpactSpeed) return;
-            Vector3 velocityChange = intoPlayer * speed * Mathf.Max(0f, Definition.ImpulseMultiplier);
+            bool shove = !Definition.DontPushPlayer && Definition.ImpulseMultiplier > 0f && speed >= Definition.MinimumImpactSpeed;
+            Vector3 velocityChange = shove ? intoPlayer * speed * Definition.ImpulseMultiplier : Vector3.zero;
             var tuning = player.Health.Settings;
             if ((damagedPlayer != player || damagedGeneration != player.Motor.ImpactGeneration) &&
                 Vector3.Dot(rockVelocity, intoPlayer) >= tuning.ItemDamageSpeed && speed >= tuning.ItemDamageSpeed)

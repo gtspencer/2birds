@@ -56,6 +56,7 @@ namespace TwoBirds
         private byte lastReportedHealth = PlayerHealth.Maximum;
         private float nextHealingReport;
         private bool healingPending, baselineReady, downPending, boundaryPending, hasPendingHealth, hasPendingClaim;
+        private bool reviveCompletionPending;
         public PlayerHealth Health => health;
         public PlayerLifeSnapshot Life => life;
         public PlayerReviveClaim Claim => claim;
@@ -127,6 +128,8 @@ namespace TwoBirds
             if (claim.Active && (!Players.TryGetValue(claim.Rescuer, out var rescuer) ||
                 !rescuer.Owner.IsActive || rescuer.Lifetime != claim.RescuerLifetime ||
                 rescuer.LifeRevision != claim.RescuerRevision || rescuer.life.State != PlayerLifeState.Alive)) ClearClaim();
+            if (claim.Active && reviveCompletionPending && ReviveRemaining <= 0f)
+                CommitLife(PlayerLifeTransition.Revive, Lifetime, LifeRevision);
         }
 
         internal void ReportHealth(HealthChangeCause cause, bool continuous)
@@ -363,8 +366,9 @@ namespace TwoBirds
                 !target.claim.Active || target.claim.Rescuer != ObjectId || target.claim.RescuerLifetime != Lifetime ||
                 target.claim.Attempt != attempt || token != 0 && target.claim.Sequence != token) return;
             if (!complete) { target.ClearClaim(); return; }
-            if (!geometry || life.State != PlayerLifeState.Alive || LifeRevision != target.claim.RescuerRevision || !Owner.IsActive ||
-                target.Elapsed(target.claim.StartTick, target.claim.StartFraction) < target.claim.Duration) return;
+            if (!geometry || life.State != PlayerLifeState.Alive || LifeRevision != target.claim.RescuerRevision || !Owner.IsActive) return;
+            target.reviveCompletionPending = true;
+            if (target.ReviveRemaining > 0f) return;
             if (target.RescueRemaining <= 0f) target.CommitLife(PlayerLifeTransition.Respawn, lifetime, revision);
             else target.CommitLife(PlayerLifeTransition.Revive, lifetime, revision);
         }
@@ -389,6 +393,7 @@ namespace TwoBirds
         }
         private void ClearClaim()
         {
+            reviveCompletionPending = false;
             if (!claim.Active) return;
             if (Players.TryGetValue(claim.Rescuer, out var rescuer) && rescuer.rescueTarget == this)
             {

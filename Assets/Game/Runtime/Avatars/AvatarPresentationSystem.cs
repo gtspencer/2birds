@@ -57,7 +57,7 @@ namespace TwoBirds
                     try
                     {
                         host.UpdateInput(dt, Time.deltaTime > 0.25f);
-                        if (!prepared && host.NeedsPreparation)
+                        if (!prepared && host.CanPrepare)
                         {
                             prepared = true;
                             using (PrepareMarker.Auto())
