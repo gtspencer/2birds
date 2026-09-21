@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".hooks/.agentignore.codex.hook.cmd",
+            "command": ".hooks\\.agentignore.codex.hook.cmd",
             "commandWindows": ".hooks\\.agentignore.codex.hook.cmd",
             "timeout": 10,
             "statusMessage": "Checking .agentignore"
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".hooks/block-git-writes.codex.hook.cmd",
+            "command": ".hooks\\block-git-writes.codex.hook.cmd",
             "commandWindows": ".hooks\\block-git-writes.codex.hook.cmd",
             "timeout": 10,
             "statusMessage": "Checking Git command"

@@ -169,7 +169,7 @@ hold pose
 
 The exact mathematical representation of the trajectory is an implementation detail.
 
-It must be tunable.
+It must be tunable, and it should go in a arc from default hold position, to somewhere above the head/shoulder.
 
 At minimum, the system should support configuring how far the hand/item can move away from the player into the throw pose.
 
@@ -182,6 +182,7 @@ When the existing gameplay/network layer indicates that the rock has been thrown
 - stop the charged hold behavior;
 - stop treating the rock as hand-following;
 - allow the existing gameplay/physics throw system to take over;
+- wait a configurable amount of time before disconnecting the hand IK, this will give the impression the arm is throwing it
 - transition the arm back toward its normal locomotion/idle presentation.
 
 The spec does not require networking a procedural forward arm swing.

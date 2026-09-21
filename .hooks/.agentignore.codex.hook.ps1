@@ -38,7 +38,7 @@ if ([string]::IsNullOrWhiteSpace($sessionCwd)) {
 }
 
 try {
-    $projectRoot = (& git -C $sessionCwd rev-parse --show-toplevel 2>$null | Select-Object -First 1)
+    $projectRoot = & git -C $sessionCwd rev-parse --show-toplevel 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$projectRoot)) {
         Block-Codex 'The .agentignore guard could not determine the Git repository root.'
     }

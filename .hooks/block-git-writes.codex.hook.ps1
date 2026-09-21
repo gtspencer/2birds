@@ -121,11 +121,11 @@ function Get-GitInvocation {
 }
 
 function Test-ReadOnlyBranch {
-    param([object[]]$Args)
+    param([object[]]$GitArguments)
 
-    if ($Args.Count -eq 0) { return $true }
+    if ($GitArguments.Count -eq 0) { return $true }
 
-    $lower = @($Args | ForEach-Object { ([string]$_).ToLowerInvariant() })
+    $lower = @($GitArguments | ForEach-Object { ([string]$_).ToLowerInvariant() })
 
     # Common listing-only forms.
     if ($lower.Count -eq 1 -and
@@ -148,7 +148,7 @@ function Test-ReadOnlyBranch {
             '--edit-description', '--set-upstream-to', '--unset-upstream',
             '--create-reflog', '--track', '--no-track', '-f', '--force'
         )
-        foreach ($arg in $Args) {
+        foreach ($arg in $GitArguments) {
             $value = [string]$arg
             if ($dangerous -contains $value) { return $false }
             if ($value -match '^(--set-upstream-to|--track|--no-track)=') { return $false }
@@ -172,20 +172,20 @@ function Test-ReadOnlyBranch {
 }
 
 function Test-ReadOnlyTag {
-    param([object[]]$Args)
+    param([object[]]$GitArguments)
 
-    if ($Args.Count -eq 0) { return $true }
-    $first = ([string]$Args[0]).ToLowerInvariant()
+    if ($GitArguments.Count -eq 0) { return $true }
+    $first = ([string]$GitArguments[0]).ToLowerInvariant()
     return ($first -eq '-l' -or $first -eq '--list')
 }
 
 function Test-ReadOnlyRemote {
-    param([object[]]$Args)
+    param([object[]]$GitArguments)
 
-    if ($Args.Count -eq 0) { return $true }
-    $first = ([string]$Args[0]).ToLowerInvariant()
+    if ($GitArguments.Count -eq 0) { return $true }
+    $first = ([string]$GitArguments[0]).ToLowerInvariant()
 
-    if ($Args.Count -eq 1 -and ($first -eq '-v' -or $first -eq '--verbose')) {
+    if ($GitArguments.Count -eq 1 -and ($first -eq '-v' -or $first -eq '--verbose')) {
         return $true
     }
 
@@ -193,15 +193,15 @@ function Test-ReadOnlyRemote {
 }
 
 function Test-ReadOnlyConfig {
-    param([object[]]$Args)
+    param([object[]]$GitArguments)
 
-    if ($Args.Count -eq 0) { return $true }
+    if ($GitArguments.Count -eq 0) { return $true }
 
     $writeFlags = @(
         '--add', '--replace-all', '--unset', '--unset-all', '--rename-section',
         '--remove-section', '--edit', '-e'
     )
-    foreach ($arg in $Args) {
+    foreach ($arg in $GitArguments) {
         $lower = ([string]$arg).ToLowerInvariant()
         if ($writeFlags -contains $lower) { return $false }
     }
@@ -210,7 +210,7 @@ function Test-ReadOnlyConfig {
         '--get', '--get-all', '--get-regexp', '--get-urlmatch',
         '--list', '-l', '--get-color', '--get-colorbool'
     )
-    foreach ($arg in $Args) {
+    foreach ($arg in $GitArguments) {
         $lower = ([string]$arg).ToLowerInvariant()
         if ($readActionFlags -contains $lower) { return $true }
     }
@@ -219,8 +219,8 @@ function Test-ReadOnlyConfig {
     # `git config key` reads; `git config key value` writes.
     $positionals = @()
     $i = 0
-    while ($i -lt $Args.Count) {
-        $arg = [string]$Args[$i]
+    while ($i -lt $GitArguments.Count) {
+        $arg = [string]$GitArguments[$i]
         $lower = $arg.ToLowerInvariant()
 
         if ($lower -in @('--file', '-f', '--blob', '--type')) {
@@ -244,7 +244,7 @@ function Test-ReadOnlyConfig {
 }
 
 function Test-ReadOnlyGitInvocation {
-    param([string]$Subcommand, [object[]]$Args)
+    param([string]$Subcommand, [object[]]$GitArguments)
 
     if ([string]::IsNullOrWhiteSpace($Subcommand) -or $Subcommand -eq '__meta__') {
         return $true
@@ -263,38 +263,38 @@ function Test-ReadOnlyGitInvocation {
 
     switch ($Subcommand) {
         'branch' {
-            return (Test-ReadOnlyBranch $Args)
+            return (Test-ReadOnlyBranch $GitArguments)
         }
         'tag' {
-            return (Test-ReadOnlyTag $Args)
+            return (Test-ReadOnlyTag $GitArguments)
         }
         'remote' {
-            return (Test-ReadOnlyRemote $Args)
+            return (Test-ReadOnlyRemote $GitArguments)
         }
         'config' {
-            return (Test-ReadOnlyConfig $Args)
+            return (Test-ReadOnlyConfig $GitArguments)
         }
         'stash' {
-            if ($Args.Count -eq 0) { return $false }
-            $first = ([string]$Args[0]).ToLowerInvariant()
+            if ($GitArguments.Count -eq 0) { return $false }
+            $first = ([string]$GitArguments[0]).ToLowerInvariant()
             return ($first -eq 'list' -or $first -eq 'show')
         }
         'worktree' {
-            if ($Args.Count -eq 0) { return $false }
-            return (([string]$Args[0]).ToLowerInvariant() -eq 'list')
+            if ($GitArguments.Count -eq 0) { return $false }
+            return (([string]$GitArguments[0]).ToLowerInvariant() -eq 'list')
         }
         'submodule' {
-            if ($Args.Count -eq 0) { return $true }
-            $first = ([string]$Args[0]).ToLowerInvariant()
+            if ($GitArguments.Count -eq 0) { return $true }
+            $first = ([string]$GitArguments[0]).ToLowerInvariant()
             return ($first -eq 'status' -or $first -eq 'summary')
         }
         'reflog' {
-            if ($Args.Count -eq 0) { return $true }
-            return (([string]$Args[0]).ToLowerInvariant() -eq 'show')
+            if ($GitArguments.Count -eq 0) { return $true }
+            return (([string]$GitArguments[0]).ToLowerInvariant() -eq 'show')
         }
         'notes' {
-            if ($Args.Count -eq 0) { return $false }
-            $first = ([string]$Args[0]).ToLowerInvariant()
+            if ($GitArguments.Count -eq 0) { return $false }
+            $first = ([string]$GitArguments[0]).ToLowerInvariant()
             return ($first -eq 'list' -or $first -eq 'show')
         }
         default {
