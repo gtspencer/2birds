@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace TwoBirds
 {
-    public enum WorldItemState : byte { World, Held, Removed }
+    public enum WorldItemState : byte { World, Held, Removed, CauldronOutput }
 
     public struct ItemMotion
     {
@@ -37,6 +37,8 @@ namespace TwoBirds
         public uint LaunchTick;
         public uint BirdPlayer;
         public int Simulator;
+        public bool Armed;
+        public int Cauldron;
     }
 
     public struct ItemBaselineRequest : IBroadcast { public uint Session; }

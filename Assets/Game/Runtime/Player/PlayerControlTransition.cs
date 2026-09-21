@@ -6,7 +6,7 @@ namespace TwoBirds
     {
         public int Player, Cart;
         public sbyte Seat;
-        public uint Revision, ControlRevision, Generation;
+        public uint Revision, ControlRevision, Generation, EffectReset;
         public Vector3 Position, Velocity, Ejection;
         public Quaternion Rotation;
         public bool PlacementPending, ContextOnly, CarryPlacement;

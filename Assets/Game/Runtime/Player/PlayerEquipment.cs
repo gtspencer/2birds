@@ -61,6 +61,13 @@ namespace TwoBirds
             if (item.IsCharging) networkState.BeginItemCharge(item.Definition.ItemId, activeId);
         }
 
+        public void DirectUse()
+        {
+            if (!IsOwner || !inventory.CanCraft || !HeldPresentation.ReadyForUse) return;
+            CancelUse();
+            inventory.DirectUse();
+        }
+
         public void EndUse()
         {
             if (carry && carry.IsCarrying) { carry.EndUse(); return; }

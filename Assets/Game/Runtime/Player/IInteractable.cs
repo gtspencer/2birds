@@ -11,5 +11,9 @@ namespace TwoBirds
         bool CanInteract { get; }
         Transform TooltipAnchor => null;
         void Interact();
+        string SecondaryActionText => null;
+        string SecondaryInputActionPath => "Player/SecondaryInteract";
+        bool CanSecondaryInteract => false;
+        void SecondaryInteract() { }
     }
 }

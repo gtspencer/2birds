@@ -21,6 +21,7 @@ namespace TwoBirds
         private readonly ItemMotion[] history = new ItemMotion[128];
         private readonly ItemMotion[] samples = new ItemMotion[16];
         private Collider[] colliders;
+        private LayerMask[] colliderIncludes, colliderExcludes;
         private Renderer[] renderers;
         private Transform[] parts;
         private WorldItemRegistry registry;
@@ -104,7 +105,7 @@ namespace TwoBirds
         public string TooltipTextOverride => tooltipTextOverride;
         public bool HideTooltipText => hideTooltipText;
         public string InputActionPath => "Player/Interact";
-        public bool CanInteract => registry != null && Record.State == WorldItemState.World &&
+        public bool CanInteract => registry != null && (Record.State == WorldItemState.World || registry.OutputReady(Record)) &&
                                    !optimisticPickup && Record.Motion.Id != 0 &&
                                    Time.time >= interactableAfter;
 
@@ -116,7 +117,18 @@ namespace TwoBirds
             playerHitboxMask = LayerMask.GetMask("PlayerItemHitbox");
             golfCartMask = LayerMask.GetMask("GolfCart");
             colliders = GetComponentsInChildren<Collider>(true);
-            impactSphere = GetComponentInChildren<SphereCollider>(true);
+            colliderIncludes = new LayerMask[colliders.Length];
+            colliderExcludes = new LayerMask[colliders.Length];
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                colliderIncludes[i] = colliders[i].includeLayers;
+                colliderExcludes[i] = colliders[i].excludeLayers;
+            }
+            foreach (var collider in colliders)
+                if (collider is SphereCollider sphere && !sphere.isTrigger) { impactSphere = sphere; break; }
+            potionPresentation = GetComponent<PotionPresentation>();
+            potionSensor = GetComponentInChildren<PotionContactSensor>(true);
+            if (potionSensor) potionTrigger = potionSensor.GetComponent<Collider>();
             if (impactSphere) birdColliderId = impactSphere.GetEntityId();
             renderers = GetComponentsInChildren<Renderer>(true);
             parts = GetComponentsInChildren<Transform>(true);
@@ -173,6 +185,7 @@ namespace TwoBirds
             InterruptUse();
             registry = owner;
             Definition = definition;
+            if (potionPresentation) potionPresentation.ApplyDefinition(definition);
             defaultScale = definition.WorldPrefab.transform.localScale;
             if (firstInitialization)
             {
@@ -231,6 +244,13 @@ namespace TwoBirds
             bool smoothCosmetic = CosmeticRotation && !newRelease &&
                 Record.State == WorldItemState.World && sampleCount > 0;
             SetRecord(record);
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                colliders[i].includeLayers = record.State == WorldItemState.CauldronOutput ? (LayerMask)0 : colliderIncludes[i];
+                colliders[i].excludeLayers = record.State == WorldItemState.CauldronOutput ? (LayerMask)~0 : colliderExcludes[i];
+            }
+            potionSampled = false;
+            if (potionTrigger) potionTrigger.enabled = record.State == WorldItemState.World && record.Armed;
             if (record.State != WorldItemState.Held) { heldVisible = false; hasHeldPose = false; }
             optimisticPickup = false;
             if (record.State == WorldItemState.Held)
@@ -247,6 +267,18 @@ namespace TwoBirds
                 return;
             }
 
+            if (record.State == WorldItemState.CauldronOutput)
+            {
+                Predicted = false;
+                StopBody(); ClearIgnore(); ClearVisualOffset();
+                PresentedHolder = -1;
+                transform.SetParent(null, true);
+                transform.localScale = defaultScale;
+                SetLayer(registry.WorldLayer);
+                foreach (var collider in colliders) collider.enabled = false;
+                SetVisible(false);
+                return;
+            }
             PresentedHolder = -1;
             transform.SetParent(null, true);
             transform.localScale = defaultScale;
@@ -254,7 +286,7 @@ namespace TwoBirds
             CacheImpactSphere();
             SetLayer(registry.WorldLayer);
             SetVisible(true);
-            foreach (var collider in colliders) collider.enabled = true;
+            foreach (var collider in colliders) collider.enabled = collider != potionTrigger || record.Armed;
             Body.collisionDetectionMode = CollisionDetectionMode.Discrete;
             Body.isKinematic = !Simulating || record.Sleeping && !registry.Simulates(record);
             Body.collisionDetectionMode = Body.isKinematic ? CollisionDetectionMode.Discrete :
@@ -685,7 +717,8 @@ namespace TwoBirds
 
         private void SetLayer(int layer)
         {
-            foreach (var part in parts) part.gameObject.layer = layer;
+            foreach (var part in parts)
+                if (!potionSensor || part != potionSensor.transform) part.gameObject.layer = layer;
         }
 
         private void SetVisible(bool visible)
@@ -938,6 +971,7 @@ namespace TwoBirds
         {
             CancelHandoff();
             BirdContact(collision);
+            PotionCollision(collision);
             if (birdRock && registry && Simulating && !registry.Replaying && !optimisticPickup &&
                 Record.State == WorldItemState.World && collision.impulse.sqrMagnitude > 0.000001f &&
                 (birdRegistry.Settings.SolidMask.value & (1 << collision.collider.gameObject.layer)) != 0)
@@ -953,7 +987,7 @@ namespace TwoBirds
 
         private void OnTriggerEnter(Collider other)
         {
-            if (registry && Simulating && !registry.Replaying && other.TryGetComponent<ItemKillVolume>(out _))
+            if (registry && Record.State == WorldItemState.World && Simulating && !registry.Replaying && other.TryGetComponent<ItemKillVolume>(out _))
                 RemovalPending = true;
         }
 

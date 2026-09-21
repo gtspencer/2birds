@@ -10,12 +10,12 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump, sprint, drop, use, exit, interact, lights, horn;
+        private InputAction move, look, jump, sprint, drop, use, exit, interact, lights, horn, directUse, secondaryInteract;
         private PlayerSeating seating;
         private PlayerCarry carry;
         public bool Carried => carry && carry.IsCarried || seating && seating.AwaitingReference;
         private SessionController session;
-        private bool exitBlocked, interactBlocked;
+        private bool exitBlocked, interactBlocked, directUseBlocked, secondaryInteractBlocked;
         private int suppressedInteractionFrame = -1;
         private PlayerInventory inventory;
         private PlayerEquipment equipment;
@@ -47,6 +47,8 @@ namespace TwoBirds
         public bool Handbrake => GameplayActive && !jumpBlocked && !seating.TransitionPending && jump.IsPressed();
         public bool InteractPressed => !Carried && GameplayActive && !seating.TransitionPending && !interactBlocked &&
             suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame();
+        public bool SecondaryInteractPressed => !Carried && GameplayActive && !InputSuppressed && !seating.TransitionPending &&
+            !secondaryInteractBlocked && secondaryInteract.WasPressedThisFrame();
         private InputPresentation presentation;
         public InputDevice ActiveDevice => presentation?.ActiveDevice;
 
@@ -61,6 +63,8 @@ namespace TwoBirds
             jump = actions.FindAction("Jump");
             drop = actions.FindAction("Drop");
             use = actions.FindAction("Use");
+            directUse = actions.FindAction("DirectUse");
+            secondaryInteract = actions.FindAction("SecondaryInteract");
             exit = actions.FindAction("ExitVehicle");
             interact = actions.FindAction("Interact");
             lights = actions.FindAction("Lights");
@@ -92,6 +96,9 @@ namespace TwoBirds
         private void ReadInput()
         {
             if (!IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
+            bool blockDirect = directUseBlocked;
+            if (directUseBlocked && !ButtonHeld(directUse)) directUseBlocked = false;
+            if (secondaryInteractBlocked && !ButtonHeld(secondaryInteract)) secondaryInteractBlocked = false;
             bool blocked = useBlocked;
             if (useBlocked && !UseButtonHeld()) useBlocked = false;
             bool blockExit = exitBlocked;
@@ -132,6 +139,12 @@ namespace TwoBirds
             {
                 CancelUse();
                 inventory.DropSelected();
+                return;
+            }
+            if (!blockDirect && directUse.WasPressedThisFrame())
+            {
+                CancelUse();
+                equipment.DirectUse();
                 return;
             }
             if (blocked) return;
@@ -180,6 +193,8 @@ namespace TwoBirds
             CancelUse();
             exitBlocked = ButtonHeld(exit);
             interactBlocked = ButtonHeld(interact);
+            directUseBlocked = ButtonHeld(directUse);
+            secondaryInteractBlocked = ButtonHeld(secondaryInteract);
             jumpBlocked = ButtonHeld(jump);
             dropBlocked = ButtonHeld(drop);
             lightsBlocked = ButtonHeld(lights);

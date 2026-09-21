@@ -22,8 +22,8 @@ TagManager:
   - 
   - BirdBody
   - BirdQuery
-  - 
-  - 
+  - PlayerEffectReceiver
+  - PotionEffect
   - 
   - 
   - 

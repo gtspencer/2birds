@@ -1,0 +1,7 @@
+.ingredients { flex-direction: row; width: 228px; height: 76px; }
+.ingredient {
+    width: 68px; height: 68px; margin: 4px;
+    background-color: rgba(24, 20, 30, 0.88);
+    border-width: 2px; border-color: rgb(145, 125, 165); border-radius: 6px;
+    -unity-background-scale-mode: scale-to-fit;
+}

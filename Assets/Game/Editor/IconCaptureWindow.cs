@@ -8,6 +8,7 @@ namespace TwoBirds.Editor
     public sealed class IconCaptureWindow : EditorWindow
     {
         private GameObject target;
+        private ItemDefinition definition;
         private int resolution = 128;
         private string savePath = "Assets/Game/UI/Icons";
         private Color backgroundColor = new(0.15f, 0.15f, 0.15f, 0f);
@@ -25,6 +26,8 @@ namespace TwoBirds.Editor
         {
             EditorGUILayout.Space(4);
             EditorGUI.BeginChangeCheck();
+            var selected = (ItemDefinition)EditorGUILayout.ObjectField("Definition", definition, typeof(ItemDefinition), false);
+            if (selected != definition) { definition = selected; if (definition) target = definition.WorldPrefab; }
             target = (GameObject)EditorGUILayout.ObjectField("Prefab / GameObject", target, typeof(GameObject), true);
             if (EditorGUI.EndChangeCheck())
                 RefreshPreview();
@@ -72,15 +75,16 @@ namespace TwoBirds.Editor
         }
 
         private Texture2D Render(GameObject source, int res) =>
-            Render(source, res, backgroundColor, padding, cameraAngle);
+            Render(source, res, backgroundColor, padding, cameraAngle, definition);
 
         private static Texture2D Render(GameObject source, int res, Color backgroundColor,
-            float padding, Vector2 cameraAngle)
+            float padding, Vector2 cameraAngle, ItemDefinition definition)
         {
             var scene = EditorSceneManager_Utility.NewPreviewScene();
             var instance = Instantiate(source, Vector3.zero, Quaternion.identity);
             UnityEditor.SceneManagement.EditorSceneManager.MoveGameObjectToScene(instance, scene);
 
+            if (instance.TryGetComponent<PotionPresentation>(out var presentation)) presentation.ApplyDefinition(definition);
             StripNonVisual(instance);
 
             var bounds = CalculateBounds(instance);
@@ -138,7 +142,7 @@ namespace TwoBirds.Editor
 
         private void CaptureAndSave()
         {
-            var sprite = CaptureAndSave(target, resolution, savePath, backgroundColor, padding, cameraAngle);
+            var sprite = CaptureAndSave(target, resolution, savePath, backgroundColor, padding, cameraAngle, definition);
             if (sprite == null) return;
 
             if (preview != null)
@@ -153,7 +157,7 @@ namespace TwoBirds.Editor
         {
             if (target == null) return null;
 
-            var tex = Render(target, resolution, backgroundColor, padding, cameraAngle);
+            var tex = Render(target, resolution, backgroundColor, padding, cameraAngle, definition);
             if (tex == null)
             {
                 Debug.LogWarning("Icon Capture: no renderable geometry found on target.");
@@ -161,7 +165,10 @@ namespace TwoBirds.Editor
             }
 
             if (!Directory.Exists(savePath)) Directory.CreateDirectory(savePath);
-            string fullPath = Path.Combine(savePath, $"{target.name}_icon.png").Replace('\\', '/');
+            string iconName = definition ? Path.GetFileNameWithoutExtension(AssetDatabase.GetAssetPath(definition)) : target.name;
+            string fullPath = Path.Combine(savePath, $"{iconName}_icon.png").Replace('\\', '/');
+            if (definition && File.Exists(fullPath) && (!definition.Icon || AssetDatabase.GetAssetPath(definition.Icon) != fullPath))
+                fullPath = AssetDatabase.GenerateUniqueAssetPath(fullPath);
             File.WriteAllBytes(fullPath, tex.EncodeToPNG());
             DestroyImmediate(tex);
 

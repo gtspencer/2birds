@@ -1,0 +1,72 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ae0cf7f3c80c9a43bd2b8d8dbb30920, type: 3}
+  m_Name: BouncyPotion
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.PotionDefinition
+  ItemId: 7
+  ItemName: Bouncy potion
+  Icon: {fileID: 21300000, guid: 38a03ad557e95f8419442b52c560f473, type: 3}
+  WorldPrefab: {fileID: 4230088170429107080, guid: db992efabb660c149bd1166fd2aa1b8d, type: 3}
+  Stackable: 1
+  MaxStack: 5
+  MinThrowSpeed: 3
+  MaxThrowSpeed: 14
+  ThrowChargeTime: 1
+  GripPosition: {x: -0.0000044219196, y: 0.006003797, z: -0.0008395724}
+  GripEuler: {x: 0, y: 0, z: 0}
+  OverrideHoldSettings: 0
+  OverrideFirstPersonPose: 0
+  FirstPersonPose:
+    HoldPosition: {x: -0.05, y: -0.25, z: 0.78}
+    HoldWristEuler: {x: 0, y: 0, z: 15}
+    ChargeControlPosition: {x: 0.05, y: -0.05, z: 0.72}
+    ChargedPosition: {x: 0.18, y: 0.12, z: 0.5}
+    ChargedWristEuler: {x: -35, y: 0, z: 100}
+  GripFingers: {fileID: 0}
+  HandPose:
+    HoldPosition: {x: 0.15, y: -0.4, z: 0.5}
+    HoldWristEuler: {x: 0, y: 0, z: 0}
+    ChargeControlPosition: {x: 0.35, y: 0.25, z: 0.45}
+    ChargedPosition: {x: 0.2, y: 0.65, z: -0.25}
+    ChargedWristEuler: {x: -70, y: 0, z: 195}
+    ChargePoseDuration: 0.35
+    FollowReachFraction: 0.85
+    MaximumFollowDuration: 0.2
+    EndPosePauseDuration: 0
+    ReturnBlendDuration: 0.2
+  DontPushPlayer: 1
+  MinimumImpactSpeed: 1
+  ImpulseMultiplier: 1
+  SyncRotation: 1
+  DropSpeed: 1.5
+  VelocityInheritance: 1
+  Mass: 1
+  LinearDamping: 0.05
+  AngularDamping: 0.1
+  InitialSpin: {x: 3, y: 1, z: 2}
+  PhysicsMaterial: {fileID: 0}
+  CollisionDetection: 2
+  MaxSpeed: 50
+  OverrideSleepThreshold: 0
+  SleepThreshold: 0.005
+  Effect: 1
+  Application: 0
+  Radius: 3
+  ZoneLifetime: 8
+  BuffDuration: 10
+  HealthStrength: 20
+  InitialMultiplier: 2
+  ReboundRetention: 0.5
+  MinimumMultiplier: 0.5
+  Color: {r: 0.35, g: 0.9, b: 0.4, a: 1}
+  ImpactVfx: {fileID: 0}
+  CloudVfx: {fileID: 0}

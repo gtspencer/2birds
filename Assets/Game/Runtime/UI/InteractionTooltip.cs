@@ -9,7 +9,9 @@ namespace TwoBirds
     {
         private readonly VisualElement root, tooltip, chargeTrack;
         private readonly VisualElement bindingContainer;
-        private readonly Label verb;
+        private readonly Label verb, secondaryVerb;
+        private readonly VisualElement secondaryRow, secondaryBinding;
+        private InputAction displayedSecondary;
         private readonly InputPresentation presentation;
         private InputAction displayedAction;
         private bool bindingDirty = true;
@@ -27,6 +29,9 @@ namespace TwoBirds
             glyph.RemoveFromHierarchy();
             keycap.RemoveFromHierarchy();
             verb = root.Q<Label>("interaction-action");
+            secondaryRow = root.Q("secondary-interaction");
+            secondaryBinding = root.Q("secondary-binding");
+            secondaryVerb = root.Q<Label>("secondary-action");
             presentation.Changed += PresentationChanged;
         }
 
@@ -38,6 +43,15 @@ namespace TwoBirds
                 Hide();
                 return;
             }
+            var secondary = interaction.SecondaryAction;
+            secondaryRow.style.display = secondary != null && interaction.Target.CanSecondaryInteract ? DisplayStyle.Flex : DisplayStyle.None;
+            if (secondary != null && (bindingDirty || displayedSecondary != secondary))
+            {
+                displayedSecondary = secondary;
+                secondaryBinding.Clear();
+                secondaryBinding.Add(new InputPrompt(presentation, secondary, 32));
+            }
+            secondaryVerb.text = interaction.Target.SecondaryActionText;
             var action = interaction.Action;
             if (bindingDirty || displayedAction != action)
             {

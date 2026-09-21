@@ -311,6 +311,16 @@ namespace TwoBirds
             if (IsCarried || preview) UpdateAttachment();
         }
 
+        internal void RefreshPhysicalAttachment()
+        {
+            if (!IsCarried || !Partner) return;
+            var body = Partner.motor.Body;
+            var physical = Quaternion.Euler(0f, body.rotation.eulerAngles.y, 0f);
+            motor.Body.position = body.position + physical * settings.CarryOffset;
+            motor.Body.rotation = physical;
+            transform.SetPositionAndRotation(motor.Body.position, motor.Body.rotation);
+        }
+
         private void UpdateAttachment()
         {
             if (preview)
@@ -322,10 +332,7 @@ namespace TwoBirds
                 return;
             }
             if (!IsCarried || !Partner) return;
-            var body = Partner.motor.Body;
-            var physical = Quaternion.Euler(0f, body.rotation.eulerAngles.y, 0f);
-            motor.Body.position = body.position + physical * settings.CarryOffset;
-            motor.Body.rotation = physical;
+            RefreshPhysicalAttachment();
             var graphics = Partner.presentation.Graphics;
             var visual = Quaternion.Euler(0f, graphics.eulerAngles.y, 0f);
             presentation.Graphics.SetPositionAndRotation(graphics.position + visual * settings.CarryOffset, visual);

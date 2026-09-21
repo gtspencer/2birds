@@ -371,3 +371,9 @@
 .inventory-grid .slot.selected:focus { border-bottom-color: var(--accent); }
 
 .slot-binding { position: absolute; top: 2px; left: 4px; font-size: 12px; }
+
+.interaction-tooltip { flex-direction: column; }
+.interaction-row { flex-direction: row; align-items: center; }
+.potion-buff { position: absolute; right: 24px; top: 120px; flex-direction: row; align-items: center; display: none; }
+#potion-buff-icon { width: 48px; height: 48px; }
+#potion-buff-time { font-size: 22px; color: white; margin-left: 8px; }

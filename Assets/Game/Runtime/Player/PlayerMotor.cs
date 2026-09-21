@@ -59,6 +59,7 @@ namespace TwoBirds
         public uint LastOwnerRequestId;
         public uint RecoveryTicks;
         public uint ControlRevision;
+        public BounceState Bounce;
         public CartContactSet CartContacts;
         public float PendingCartLift, CartRecovery;
         public bool CartTookOff;
@@ -144,6 +145,7 @@ namespace TwoBirds
 
         private void Awake()
         {
+            potionEffects = GetComponent<PlayerPotionEffects>();
             Body = GetComponent<Rigidbody>();
             capsule = GetComponent<CapsuleCollider>();
             carry = GetComponent<PlayerCarry>();
@@ -195,6 +197,7 @@ namespace TwoBirds
             PredictionManager.OnPostReconcile -= AfterReconcile;
             AfterReplay(0, 0);
             rejectReplay = false;
+            ClearBouncy();
             ClearImpacts();
             impactGeneration = resetRevision = movementTick = ControlRevision = 0;
             Suspended = false;
@@ -255,6 +258,7 @@ namespace TwoBirds
 
         private void BeginGeneration(uint generation)
         {
+            ClearBouncy();
             ClearImpacts();
             impactGeneration = generation;
             generationOwner = OwnerId;
@@ -368,6 +372,7 @@ namespace TwoBirds
 
         internal void ApplyPlacement(bool seated, uint revision, uint generation, Vector3 position, Quaternion rotation, Vector3 velocity, float recovery = 0.2f)
         {
+            SynchronizeBouncy();
             Suspended = seated;
             ControlRevision = revision;
             ClearReplicateCache();
@@ -428,6 +433,7 @@ namespace TwoBirds
             ReconcileState(new MotorState(predictedBody, pendingVelocityChange, Mode, jumpCooldown, resetRevision,
                 impactGeneration, IsServerInitialized ? TimeManager.Tick : 0, lastImpactSequence, lastOwnerRequestId, recoveryTicks, ControlRevision)
             {
+                Bounce = bounce,
                 CartContacts = cartContacts, PendingCartLift = pendingCartLift, CartRecovery = cartRecovery,
                 CartTookOff = cartTookOff, ExitGraceCart = exitGraceCart,
                 PendingCartSource = pendingCartSource, PendingCartGeneration = pendingCartGeneration
@@ -516,7 +522,7 @@ namespace TwoBirds
                 change = LimitCartEffort(change, target, (float)TimeManager.TickDelta);
                 predictedBody.AddForce(change, ForceMode.VelocityChange);
                 if (state.ContainsCreated()) predictedBody.MoveRotation(Quaternion.Euler(0f, Mathf.Repeat(data.Facing, 360f), 0f));
-                if (data.Jump && grounded && jumpCooldown == 0)
+                if (!StepBouncy(grounded, data.Jump) && data.Jump && grounded && jumpCooldown == 0)
                 {
                     predictedBody.AddForce(Vector3.up * settings.JumpSpeed, ForceMode.VelocityChange);
                     jumpCooldown = 12;
@@ -591,6 +597,7 @@ namespace TwoBirds
             pendingVelocityChange = data.PendingVelocityChange;
             resetRevision = data.ResetRevision;
             Mode = data.Mode;
+            bounce = data.Bounce;
             jumpCooldown = data.JumpCooldown;
             lastImpactSequence = data.LastImpactSequence;
             lastOwnerRequestId = data.LastOwnerRequestId;

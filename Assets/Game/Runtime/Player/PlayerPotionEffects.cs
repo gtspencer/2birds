@@ -1,0 +1,132 @@
+using System.Collections.Generic;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
+using UnityEngine;
+
+namespace TwoBirds
+{
+    public sealed class PlayerPotionEffects : NetworkBehaviour
+    {
+        private readonly SyncVar<uint> lifetime = new();
+        private readonly Dictionary<uint, (float Strength, uint Expiry)> healing = new();
+        private readonly HashSet<uint> receivedEffects = new();
+        private PlayerSeating seating;
+        private PlayerCarry carry;
+        private PlayerEffectReceiver receiver;
+        private WorldItemRegistry registry;
+        private PotionDose current;
+        private uint revision;
+        private double healingTime;
+        private bool showingBuff;
+        public PlayerMotor Motor { get; private set; }
+        public uint Lifetime => lifetime.Value;
+        public uint Reset { get; private set; }
+        public PotionDefinition Buff => current.Definition == 0 || !registry ? null : registry.GetDefinition(current.Definition) as PotionDefinition;
+        public float Remaining => registry ? Mathf.Max(0f, ((long)current.Expiry - registry.ServerTick) * (float)registry.TickDelta) : 0f;
+        public event System.Action BuffChanged;
+
+        private void Awake()
+        {
+            Motor = GetComponent<PlayerMotor>(); seating = GetComponent<PlayerSeating>(); carry = GetComponent<PlayerCarry>();
+            receiver = GetComponentInChildren<PlayerEffectReceiver>(true);
+            lifetime.OnChange += LifetimeChanged;
+        }
+        public override void OnStartNetwork() => registry = WorldItemRegistry.Instance;
+        public override void OnStartServer() => lifetime.Value = (uint)Random.Range(1, int.MaxValue);
+        private void LifetimeChanged(uint previous, uint next, bool server)
+        {
+            if (registry) registry.BindEffects(this);
+        }
+        internal void RefreshPhysicalPose()
+        {
+            seating.RefreshPhysicalAttachment();
+            carry.RefreshPhysicalAttachment();
+        }
+        internal void Step()
+        {
+            if (registry.Replaying) return;
+            receiver.RefreshEligibility();
+            if (showingBuff && Remaining <= 0f) { showingBuff = false; BuffChanged?.Invoke(); }
+        }
+        internal void Apply(PotionActivation activation, PotionDefinition definition)
+        {
+            if (!IsOwner || !receiver.Eligible || registry.Replaying || !receivedEffects.Add(activation.Id)) return;
+            if (definition.Effect == PotionEffect.Health) { ApplyHealing(definition.HealthStrength); return; }
+            var dose = new PotionDose { Player = ObjectId, Lifetime = Lifetime, Reset = Reset, Revision = ++revision,
+                Effect = activation.Id, Definition = definition.ItemId, StartTick = registry.ServerTick,
+                Expiry = registry.ServerTick + registry.DurationTicks(definition.BuffDuration), OwnerTick = Motor.NextPotionTick,
+                SimulationTick = registry.ServerTick + 1 };
+            AcceptDose(dose);
+            registry.ReportDose(dose);
+        }
+        internal void AcceptDose(PotionDose dose)
+        {
+            if (dose.Lifetime != Lifetime || dose.Reset != Reset || dose.Revision < current.Revision) return;
+            revision = System.Math.Max(revision, dose.Revision);
+            Motor.ScheduleDose(dose);
+            if (dose.Revision == current.Revision) return;
+            current = dose;
+            showingBuff = Remaining > 0f;
+            BuffChanged?.Invoke();
+        }
+        internal void ResetEffects(uint reset)
+        {
+            if (reset <= Reset) return;
+            Reset = reset;
+            current = default;
+            receivedEffects.Clear();
+            showingBuff = false;
+            Motor.ClearBouncy();
+            if (registry) registry.ClearPlayerDose(ObjectId);
+            BuffChanged?.Invoke();
+        }
+        internal void SetHealing(uint id, float strength, uint expiry)
+        {
+            SettleHealing();
+            healing[id] = (strength, expiry);
+        }
+        internal void RemoveHealing(uint id)
+        {
+            SettleHealing();
+            healing.Remove(id);
+        }
+        internal void SettleHealing(bool endingEligibility = false)
+        {
+            if (!registry || registry.Replaying) return;
+            double now = registry.ServerTick * registry.TickDelta;
+            if (IsOwner && (receiver.Eligible || endingEligibility))
+            {
+                while (healingTime < now && healing.Count > 0)
+                {
+                    double end = now;
+                    float rate = 0f;
+                    foreach (var membership in healing.Values)
+                    {
+                        double expiry = membership.Expiry * registry.TickDelta;
+                        if (expiry <= healingTime) continue;
+                        rate = Mathf.Max(rate, membership.Strength);
+                        end = System.Math.Min(end, expiry);
+                    }
+                    if (rate > 0f) ApplyHealing((float)(end - healingTime) * rate);
+                    healingTime = end;
+                }
+            }
+            healingTime = now;
+        }
+        internal void ApplyHealing(float amount)
+        {
+            // TODO: Add player health.
+        }
+        internal void ApplyDamage(float amount)
+        {
+            // TODO: Subtract player health.
+        }
+        public override void OnStopNetwork()
+        {
+            if (registry) registry.RemoveReceiver(receiver);
+            healing.Clear(); receivedEffects.Clear(); current = default; showingBuff = false;
+            Motor.ClearBouncy();
+            BuffChanged?.Invoke();
+        }
+    }
+}

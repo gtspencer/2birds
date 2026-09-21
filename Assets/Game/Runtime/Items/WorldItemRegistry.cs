@@ -85,12 +85,13 @@ namespace TwoBirds
             network = GetComponent<NetworkManager>();
             WorldLayer = LayerMask.NameToLayer("ItemWorld");
             HeldLayer = LayerMask.NameToLayer("ItemHeld");
-            EnvironmentMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemWorld", "ItemHeld", "Player", "PlayerItemHitbox", "BirdBody", "BirdQuery");
+            EnvironmentMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemWorld", "ItemHeld", "Player", "PlayerItemHitbox", "BirdBody", "BirdQuery", "PlayerEffectReceiver", "PotionEffect");
         }
 
         private void Start()
         {
             predictionManager = GetComponent<PredictionManager>();
+            RegisterCraftingMessages();
             network.ServerManager.RegisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ServerManager.RegisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
             network.ClientManager.RegisterBroadcast<ItemBaselineStart>(BeginBaseline);
@@ -147,6 +148,7 @@ namespace TwoBirds
                 records.Add(record.Motion.Id, record);
                 item.Initialize(this, definition, record, false);
             }
+            BeginCraftingWorld();
             SessionController.Instance.WorldReady(sessionId, epoch);
         }
 
@@ -184,6 +186,7 @@ namespace TwoBirds
                 if (lifecycleBatch.Count == BatchSize) FlushLifecycle(connection);
             }
             FlushLifecycle(connection);
+            SendCraftingBaseline(connection);
             network.ServerManager.Broadcast(connection, new ItemBaselineComplete { Session = request.Session, Epoch = epoch });
         }
 
@@ -202,11 +205,17 @@ namespace TwoBirds
         private void ReceiveLifecycle(ItemLifecycleBatch message, Channel channel)
         {
             if (IsHost || !worldReady || message.Epoch != epoch) return;
-            foreach (var record in message.Items)
+            ApplyLifecycle(message.Items);
+        }
+
+        private void ApplyLifecycle(List<ItemRecord> changes)
+        {
+            foreach (var record in changes)
             {
                 uint id = record.Motion.Id;
                 if (records.TryGetValue(id, out var previous) && !Newer(record.Motion, previous.Motion)) continue;
                 records[id] = record;
+                if (record.State == WorldItemState.Held) ClearPredictedClouds(id);
                 if (record.State == WorldItemState.Removed)
                 {
                     Pool(id);
@@ -276,6 +285,7 @@ namespace TwoBirds
             BirdRegistry.Instance?.RegisterPlayer(player);
             if (player.IsOwner) LocalInventory = player;
             else if (LocalInventory == player) LocalInventory = null;
+            ResolvePlayerEffects(player);
             RefreshHolders();
             player.Equipment.HeldPresentation.StartPresentation();
         }
@@ -291,6 +301,7 @@ namespace TwoBirds
                 if (IsHost) Remove(id);
                 else if (items.TryGetValue(id, out var item)) item.transform.SetParent(transform, true);
             }
+            ForgetPlayerEffects(player);
             players.Remove(player.ObjectId);
             if (LocalInventory == player) LocalInventory = null;
         }
@@ -440,6 +451,8 @@ namespace TwoBirds
             BirdRegistry.Instance?.CompleteRelease(record);
             record.Motion = items[id].Capture(ServerTick);
             record.Motion.Revision++;
+            record.Armed = false;
+            record.Cauldron = -1;
             record.State = WorldItemState.Held;
             record.Holder = holder.ObjectId;
             record.Equipped = equipped;
@@ -450,7 +463,7 @@ namespace TwoBirds
             record.Simulator = -1;
             records[id] = record;
             items[id].ApplyRecord(record);
-            Publish(record);
+            PublishCollection(record);
             NotifyPresentation(id, previousHolder);
         }
 
@@ -465,12 +478,13 @@ namespace TwoBirds
             }
         }
 
-        internal void PredictRelease(uint id, uint operation, ItemMotion motion, PlayerInventory player)
+        internal void PredictRelease(uint id, uint operation, ItemMotion motion, PlayerInventory player, ItemReleaseIntent intent)
         {
             if (IsHost) return;
             var record = records[id];
             record.Motion = motion;
             record.State = WorldItemState.World;
+            record.Armed = intent == ItemReleaseIntent.Throw && itemRegistry.Get(record.DefinitionId) is PotionDefinition;
             record.Sleeping = false;
             record.Holder = -1;
             record.Releaser = player.ObjectId;
@@ -478,17 +492,17 @@ namespace TwoBirds
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             pendingReleases[id] = operation;
-            record.Simulator = BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId))
+            record.Simulator = (itemRegistry.Get(record.DefinitionId) is PotionDefinition || BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId)))
                 ? player.Owner.ClientId : -1;
             items[id].Initialize(this, itemRegistry.Get(record.DefinitionId), record, true);
             items[id].Launch(motion);
             NotifyPresentation(id, player.ObjectId);
         }
 
-        internal void Release(uint id, uint operation, ItemMotion motion, PlayerInventory player)
-            => Release(id, operation, motion, player.ObjectId);
+        internal void Release(uint id, uint operation, ItemMotion motion, PlayerInventory player, ItemReleaseIntent intent)
+            => Release(id, operation, motion, player.ObjectId, intent);
 
-        private void Release(uint id, uint operation, ItemMotion motion, int releaser)
+        private void Release(uint id, uint operation, ItemMotion motion, int releaser, ItemReleaseIntent intent = ItemReleaseIntent.Drop)
         {
             var record = records[id];
             int previousHolder = record.State == WorldItemState.Held ? record.Holder : -1;
@@ -504,11 +518,13 @@ namespace TwoBirds
             record.Holder = -1;
             record.Equipped = false;
             record.Sleeping = false;
+            record.Armed = intent == ItemReleaseIntent.Throw && itemRegistry.Get(record.DefinitionId) is PotionDefinition;
+            record.Cauldron = -1;
             record.Releaser = releaser;
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             record.BirdPlayer = BirdRegistry.Instance ? BirdRegistry.Instance.PlayerToken(releaser) : 0;
-            record.Simulator = BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId)) &&
+            record.Simulator = (itemRegistry.Get(record.DefinitionId) is PotionDefinition || BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId))) &&
                 players.TryGetValue(releaser, out var simulator) && simulator.Owner.IsActive ? simulator.Owner.ClientId : -1;
             records[id] = record;
             BirdRegistry.Instance?.AcceptRelease(record);
@@ -521,6 +537,7 @@ namespace TwoBirds
         {
             if (pendingReleases.TryGetValue(id, out uint pending) && pending != operation) return;
             pendingReleases.Remove(id);
+            contacts.Remove(id);
             if (items.TryGetValue(id, out var item) && records.TryGetValue(id, out var record))
             {
                 int previousHolder = item.Record.State == WorldItemState.Held ? item.Record.Holder : -1;
@@ -533,6 +550,7 @@ namespace TwoBirds
         {
             if (!IsHost || !records.TryGetValue(id, out var record) || record.State == WorldItemState.Removed) return;
             BirdRegistry.Instance?.CompleteRelease(record);
+            record.Armed = false;
             record.State = WorldItemState.Removed;
             record.Motion.Revision++;
             record.Motion.Tick = ServerTick;
@@ -546,22 +564,25 @@ namespace TwoBirds
             if (!worldReady) return;
             BirdRegistry.Instance?.PrepareRockPhysics(ServerTick);
             if (Replaying) return;
+            RefreshEffectPoses();
             foreach (var player in players.Values)
                 if (!player.Hitbox.Suspended) player.Hitbox.FollowMotor();
             foreach (var item in items.Values)
-                if (item != null && item.Definition != null && item.gameObject.activeSelf) item.BeforePhysics();
+                if (item != null && item.Definition != null && item.gameObject.activeSelf) { item.BeforePhysics(); item.BeforePotionPhysics(); }
         }
 
         private void AfterPhysics(float delta)
         {
             if (!worldReady || Replaying) return;
+            RefreshEffectPoses();
             foreach (var item in items.Values)
-                if (item != null && item.Definition != null && item.gameObject.activeSelf) item.AfterPhysics(delta);
+                if (item != null && item.Definition != null && item.gameObject.activeSelf) { item.AfterPhysics(delta); item.AfterPotionPhysics(); }
         }
 
         private void LateUpdate()
         {
             if (!worldReady || Replaying) return;
+            StepCrafting();
             PlayerItemHitbox victim = LocalInventory != null && LocalInventory.IsOwner ? LocalInventory.Hitbox : null;
             if (victim != null) victim.SamplePresentation();
             foreach (var item in items.Values)
@@ -571,6 +592,7 @@ namespace TwoBirds
                 item.SampleBirdContacts();
                 if (!IsHost || !item.Simulating) item.SamplePlayerContact(victim);
             }
+            FlushPotionContacts();
         }
 
         private void Publish(ItemRecord record)
@@ -612,7 +634,9 @@ namespace TwoBirds
 
         private void Pool(uint id)
         {
+            ClearPredictedClouds(id);
             pendingReleases.Remove(id);
+            contacts.Remove(id);
             if (!items.Remove(id, out var item) || item == null) return;
             if (item.Definition == null)
             {
@@ -636,6 +660,7 @@ namespace TwoBirds
 
         public void EndWorld()
         {
+            EndCraftingWorld();
             worldReady = false;
             foreach (var item in items.Values)
                 if (item != null) Destroy(item.gameObject);
@@ -662,6 +687,7 @@ namespace TwoBirds
 
         private void OnDestroy()
         {
+            UnregisterCraftingMessages();
             network.ServerManager.UnregisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ServerManager.UnregisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
             network.ClientManager.UnregisterBroadcast<ItemBaselineStart>(BeginBaseline);

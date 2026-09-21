@@ -20,13 +20,14 @@ namespace TwoBirds
         public IInteractable Target { get; private set; }
         public Collider TargetCollider { get; private set; }
         public InputAction Action { get; private set; }
+        public InputAction SecondaryAction { get; private set; }
         public Camera ViewCamera { get; private set; }
 
         private void Awake()
         {
             inputReader = GetComponent<PlayerInputReader>();
             presentation = GetComponent<PlayerPresentation>();
-            queryMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemHeld", "PlayerItemHitbox", "Player", "BirdBody", "BirdQuery");
+            queryMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemHeld", "PlayerItemHitbox", "Player", "BirdBody", "BirdQuery", "PlayerEffectReceiver", "PotionEffect");
             targetMask = LayerMask.GetMask("CartSeat", "GolfCart", "Player");
         }
 
@@ -77,8 +78,11 @@ namespace TwoBirds
             Target = target;
             TargetCollider = selected;
             Action = action;
-            if (!inputReader.InteractPressed) return;
-            target.Interact();
+            if (target.CanSecondaryInteract && actions.TryGetValue(target.SecondaryInputActionPath, out var secondary) && secondary.enabled)
+                SecondaryAction = secondary;
+            if (inputReader.InteractPressed) target.Interact();
+            else if (SecondaryAction != null && inputReader.SecondaryInteractPressed) target.SecondaryInteract();
+            else return;
             if (TargetCollider == null || !TargetCollider.gameObject.activeInHierarchy || !target.CanInteract)
                 ClearTarget();
         }
@@ -88,7 +92,7 @@ namespace TwoBirds
             (collider.TryGetComponent<CartSeat>(out var seat) && seat.CanInteract ||
              collider.TryGetComponent<SteeringWheelHorn>(out var horn) && horn.CanInteract);
 
-        private void ClearTarget() { Target = null; TargetCollider = null; Action = null; }
+        private void ClearTarget() { Target = null; TargetCollider = null; Action = null; SecondaryAction = null; }
         public override void OnStopClient() => ClearTarget();
     }
 }

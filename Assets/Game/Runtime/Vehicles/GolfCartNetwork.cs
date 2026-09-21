@@ -30,6 +30,9 @@ namespace TwoBirds
         }
 
         internal static readonly Dictionary<int, GolfCartNetwork> Carts = new();
+        internal static event System.Action<GolfCartNetwork, bool> LifetimeChanged;
+        private readonly FishNet.Object.Synchronizing.SyncVar<uint> effectLifetime = new();
+        internal uint EffectLifetime => effectLifetime.Value;
         [SerializeField] private Color bodyColor = new(0.08f, 0.35f, 0.85f);
         private bool lightsOn;
         private float hornCooldown;
@@ -85,6 +88,7 @@ namespace TwoBirds
 
         public override void OnStartNetwork()
         {
+            effectLifetime.OnChange += EffectLifetimeChanged;
             Carts[ObjectId] = this;
             controller.Body.isKinematic = true;
             Bodies[controller.Body] = this;
@@ -94,10 +98,12 @@ namespace TwoBirds
             TimeManager.OnPrePhysicsSimulation += BeforePhysics;
             TimeManager.OnPostPhysicsSimulation += AfterPhysics;
             PlayerSeating.ResolvePending();
+            LifetimeChanged?.Invoke(this, true);
         }
 
         public override void OnStartServer()
         {
+            effectLifetime.Value = (uint)UnityEngine.Random.Range(1, int.MaxValue);
             ServerManager.Objects.OnPreDestroyClientObjects += Disconnect;
             controller.Body.isKinematic = false;
             controller.ResetMotion(false, true);
@@ -462,6 +468,7 @@ namespace TwoBirds
 
         public override void OnStopNetwork()
         {
+            effectLifetime.OnChange -= EffectLifetimeChanged;
             BirdRegistry.Instance?.ForgetCart(this);
             TimeManager.OnPrePhysicsSimulation -= BeforePhysics;
             TimeManager.OnPostPhysicsSimulation -= AfterPhysics;
@@ -471,6 +478,7 @@ namespace TwoBirds
                 if (pending.Partner) pending.Partner.ServerRequestPending = false;
                 pending.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
             }
+            LifetimeChanged?.Invoke(this, false);
             Carts.Remove(ObjectId);
             PlayerSeating.ForgetCart(ObjectId);
             pending = null;
@@ -482,5 +490,6 @@ namespace TwoBirds
             baselineReady = false;
             controller.Body.isKinematic = true;
         }
+        private void EffectLifetimeChanged(uint previous, uint next, bool asServer) => LifetimeChanged?.Invoke(this, true);
     }
 }

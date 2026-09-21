@@ -9,6 +9,12 @@ namespace TwoBirds
     {
         [SerializeField] private ItemRegistry itemRegistry;
 
+        private PlayerPotionEffects potionEffects;
+        private VisualElement buff;
+        private Image buffIcon;
+        private Label buffTime;
+        private IVisualElementScheduledItem buffCountdown;
+        private int buffSecond = -1;
         private PlayerInventory inventory;
         private PlayerNetworkState playerState;
         private PlayerEquipment equipment;
@@ -59,6 +65,9 @@ namespace TwoBirds
         private void OnEnable()
         {
             root = GetComponent<UIDocument>().rootVisualElement;
+            buff = root.Q("potion-buff");
+            buffIcon = root.Q<Image>("potion-buff-icon");
+            buffTime = root.Q<Label>("potion-buff-time");
             birdBalance = root.Q<Label>("bird-balance");
             birdReward = root.Q<Label>("bird-reward");
             birds = BirdRegistry.Instance;
@@ -329,6 +338,10 @@ namespace TwoBirds
 
         private void Bind(PlayerInventory inv, PlayerNetworkState state)
         {
+            if (potionEffects) potionEffects.BuffChanged -= RefreshBuff;
+            potionEffects = inv ? inv.Effects : null;
+            if (potionEffects) potionEffects.BuffChanged += RefreshBuff;
+            RefreshBuff();
             HideCharge();
             if (inventory)
             {
@@ -538,6 +551,26 @@ namespace TwoBirds
             if (itemRegistry == null) return $"Item {itemId}";
             var def = itemRegistry.Get(itemId);
             return def != null ? def.ItemName : $"Item {itemId}";
+        }
+
+        private void RefreshBuff()
+        {
+            buffCountdown?.Pause();
+            buffSecond = -1;
+            UpdateBuffTime();
+            if (potionEffects && potionEffects.Remaining > 0f)
+            {
+                buffIcon.sprite = potionEffects.Buff.Icon;
+                buffCountdown = buff.schedule.Execute(UpdateBuffTime).Every(100);
+            }
+        }
+
+        private void UpdateBuffTime()
+        {
+            int seconds = potionEffects ? Mathf.CeilToInt(potionEffects.Remaining) : 0;
+            buff.style.display = seconds > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (seconds != buffSecond) { buffSecond = seconds; buffTime.text = seconds + "s"; }
+            if (seconds == 0) buffCountdown?.Pause();
         }
 
         private void BirdRewardChanged(BirdReward reward)

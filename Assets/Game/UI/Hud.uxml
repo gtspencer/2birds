@@ -10,9 +10,19 @@
             <ui:VisualElement name="charge-fill" class="charge-fill" picking-mode="Ignore" />
         </ui:VisualElement>
         <ui:VisualElement name="interaction-tooltip" class="interaction-tooltip" picking-mode="Ignore">
+            <ui:VisualElement class="interaction-row" picking-mode="Ignore">
             <ui:Image name="interaction-glyph" class="interaction-glyph" picking-mode="Ignore" />
             <ui:Label name="interaction-keycap" class="interaction-keycap" picking-mode="Ignore" />
             <ui:Label name="interaction-action" class="interaction-action" picking-mode="Ignore" />
+            </ui:VisualElement>
+            <ui:VisualElement name="secondary-interaction" class="interaction-row" picking-mode="Ignore">
+                <ui:VisualElement name="secondary-binding" picking-mode="Ignore" />
+                <ui:Label name="secondary-action" class="interaction-action" picking-mode="Ignore" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="potion-buff" class="potion-buff" picking-mode="Ignore">
+            <ui:Image name="potion-buff-icon" picking-mode="Ignore" />
+            <ui:Label name="potion-buff-time" picking-mode="Ignore" />
         </ui:VisualElement>
         <ui:VisualElement class="health-container" picking-mode="Ignore">
             <ui:VisualElement class="health-bar-bg">

@@ -20,7 +20,7 @@ namespace TwoBirds
     }
 
     [CreateAssetMenu(menuName = "Two Birds/Item Definition")]
-    public sealed class ItemDefinition : ScriptableObject
+    public class ItemDefinition : ScriptableObject
     {
         [Range(1, 255)] public byte ItemId;
         [Tooltip("Display name shown in the inventory HUD and drag ghost.")]
@@ -89,7 +89,7 @@ namespace TwoBirds
 
         public event System.Action ContentChanged;
 
-        private void OnValidate()
+        protected virtual void OnValidate()
         {
             MinThrowSpeed = Mathf.Max(0f, MinThrowSpeed);
             MaxThrowSpeed = Mathf.Max(MinThrowSpeed, MaxThrowSpeed);

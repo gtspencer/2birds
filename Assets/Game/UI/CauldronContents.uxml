@@ -1,0 +1,8 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="CauldronContents.uss" />
+    <ui:VisualElement class="ingredients" picking-mode="Ignore">
+        <ui:Image name="ingredient-0" class="ingredient" picking-mode="Ignore" />
+        <ui:Image name="ingredient-1" class="ingredient" picking-mode="Ignore" />
+        <ui:Image name="ingredient-2" class="ingredient" picking-mode="Ignore" />
+    </ui:VisualElement>
+</ui:UXML>

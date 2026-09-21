@@ -12,6 +12,10 @@ namespace TwoBirds.Editor
         private const string RegistryPath = "Assets/Game/ScriptableObjects/ItemRegistry.asset";
         private const string IconFolder = "Assets/Game/UI/Icons";
 
+        private enum SetupMode { Item, Potion }
+        private SetupMode mode;
+        private PotionEffect effect;
+        private Color potionColor = Color.red;
         private GameObject source;
         private string itemName;
         private bool addThrowable = true;
@@ -20,16 +24,25 @@ namespace TwoBirds.Editor
         private ItemDefinition existingItem;
 
         [MenuItem("Two Birds/Item Setup")]
-        public static void ShowWindow() => GetWindow<ItemSetup>("Item Setup");
+        public static void ShowWindow() => GetWindow<ItemSetup>("Item Setup").mode = SetupMode.Item;
+
+        [MenuItem("Two Birds/Potion Setup")]
+        public static void ShowPotionWindow() => GetWindow<ItemSetup>("Item Setup").mode = SetupMode.Potion;
 
         private void OnGUI()
         {
-            EditorGUILayout.HelpBox("Drop a scene object or project prefab here.", MessageType.Info);
-            source = (GameObject)EditorGUILayout.ObjectField("Source", source, typeof(GameObject), true);
+            mode = (SetupMode)EditorGUILayout.EnumPopup("Mode", mode);
+            if (mode == SetupMode.Potion)
+            {
+                source = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabFolder + "/Potion.prefab");
+                effect = (PotionEffect)EditorGUILayout.EnumPopup("Effect", effect);
+                potionColor = EditorGUILayout.ColorField("Color", potionColor);
+            }
+            else source = (GameObject)EditorGUILayout.ObjectField("Source", source, typeof(GameObject), true);
 
             if (source != null && string.IsNullOrEmpty(itemName)) itemName = source.name;
             itemName = EditorGUILayout.TextField("Item Name", itemName);
-            addThrowable = EditorGUILayout.Toggle("Add ThrowableItemUse", addThrowable);
+            if (mode == SetupMode.Item) addThrowable = EditorGUILayout.Toggle("Add ThrowableItemUse", addThrowable);
             captureIcon = EditorGUILayout.Toggle("Capture Screenshot Icon", captureIcon);
             if (captureIcon)
                 iconResolution = EditorGUILayout.IntPopup("Icon Resolution", iconResolution,
@@ -52,31 +65,56 @@ namespace TwoBirds.Editor
 
         private void CreateItem()
         {
+            CreateDefinition(itemName, source, mode == SetupMode.Potion, effect, potionColor, addThrowable, captureIcon, iconResolution);
+        }
+
+        public static ItemDefinition CreateDefinition(string itemName, GameObject source, bool potion, PotionEffect effect,
+            Color color, bool addThrowable = true, bool captureIcon = true, int iconResolution = 128)
+        {
+            byte id = GetNextItemId();
+            if (id == 0) { Debug.LogError("All nonzero item IDs are in use."); return null; }
+            if (potion) source = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabFolder + "/Potion.prefab");
+            if (!source) return null;
             EnsureFolder(PrefabFolder);
             EnsureFolder(DefinitionFolder);
             EnsureFolder(IconFolder);
 
             string safeName = MakeAssetName(itemName);
             string definitionPath = AssetDatabase.GenerateUniqueAssetPath($"{DefinitionFolder}/{safeName}.asset");
-            var definition = CreateInstance<ItemDefinition>();
+            ItemDefinition definition = potion ? CreateInstance<PotionDefinition>() : CreateInstance<ItemDefinition>();
+            if (definition is PotionDefinition dose)
+            {
+                dose.Effect = effect; dose.Color = color;
+                dose.Application = effect == PotionEffect.Bouncy ? PotionApplication.Pulse : PotionApplication.Zone;
+            }
             definition.name = safeName;
             definition.ItemName = itemName;
-            definition.ItemId = GetNextItemId();
+            definition.ItemId = id;
             AssetDatabase.CreateAsset(definition, definitionPath);
             EditorUtility.SetDirty(definition);
 
             AddToRegistry(definition);
-            var root = InstantiateSource(source);
-            root.name = safeName;
-            PrepareVisualRoot(root);
-            definition.GripEuler = root.transform.localEulerAngles;
-            GenerateHeldOffset(root, definition);
-            AddComponents(root, definition, addThrowable);
-            root.hideFlags = HideFlags.None;
-
-            string prefabPath = AssetDatabase.GenerateUniqueAssetPath($"{PrefabFolder}/{safeName}.prefab");
-            var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-            DestroyImmediate(root);
+            GameObject prefab;
+            if (potion)
+            {
+                prefab = source;
+                GenerateHeldOffset(prefab, definition);
+            }
+            else
+            {
+                var root = InstantiateSource(source);
+                root.name = safeName;
+                PrepareVisualRoot(root);
+                definition.GripEuler = root.transform.localEulerAngles;
+                GenerateHeldOffset(root, definition);
+                AddComponents(root, definition, addThrowable);
+                root.hideFlags = HideFlags.None;
+    
+                string prefabPath = AssetDatabase.GenerateUniqueAssetPath($"{PrefabFolder}/{safeName}.prefab");
+                prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                DestroyImmediate(root);
+    
+            }
 
             definition.WorldPrefab = prefab;
             EditorUtility.SetDirty(definition);
@@ -92,6 +130,7 @@ namespace TwoBirds.Editor
 
             Selection.activeObject = prefab;
             EditorGUIUtility.PingObject(prefab);
+            return definition;
         }
 
         private static GameObject InstantiateSource(GameObject source)
@@ -178,10 +217,15 @@ namespace TwoBirds.Editor
         {
             var registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>(RegistryPath);
             if (registry == null) return 1;
-            byte max = 0;
-            foreach (var item in registry.Items)
-                if (item && item.ItemId > max) max = item.ItemId;
-            return (byte)(max + 1);
+            var used = new bool[256];
+            foreach (var item in registry.Items) if (item) used[item.ItemId] = true;
+            foreach (string guid in AssetDatabase.FindAssets("t:ItemDefinition"))
+            {
+                var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(AssetDatabase.GUIDToAssetPath(guid));
+                if (item) used[item.ItemId] = true;
+            }
+            for (int id = 1; id <= byte.MaxValue; id++) if (!used[id]) return (byte)id;
+            return 0;
         }
 
         private static void AddToRegistry(ItemDefinition definition)

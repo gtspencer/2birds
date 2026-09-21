@@ -41,6 +41,8 @@ namespace TwoBirds
             Add("Sprint", "Sprint");
             Add("Interact", "Interact");
             Add("Use", "Use");
+            Add("DirectUse", "Use Potion");
+            Add("SecondaryInteract", "Secondary Interaction");
             Add("Drop", "Drop");
             Add("Inventory", "Inventory");
             Add("Jump", "Jump / Handbrake");

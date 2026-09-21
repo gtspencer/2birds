@@ -198,6 +198,7 @@ namespace TwoBirds
             Pose? releasePreview = Carry && Carry.ReleasePreview && state.Role == CarryRole.Free &&
                 state.Seat < 0 && !state.PlacementPending ? new Pose(presentation.Graphics.position, presentation.Graphics.rotation) : null;
             exitCart = Cart;
+            inventory.Effects.ResetEffects(state.EffectReset);
             current = state;
             Revision = state.Revision;
             SeatIndex = state.Seat;
@@ -238,6 +239,7 @@ namespace TwoBirds
         internal void ResetToSpawn()
         {
             var state = CaptureCurrent();
+            state.EffectReset++;
             state.Role = CarryRole.Free;
             state.Partner = -1;
             state.ControlRevision++;
@@ -297,15 +299,22 @@ namespace TwoBirds
             }
         }
 
+        internal void RefreshPhysicalAttachment()
+        {
+            if (!Seated) return;
+            var physical = Cart.GetSeat(SeatIndex).PhysicalRider;
+            Motor.Body.position = physical.position;
+            Motor.Body.rotation = physical.rotation;
+            transform.SetPositionAndRotation(physical.position, physical.rotation);
+        }
+
         private void LateUpdate()
         {
             if (!IsServerInitialized && !IsClientInitialized) return;
             if (Seated)
             {
                 var seat = Cart.GetSeat(SeatIndex);
-                var physical = seat.PhysicalRider;
-                Motor.Body.position = physical.position;
-                Motor.Body.rotation = physical.rotation;
+                RefreshPhysicalAttachment();
                 var visual = seat.VisualRider;
                 presentation.Graphics.SetPositionAndRotation(visual.position, visual.rotation);
             }

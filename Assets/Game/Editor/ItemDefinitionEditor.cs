@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace TwoBirds.Editor
 {
-    [CustomEditor(typeof(ItemDefinition)), CanEditMultipleObjects]
+    [CustomEditor(typeof(ItemDefinition), true), CanEditMultipleObjects]
     public sealed class ItemDefinitionEditor : UnityEditor.Editor
     {
         private ItemRegistry registry;

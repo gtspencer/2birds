@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace TwoBirds
 {
-    public enum InventoryOperation : byte { Pickup, Release, Select, Swap }
+    public enum InventoryOperation : byte { Pickup, Release, Select, Swap, Insert, DirectUse, Brew, Dispose }
     public enum ItemReleaseIntent : byte { Drop, Throw }
 
     public struct InventoryRequest
@@ -18,6 +18,10 @@ namespace TwoBirds
         public bool AutoSelect;
         public int From;
         public int To;
+        public uint ExpectedRevision, CauldronRevision, Epoch, ExpectedOperation;
+        public int ExpectedReleaser;
+        public Vector3 Position;
+        public Quaternion Rotation;
         public byte DefinitionId;
         public uint[] Ids;
         public ItemMotion[] Releases;
@@ -47,10 +51,12 @@ namespace TwoBirds
         private sbyte serverSelection = -1;
         private sbyte confirmedSelection = -1;
         private sbyte viewSelection = -1;
+        public PlayerPotionEffects Effects { get; private set; }
         public PlayerEquipment Equipment { get; private set; }
         public PlayerItemHitbox Hitbox { get; private set; }
         public int Count => SlotCount;
         public bool CanAct => (!carry || !carry.IsCarried) && (!seating || !seating.PlacementPending && !seating.AwaitingReference);
+        public bool CanCraft => CanEquip && (!carry || carry.Role == CarryRole.Free) && (!seating || !seating.TransitionPending);
         public bool CanEquip => CanAct && (!seating || seating.CanEquip);
         public sbyte SelectedSlot => !CanEquip ? (sbyte)-1 : IsServerInitialized && !IsOwner ? serverSelection : viewSelection;
         public event Action InventoryChanged;
@@ -58,6 +64,7 @@ namespace TwoBirds
 
         private void Awake()
         {
+            Effects = GetComponent<PlayerPotionEffects>();
             motor = GetComponent<PlayerMotor>();
             seating = GetComponent<PlayerSeating>();
             carry = GetComponent<PlayerCarry>();
@@ -112,10 +119,36 @@ namespace TwoBirds
         {
             if (!IsOwner || !CanAct || !item.CanInteract) return;
             var request = new InventoryRequest { Kind = InventoryOperation.Pickup, DefinitionId = item.Record.DefinitionId,
-                Ids = new[] { item.Record.Motion.Id } };
+                Ids = new[] { item.Record.Motion.Id }, ExpectedRevision = item.Record.Motion.Revision,
+                ExpectedReleaser = item.Record.Releaser, ExpectedOperation = item.Record.Operation };
             if (FindSpace(viewSlots, request.DefinitionId) < 0) return;
             if (!IsServerInitialized) item.PredictPickup();
             Submit(request);
+        }
+
+        public void CauldronAction(Cauldron cauldron, InventoryOperation operation)
+        {
+            if (!IsOwner || !CanCraft) return;
+            Equipment.CancelUse();
+            if (operation == InventoryOperation.Insert) ConsumeEquipped(operation, cauldron);
+            else if (GetEquipped().IsEmpty) Submit(new InventoryRequest { Kind = operation, To = cauldron.ObjectId,
+                CauldronRevision = cauldron.State.Revision });
+        }
+
+        internal bool DirectUse()
+        {
+            if (!IsOwner || !CanCraft || !Equipment.HeldPresentation.ReadyForUse) return false;
+            return ConsumeEquipped(InventoryOperation.DirectUse, null);
+        }
+
+        private bool ConsumeEquipped(InventoryOperation operation, Cauldron cauldron)
+        {
+            var stack = GetEquipped();
+            if (stack.IsEmpty || !registry.TryGetItem(stack.WorldIds[0], out var item)) return false;
+            if (operation == InventoryOperation.DirectUse && item.Definition is not PotionDefinition) return false;
+            return Submit(new InventoryRequest { Kind = operation, From = SelectedSlot, To = cauldron ? cauldron.ObjectId : -1,
+                DefinitionId = stack.ItemId, Ids = new[] { stack.WorldIds[0] }, Rotation = item.PresentedRotation,
+                Position = operation == InventoryOperation.Insert ? item.PresentedRootPosition : motor.PhysicalFeet });
         }
 
         public void DropSelected()
@@ -191,6 +224,7 @@ namespace TwoBirds
         {
             if (!IsOwner || !CanAct) return false;
             request.Operation = ++nextOperation;
+            request.Epoch = registry.Epoch;
             request.ControlRevision = motor.ControlRevision;
             request.AutoSelect = CanEquip;
             bool throwing = request.Kind == InventoryOperation.Release && request.ReleaseIntent == ItemReleaseIntent.Throw;
@@ -204,7 +238,9 @@ namespace TwoBirds
             pending.Add(request);
             if (request.Kind == InventoryOperation.Release)
                 for (int i = 0; i < request.Ids.Length; i++)
-                    registry.PredictRelease(request.Ids[i], request.Operation, request.Releases[i], this);
+                    registry.PredictRelease(request.Ids[i], request.Operation, request.Releases[i], this, request.ReleaseIntent);
+            if (request.Kind is InventoryOperation.Insert or InventoryOperation.DirectUse)
+                registry.PredictConsumption(request, this);
             RebuildView();
             bool accepted = true;
             if (IsServerInitialized) accepted = ProcessRequest(request);
@@ -233,7 +269,7 @@ namespace TwoBirds
 
         private bool Commit(InventoryRequest request)
         {
-            if (!CanAct || request.ControlRevision != motor.ControlRevision ||
+            if (!CanAct || request.Epoch != registry.Epoch || request.ControlRevision != motor.ControlRevision ||
                 carry && carry.IsCarrying && request.Kind == InventoryOperation.Release && request.ReleaseIntent == ItemReleaseIntent.Throw) return false;
             if (request.Kind == InventoryOperation.Select || request.Kind == InventoryOperation.Release)
             {
@@ -252,13 +288,31 @@ namespace TwoBirds
                     return true;
                 case InventoryOperation.Pickup:
                     if (request.Ids == null || request.Ids.Length != 1 || !registry.TryGetRecord(request.Ids[0], out var item) ||
-                        item.State != WorldItemState.World || item.DefinitionId != request.DefinitionId) return false;
+                        (item.State != WorldItemState.World && !registry.OutputReady(item)) || item.DefinitionId != request.DefinitionId ||
+                        item.Releaser != request.ExpectedReleaser || item.Operation != request.ExpectedOperation ||
+                        item.Motion.Revision < request.ExpectedRevision) return false;
                     int slot = FindSpace(serverSlots, request.DefinitionId);
                     if (slot < 0) return false;
                     AddId(serverSlots, slot, item.DefinitionId, request.Ids[0]);
                     if (CanEquip && request.AutoSelect && (request.ControlRevision == motor.ControlRevision) &&
                         serverSelection < 0 && slot < HotbarSize) serverSelection = (sbyte)slot;
                     registry.SetHeld(request.Ids[0], this, EquippedId(serverSlots, serverSelection) == request.Ids[0]);
+                    return true;
+                case InventoryOperation.Brew:
+                case InventoryOperation.Dispose:
+                    return CanCraft && EquippedId(serverSlots, serverSelection) == 0 &&
+                        registry.ResolveMixture(request.To, request.CauldronRevision, request.Kind == InventoryOperation.Dispose);
+                case InventoryOperation.Insert:
+                case InventoryOperation.DirectUse:
+                    if (!CanCraft || request.Ids == null || request.Ids.Length != 1 || request.From != serverSelection ||
+                        EquippedId(serverSlots, serverSelection) != request.Ids[0] ||
+                        !registry.TryGetRecord(request.Ids[0], out var consumed) || consumed.State != WorldItemState.Held ||
+                        consumed.Holder != ObjectId || consumed.DefinitionId != request.DefinitionId) return false;
+                    bool committed = request.Kind == InventoryOperation.Insert
+                        ? registry.AdmitHeld(request.Ids[0], request.To, this, request.Operation, request.Position, request.Rotation)
+                        : registry.UsePotion(consumed, this, request.Operation, request.Position);
+                    if (!committed) return false;
+                    RemoveId(serverSlots, request.Ids[0]);
                     return true;
                 case InventoryOperation.Release:
                     if (request.Ids == null || request.Ids.Length == 0 || request.Releases == null ||
@@ -281,7 +335,7 @@ namespace TwoBirds
                             ReleaseArcProgress = request.ReleaseArcProgress });
                     }
                     foreach (uint id in request.Ids) RemoveId(serverSlots, id);
-                    for (int i = 0; i < request.Ids.Length; i++) registry.Release(request.Ids[i], request.Operation, request.Releases[i], this);
+                    for (int i = 0; i < request.Ids.Length; i++) registry.Release(request.Ids[i], request.Operation, request.Releases[i], this, request.ReleaseIntent);
                     return true;
             }
             return false;
@@ -324,6 +378,7 @@ namespace TwoBirds
                     if (request.Kind == InventoryOperation.Release && request.ReleaseIntent == ItemReleaseIntent.Throw)
                         Equipment.HeldPresentation.RejectRelease(request.Ids[0], request.Operation);
                 }
+                registry.ResolveConsumption(request, accepted || request.Operation != operation);
                 pending.RemoveAt(i);
             }
             RebuildView();
@@ -351,11 +406,16 @@ namespace TwoBirds
                         if (CanEquip && request.AutoSelect && (request.ControlRevision == motor.ControlRevision) &&
                             viewSelection < 0 && slot < HotbarSize) viewSelection = (sbyte)slot;
                         break;
+                    case InventoryOperation.Insert:
+                    case InventoryOperation.DirectUse:
                     case InventoryOperation.Release:
                         foreach (uint id in request.Ids) RemoveId(viewSlots, id);
                         break;
                 }
             }
+            foreach (var stack in (ItemStack[])viewSlots.Clone())
+                if (!stack.IsEmpty) foreach (uint id in stack.WorldIds)
+                    if (registry.TryGetRecord(id, out var record) && record.State == WorldItemState.Removed) RemoveId(viewSlots, id);
             if (!CanEquip) viewSelection = -1;
             RefreshHeldPresentation();
             InventoryChanged?.Invoke();
@@ -377,6 +437,7 @@ namespace TwoBirds
                         if (request.Kind == InventoryOperation.Release) BirdRegistry.Instance?.ReleaseResolved(id, request.Operation, false);
                         registry.Rollback(id, request.Operation);
                     }
+                registry.ResolveConsumption(request, false);
                 pending.RemoveAt(i);
             }
             if (IsServerInitialized) registry.UpdateEquipment(this, CanEquip ? EquippedId(serverSlots, serverSelection) : 0);
@@ -411,7 +472,7 @@ namespace TwoBirds
                 if (stack.IsEmpty) continue;
                 foreach (uint id in stack.WorldIds)
                     if (registry.TryGetItem(id, out var item) && item.Definition != null &&
-                        (!IsServerInitialized || item.Record.State == WorldItemState.Held)) item.PresentHeld(this, id == equipped);
+                        (item.Record.State != WorldItemState.Removed && (!IsServerInitialized || item.Record.State == WorldItemState.Held))) item.PresentHeld(this, id == equipped);
             }
         }
 
