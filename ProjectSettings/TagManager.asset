@@ -19,7 +19,7 @@ TagManager:
   - GolfCart
   - CartSeat
   - Environment
-  - 
+  - PlayerRagdoll
   - BirdBody
   - BirdQuery
   - PlayerEffectReceiver

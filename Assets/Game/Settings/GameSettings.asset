@@ -32,6 +32,13 @@ MonoBehaviour:
   PlayerThrowRecoveryMax: 1.5
   CarryImmunityDuration: 2
   FallBoundary: -15
+  ItemCollisionDamage: 10
+  ItemDamageSpeed: 3
+  CartContactDamage: 25
+  CrashEjectionDamage: 25
+  FallDamageEnabled: 1
+  LandingDamageSpeed: 8
+  LandingDamage: 25
   GroundLayers:
     serializedVersion: 2
     m_Bits: 8320

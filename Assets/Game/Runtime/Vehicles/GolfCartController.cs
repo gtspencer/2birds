@@ -217,7 +217,7 @@ namespace TwoBirds
             if (eject || recovery != CartRecovery.None && recovery != network.Recovery)
             {
                 rolloverReported |= rolloverTime >= settings.RolloverSeconds;
-                network.ReportIncident(recovery);
+                network.ReportIncident(recovery, collisionSeverity >= settings.CrashVelocityChange);
             }
             if (!network.IsServerInitialized) return;
             bool progressed = Vector3.ProjectOnPlane(Body.position - network.RecoveryOrigin, Vector3.up).magnitude > settings.StuckProgress;

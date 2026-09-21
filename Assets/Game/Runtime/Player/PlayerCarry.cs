@@ -36,6 +36,7 @@ namespace TwoBirds
         private PlayerSeating seating;
         private PlayerPresentation presentation;
         private PlayerEquipment equipment;
+        private PlayerHealth health;
         private CapsuleCollider capsule;
         private float immuneUntil, chargeStart, previewStart;
         private bool charging, preview;
@@ -75,6 +76,7 @@ namespace TwoBirds
             seating = GetComponent<PlayerSeating>();
             presentation = GetComponent<PlayerPresentation>();
             equipment = GetComponent<PlayerEquipment>();
+            health = GetComponent<PlayerHealth>();
             capsule = GetComponent<CapsuleCollider>();
         }
 
@@ -88,7 +90,7 @@ namespace TwoBirds
         public override void OnStartServer() => ServerManager.Objects.OnPreDestroyClientObjects += Disconnect;
 
         private static bool Free(PlayerCarry player) => player && player.isActiveAndEnabled && player.IsSpawned &&
-            player.Role == CarryRole.Free && !player.RequestPending && !player.motor.Suspended &&
+            player.health.IsAlive && player.seating.CanGameplayActions && player.Role == CarryRole.Free && !player.RequestPending && !player.motor.Suspended &&
             !player.seating.Seated && !player.seating.PlacementPending && !player.seating.TransitionPending &&
             !player.seating.ServerRequestPending;
 
@@ -145,7 +147,7 @@ namespace TwoBirds
 
         public void BeginUse()
         {
-            if (!IsOwner || !IsCarrying || charging || RequestPending || seating.TransitionPending || !input.GameplayActive) return;
+            if (!seating.CanGameplayActions || !IsOwner || !IsCarrying || charging || RequestPending || seating.TransitionPending || !input.GameplayActive) return;
             charging = true;
             chargeStart = Time.unscaledTime;
         }
@@ -320,7 +322,7 @@ namespace TwoBirds
 
         internal void RefreshPhysicalAttachment()
         {
-            if (!IsCarried || !Partner) return;
+            if (!IsCarried || !Partner || health.IsDowned) return;
             var body = Partner.motor.Body;
             var physical = Quaternion.Euler(0f, body.rotation.eulerAngles.y, 0f);
             motor.Body.position = body.position + physical * settings.CarryOffset;
@@ -330,6 +332,7 @@ namespace TwoBirds
 
         private void UpdateAttachment()
         {
+            if (health.IsDowned) return;
             if (preview)
             {
                 float elapsed = Mathf.Min(Time.unscaledTime - previewStart, 0.25f);
@@ -351,6 +354,29 @@ namespace TwoBirds
             var carrier = IsCarrying ? this : Partner;
             if (carrier && carrier.IsCarrying)
                 carrier.RequestRelease(carrier.motor.Body.position, carrier.motor.Body.rotation.eulerAngles.y, Vector3.zero, 0.2f, true);
+        }
+
+        internal void ReleaseForLife()
+        {
+            if (!IsServerInitialized || !Partner) return;
+            var survivor = Partner;
+            var state = survivor.seating.CaptureCurrent();
+            state.ControlRevision++;
+            state.Generation++;
+            state.Role = CarryRole.Free;
+            state.Partner = -1;
+            state.Velocity = survivor.health.CaptureVelocity;
+            state.Position = survivor.health.LivingPosition;
+            state.ContextOnly = survivor.IsCarrying;
+            if (survivor.IsCarried)
+            {
+                state.PlacementPending = !survivor.seating.TryCarryPlacement(motor.Body.position,
+                    motor.Body.rotation.eulerAngles.y, capsule, true, out state.Position);
+                state.CarryPlacement = true;
+            }
+            PlayerSeating.Receive(state, false);
+            survivor.ObserversSurvivor(state);
+            Install(CarryRole.Free, -1, 0f);
         }
 
         private void Disconnect(NetworkConnection connection)

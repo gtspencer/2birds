@@ -57,6 +57,15 @@
                     "priority": 0
                 },
                 {
+                "name": "GiveUp",
+                "type": "Button",
+                "id": "59b9548a-2ae0-4541-ac3e-f19f4714ad9d",
+                "expectedControlType": "Button",
+                "processors": "",
+                "interactions": "",
+                "initialStateCheck": false
+            },
+            {
                     "name": "Jump",
                     "type": "Button",
                     "id": "f1ba0d36-48eb-4cd5-b651-1c94a6531f70",
@@ -256,6 +265,28 @@
                 }
             ],
             "bindings": [
+            {
+                "name": "",
+                "id": "21394e6c-718e-4122-ae38-6ea2072753af",
+                "path": "<Keyboard>/space",
+                "interactions": "",
+                "processors": "",
+                "groups": "Keyboard&Mouse",
+                "action": "GiveUp",
+                "isComposite": false,
+                "isPartOfComposite": false
+            },
+            {
+                "name": "",
+                "id": "465b2b31-92cc-4ae3-b9bf-36e948195546",
+                "path": "<Gamepad>/buttonSouth",
+                "interactions": "",
+                "processors": "",
+                "groups": "Gamepad",
+                "action": "GiveUp",
+                "isComposite": false,
+                "isPartOfComposite": false
+            },
                 {
                     "name": "",
                     "id": "4638ee30-eeb1-4636-b84d-e903132e0471",

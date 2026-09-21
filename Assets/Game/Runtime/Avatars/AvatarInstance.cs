@@ -24,6 +24,15 @@ namespace TwoBirds
         internal float VisualHeight { get; private set; }
         internal Transform Head { get; private set; }
         internal bool Initialized { get; private set; }
+        private bool physical;
+        internal void SetPhysical(bool value)
+        {
+            physical = value;
+            if (!Initialized) return;
+            animator.enabled = !value;
+            ApplyFeatures();
+            if (!value) ResetMotion();
+        }
 
         internal void Stage(AvatarPresentation owner, AvatarRegistry.Entry entry, ulong generation)
         {
@@ -77,7 +86,7 @@ namespace TwoBirds
 
         internal void Evaluate(float dt, bool warmup = false)
         {
-            if (!Initialized || !host.AnimationEnabled && !warmup) return;
+            if (physical || !Initialized || !host.AnimationEnabled && !warmup) return;
             Place(host.State.Weights[(int)AvatarPose.Seated]);
             if (resetRequested)
             {
@@ -112,7 +121,7 @@ namespace TwoBirds
         {
             if (!Initialized) return;
             ik.Reset();
-            bool springs = host.AnimationEnabled && host.SpringsEnabled;
+            bool springs = !physical && host.AnimationEnabled && host.SpringsEnabled;
             if (springs != springsRegistered)
             {
                 if (springs)
@@ -121,7 +130,7 @@ namespace TwoBirds
                 }
                 else
                 {
-                    if (host.AnimationEnabled) runtime.SpringBone.RestoreInitialTransform();
+                    if (!physical && host.AnimationEnabled) runtime.SpringBone.RestoreInitialTransform();
                     runtime.SpringBone.Dispose();
                 }
                 springsRegistered = springs;

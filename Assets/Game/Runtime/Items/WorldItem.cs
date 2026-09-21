@@ -74,6 +74,8 @@ namespace TwoBirds
         private float contactSeconds;
         private bool physicsContactSampled;
         private PlayerItemHitbox contactPlayer;
+        private PlayerItemHitbox damagedPlayer;
+        private uint damagedGeneration;
         private uint contactGeneration;
         private uint contactReset;
         private Vector3 previousSphere;
@@ -790,6 +792,8 @@ namespace TwoBirds
 
         internal void BeforePhysics()
         {
+            if (!registry.Replaying && registry.IsHost && damagedPlayer &&
+                !damagedPlayer.OverlapsSphere(BodySpherePosition, sphereRadius + 0.03f, damagedPlayer.PresentedCenter)) damagedPlayer = null;
             BeforeBirdPhysics();
             UpdateIgnore();
             incomingSampled = ContactEligible && !Body.isKinematic && !Body.IsSleeping();
@@ -922,6 +926,8 @@ namespace TwoBirds
         private void SweepContact(PlayerItemHitbox player, Vector3 from, Vector3 to, Vector3 playerFrom,
             Vector3 playerTo, Vector3 rockVelocity, Vector3 playerVelocityFrom, Vector3 playerVelocityTo)
         {
+            if (damagedPlayer == player && (to - from - (playerTo - playerFrom)).sqrMagnitude > 0.000001f &&
+                !player.OverlapsSphere(from, sphereRadius + 0.03f, playerFrom)) damagedPlayer = null;
             if (ignoredPlayer != player.Collider && !touchingPlayer &&
                 player.SweepSphere(from, to, sphereRadius, playerFrom, playerTo, out Vector3 intoPlayer, out float fraction))
                 ReportImpact(player, rockVelocity, Vector3.Lerp(playerVelocityFrom, playerVelocityTo, fraction), intoPlayer);
@@ -951,6 +957,7 @@ namespace TwoBirds
 
         private void ResetContactState()
         {
+            damagedPlayer = null;
             ResetBirdContact();
             ResetContactSamples();
             releasePlayer = -1;
@@ -962,6 +969,14 @@ namespace TwoBirds
             float speed = Mathf.Max(0f, Vector3.Dot(rockVelocity - playerVelocity, intoPlayer));
             if (speed < Definition.MinimumImpactSpeed) return;
             Vector3 velocityChange = intoPlayer * speed * Mathf.Max(0f, Definition.ImpulseMultiplier);
+            var tuning = player.Health.Settings;
+            if ((damagedPlayer != player || damagedGeneration != player.Motor.ImpactGeneration) &&
+                Vector3.Dot(rockVelocity, intoPlayer) >= tuning.ItemDamageSpeed && speed >= tuning.ItemDamageSpeed)
+            {
+                damagedPlayer = player;
+                damagedGeneration = player.Motor.ImpactGeneration;
+                player.Damage(Definition.OverrideCollisionDamage ? Definition.CollisionDamage : tuning.ItemCollisionDamage, velocityChange);
+            }
             if (velocityChange.sqrMagnitude > 0f || !WorldItemRegistry.Finite(velocityChange))
                 player.QueueItemImpact(Record.Motion.Id, Record.Releaser, Record.Operation,
                     registry.IsHost ? "host" : Predicted ? "predicted" : "snapshot", rockVelocity, playerVelocity, intoPlayer, velocityChange);

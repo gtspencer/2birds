@@ -251,14 +251,15 @@ namespace TwoBirds
         private void BeforeContactPhysics(float delta)
         {
             if (!ContactPhysicsActive) return;
+            BeforeHealthPhysics(delta);
             preContactVelocity = Body.linearVelocity;
             preContactPosition = Body.position;
             preContactYaw = Body.rotation.eulerAngles.y;
             System.Array.Clear(upwardTargets, 0, upwardTargets.Length);
         }
 
-        private void OnCollisionEnter(Collision collision) => GatherCartContact(collision);
-        private void OnCollisionStay(Collision collision) => GatherCartContact(collision);
+        private void OnCollisionEnter(Collision collision) { GatherCartContact(collision); GatherHealthContact(collision); }
+        private void OnCollisionStay(Collision collision) { GatherCartContact(collision); GatherHealthContact(collision); }
 
         private void GatherCartContact(Collision collision)
         {
@@ -285,6 +286,8 @@ namespace TwoBirds
         private void AfterContactPhysics(float delta)
         {
             if (!ContactPhysicsActive) return;
+            AfterHealthPhysics();
+            if (Suspended) return;
             float target = 0f;
             int source = -1;
             uint generation = 0;
@@ -294,6 +297,12 @@ namespace TwoBirds
                 var entry = cartContacts[i];
                 entry.Launched = true;
                 cartContacts[i] = entry;
+                if (IsOwner && !PredictionManager.IsReconciling && damagedCarts.Add(entry.Cart))
+                {
+                    health.ApplyDamage(settings.CartContactDamage,
+                        Vector3.up * Mathf.Max(0f, upwardTargets[i] - Body.linearVelocity.y));
+                    if (Suspended) return;
+                }
                 if (upwardTargets[i] > target)
                 {
                     target = upwardTargets[i];

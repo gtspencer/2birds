@@ -24,7 +24,7 @@ namespace TwoBirds
             public int PartnerSeat;
             public int Seat;
             public uint Request, PlayerRevision;
-            public bool Eject, Recover, Paired;
+            public bool Eject, Recover, Paired, Crash;
             public CartRecovery Recovery;
             public Vector3[] RiderVelocities;
         }
@@ -138,7 +138,7 @@ namespace TwoBirds
         {
             if (!IsServerInitialized) return;
             bool changesDriver = player.SeatIndex == 0 || destination == 0 || partnerId >= 0;
-            if (Busy || player.Motor.ControlRevision != controlRevision || player.Carry && player.Carry.IsCarried || player.Revision != playerRevision || motionEpoch != epoch ||
+            if (!player.CanGameplayActions || Busy || player.Motor.ControlRevision != controlRevision || player.Carry && player.Carry.IsCarried || player.Revision != playerRevision || motionEpoch != epoch ||
                 (changesDriver || Recovery != CartRecovery.None) && cartRevision != StateRevision || destination < -1 || destination > 3 ||
                 player.PlacementPending || player.Cart && player.Cart != this || destination < 0 && player.Cart != this)
             { player.CompleteRequest(request, SeatRequestResult.Busy); return; }
@@ -304,7 +304,7 @@ namespace TwoBirds
                     Immunity = player.Carry ? player.Carry.RemainingImmunity : 0f, Generation = player.Motor.ImpactGeneration + 1,
                 Position = position, Rotation = Quaternion.Euler(0f, controller.Heading, 0f), Velocity = velocity,
                 Ejection = forced ? outward * controller.Settings.EjectionSpeed + Vector3.up * controller.Settings.EjectionLift : Vector3.zero,
-                PlacementPending = !clear };
+                PlacementPending = !clear, CrashDamage = forced && change.Crash };
         }
 
         private void Broadcast(PlayerControlTransition[] transitions, bool resetMotion)
@@ -341,7 +341,7 @@ namespace TwoBirds
                 }, false);
         }
 
-        internal void ReportIncident(CartRecovery recovery)
+        internal void ReportIncident(CartRecovery recovery, bool crash = false)
         {
             if (PredictionManager.IsReconciling) return;
             if ((recovery == CartRecovery.None || recovery == Recovery) &&
@@ -352,29 +352,30 @@ namespace TwoBirds
             if (!IsServerInitialized)
             {
                 incidentReported = true;
-                ServerIncident(epoch, occupants[0].Revision, velocities);
+                ServerIncident(epoch, occupants[0].Revision, velocities, crash);
                 return;
             }
-            QueueIncident(recovery, velocities);
+            QueueIncident(recovery, velocities, crash);
         }
 
         [ServerRpc]
-        private void ServerIncident(uint generation, uint driverRevision, Vector3[] velocities)
+        private void ServerIncident(uint generation, uint driverRevision, Vector3[] velocities, bool crash)
         {
             if (generation != epoch || driverRevision != occupants[0].Revision || inputOwner < 0) return;
-            QueueIncident(CartRecovery.None, velocities);
+            QueueIncident(CartRecovery.None, velocities, crash);
         }
 
-        private void QueueIncident(CartRecovery recovery, Vector3[] velocities)
+        private void QueueIncident(CartRecovery recovery, Vector3[] velocities, bool crash)
         {
             if (pending != null && pending.Eject)
             {
                 if (recovery != CartRecovery.None) pending.Recovery = recovery;
+                pending.Crash |= crash;
                 return;
             }
             if (pending != null && pending.Partner) pending.Partner.ServerRequestPending = false;
             pending?.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
-            pending = new PendingChange { Eject = true, Recovery = recovery, RiderVelocities = velocities };
+            pending = new PendingChange { Eject = true, Recovery = recovery, RiderVelocities = velocities, Crash = crash };
         }
 
         internal void ClearRecovery()
@@ -382,6 +383,21 @@ namespace TwoBirds
             if (!IsServerInitialized || Recovery == CartRecovery.None || Busy) return;
             Recovery = CartRecovery.None;
             Broadcast(Array.Empty<PlayerControlTransition>(), false);
+        }
+
+        internal void ReleaseForLife(PlayerSeating player)
+        {
+            if (!IsServerInitialized || player.Cart != this) return;
+            bool driver = player.SeatIndex == 0;
+            occupants[player.SeatIndex] = new CartOccupant { Player = -1 };
+            if (pending != null && (pending.Player == player || pending.Partner == player))
+            {
+                if (pending.Partner) pending.Partner.ServerRequestPending = false;
+                pending.Player?.CompleteRequest(pending.Request, SeatRequestResult.Busy);
+                pending = null;
+            }
+            if (driver) { RemoveOwnership(); BeginBaseline(); }
+            Broadcast(Array.Empty<PlayerControlTransition>(), driver);
         }
 
         private void Disconnect(NetworkConnection connection)
@@ -416,6 +432,7 @@ namespace TwoBirds
 
         public void ToggleLights()
         {
+            if (PlayerSeating.Local && !PlayerSeating.Local.CanGameplayActions) return;
             ApplyLightToggle();
             if (!IsServerInitialized) ServerToggleLights();
         }
@@ -430,11 +447,15 @@ namespace TwoBirds
         }
 
         [ServerRpc(RequireOwnership = false)]
-        private void ServerToggleLights(NetworkConnection sender = null) => ApplyLightToggle(sender);
+        private void ServerToggleLights(NetworkConnection sender = null)
+        {
+            if (CanPlayerAct(sender)) ApplyLightToggle(sender);
+        }
         [TargetRpc] private void TargetToggleLights(NetworkConnection connection) => ApplyLightToggle();
 
         public void Honk()
         {
+            if (PlayerSeating.Local && !PlayerSeating.Local.CanGameplayActions) return;
             if (hornCooldown > Time.unscaledTime) return;
             hornCooldown = Time.unscaledTime + 0.3f;
             BirdRegistry.Instance?.Honk(this);
@@ -450,7 +471,16 @@ namespace TwoBirds
                 if (connection != sender && !connection.IsLocalClient) TargetHonk(connection);
         }
 
-        [ServerRpc(RequireOwnership = false)] private void ServerHonk(NetworkConnection sender = null) => PlayHorn(sender);
+        private static bool CanPlayerAct(NetworkConnection sender)
+        {
+            foreach (var player in PlayerNetworkState.Players.Values)
+                if (player.Owner == sender) return player.CanGameplayActions;
+            return false;
+        }
+        [ServerRpc(RequireOwnership = false)] private void ServerHonk(NetworkConnection sender = null)
+        {
+            if (CanPlayerAct(sender)) PlayHorn(sender);
+        }
         [TargetRpc] private void TargetHonk(NetworkConnection connection) => presentation.PlayHorn();
 
         public void SetBodyColor(Color color)

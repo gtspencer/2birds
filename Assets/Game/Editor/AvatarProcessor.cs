@@ -514,6 +514,96 @@ namespace TwoBirds.Editor
             foreach (var component in root.GetComponents<MonoBehaviour>())
                 if (component is IVrm10SpringBoneRuntimeProvider) DestroyImmediate(component);
             root.AddComponent<AvatarSpringRuntimeProvider>();
+            PrepareRagdoll(root, animator, height);
+        }
+
+        private static void PrepareRagdoll(GameObject root, Animator animator, float height)
+        {
+            int layer = LayerMask.NameToLayer("PlayerRagdoll");
+            if (layer < 0) throw new InvalidOperationException("Add the PlayerRagdoll layer before processing avatars.");
+            var ragdoll = root.AddComponent<AvatarRagdoll>();
+            var bodies = new List<Rigidbody>();
+            var colliders = new List<Collider>();
+            var joints = new List<CharacterJoint>();
+            var mapped = new Dictionary<Transform, Rigidbody>();
+            var bones = AvatarContentValidation.RequiredBones;
+            foreach (var bone in bones)
+            {
+                var transform = animator.GetBoneTransform(bone);
+                var body = transform.GetComponent<Rigidbody>();
+                if (!body) body = transform.gameObject.AddComponent<Rigidbody>();
+                body.isKinematic = true;
+                body.detectCollisions = false;
+                body.interpolation = RigidbodyInterpolation.Interpolate;
+                body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                body.mass = bone == HumanBodyBones.Hips ? 12f : bone == HumanBodyBones.Spine ? 18f :
+                    bone == HumanBodyBones.Head ? 5f : bone.ToString().Contains("UpperLeg") ? 8f :
+                    bone.ToString().Contains("LowerLeg") ? 4f : bone.ToString().Contains("UpperArm") ? 3f : 1.5f;
+                body.linearDamping = 0.1f;
+                body.angularDamping = 0.5f;
+                transform.gameObject.layer = layer;
+                HumanBodyBones endpoint = bone switch
+                {
+                    HumanBodyBones.Hips => HumanBodyBones.Spine,
+                    HumanBodyBones.Spine => HumanBodyBones.Neck,
+                    HumanBodyBones.LeftUpperArm => HumanBodyBones.LeftLowerArm,
+                    HumanBodyBones.LeftLowerArm => HumanBodyBones.LeftHand,
+                    HumanBodyBones.RightUpperArm => HumanBodyBones.RightLowerArm,
+                    HumanBodyBones.RightLowerArm => HumanBodyBones.RightHand,
+                    HumanBodyBones.LeftUpperLeg => HumanBodyBones.LeftLowerLeg,
+                    HumanBodyBones.LeftLowerLeg => HumanBodyBones.LeftFoot,
+                    HumanBodyBones.RightUpperLeg => HumanBodyBones.RightLowerLeg,
+                    HumanBodyBones.RightLowerLeg => HumanBodyBones.RightFoot,
+                    _ => HumanBodyBones.LastBone
+                };
+                var end = endpoint == HumanBodyBones.LastBone ? null : animator.GetBoneTransform(endpoint);
+                if (bone == HumanBodyBones.Spine && !end) end = animator.GetBoneTransform(HumanBodyBones.Head);
+                Vector3 direction = end ? transform.InverseTransformPoint(end.position) :
+                    transform.InverseTransformVector(root.transform.up * (height * 0.08f));
+                float length = Mathf.Max(direction.magnitude, height * 0.035f);
+                float scale = Mathf.Max(0.001f, transform.lossyScale.x);
+                var shape = transform.gameObject.AddComponent<CapsuleCollider>();
+                Vector3 axis = new(Mathf.Abs(direction.x), Mathf.Abs(direction.y), Mathf.Abs(direction.z));
+                shape.direction = axis.x > axis.y && axis.x > axis.z ? 0 : axis.z > axis.y ? 2 : 1;
+                bool torso = bone == HumanBodyBones.Hips || bone == HumanBodyBones.Spine;
+                shape.radius = Mathf.Min(length * 0.45f, height * (torso ? 0.095f : bone == HumanBodyBones.Head ? 0.06f : 0.035f) / scale);
+                shape.height = Mathf.Max(shape.radius * 2f, length * 0.95f);
+                shape.center = direction * 0.5f;
+                shape.enabled = false;
+                bodies.Add(body);
+                colliders.Add(shape);
+                mapped[transform] = body;
+                if (bone == HumanBodyBones.Hips) ragdoll.Pelvis = body;
+            }
+            foreach (var body in bodies)
+            {
+                if (body == ragdoll.Pelvis) continue;
+                var parent = body.transform.parent;
+                while (parent && !mapped.ContainsKey(parent)) parent = parent.parent;
+                var joint = body.gameObject.AddComponent<CharacterJoint>();
+                joint.connectedBody = parent ? mapped[parent] : ragdoll.Pelvis;
+                joint.axis = Vector3.right;
+                joint.swingAxis = Vector3.up;
+                joint.lowTwistLimit = new SoftJointLimit { limit = -25f };
+                joint.highTwistLimit = new SoftJointLimit { limit = 25f };
+                joint.swing1Limit = new SoftJointLimit { limit = 45f };
+                joint.swing2Limit = new SoftJointLimit { limit = 30f };
+                joint.enableProjection = true;
+                joint.projectionDistance = height * 0.03f;
+                joint.enableCollision = false;
+                joints.Add(joint);
+            }
+            ragdoll.Bodies = bodies.ToArray();
+            ragdoll.Colliders = colliders.ToArray();
+            ragdoll.Joints = joints.ToArray();
+            ragdoll.Bones = root.GetComponentsInChildren<Transform>(true);
+            ragdoll.RestPositions = new Vector3[ragdoll.Bones.Length];
+            ragdoll.RestRotations = new Quaternion[ragdoll.Bones.Length];
+            for (int i = 0; i < ragdoll.Bones.Length; i++)
+            {
+                ragdoll.RestPositions[i] = ragdoll.Bones[i].localPosition;
+                ragdoll.RestRotations[i] = ragdoll.Bones[i].localRotation;
+            }
         }
 
         public static AvatarAnimationSet PrepareAnimations(bool force = false)

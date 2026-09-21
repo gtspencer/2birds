@@ -42,6 +42,9 @@ namespace TwoBirds
         private PlayerPresentation player;
         private PlayerInputReader input;
         private PlayerNetworkState state;
+        private PlayerHealth health;
+        private AvatarId deferredSelection;
+        private bool hasDeferredSelection;
         private Transform graphics;
         private Vector3 capsuleSole;
         private AvatarLookSample serverSample, received, pending;
@@ -55,6 +58,8 @@ namespace TwoBirds
             motor = GetComponent<PlayerMotor>(); seating = GetComponent<PlayerSeating>();
             carry = GetComponent<PlayerCarry>(); player = GetComponent<PlayerPresentation>();
             input = GetComponent<PlayerInputReader>(); state = GetComponent<PlayerNetworkState>();
+            health = GetComponent<PlayerHealth>();
+            health.LifeChanged += LifeChanged;
             graphics = player.Graphics;
             var capsule = GetComponent<CapsuleCollider>();
             capsuleSole = capsule.center - Vector3.up * (capsule.height * 0.5f);
@@ -70,9 +75,9 @@ namespace TwoBirds
         internal void Initialize() => selected.Value = presentation.Registry.DefaultId;
         public override void OnStartClient()
         {
-            presentation.Configure(presentation.Registry, !IsOwner, state.Snapshot.SpawnSlot / 8f);
+            presentation.Configure(presentation.Registry, !IsOwner || health.IsDowned, state.Snapshot.SpawnSlot / 8f);
             ResolveSelected(selected.Value);
-            Hands.StartPresentation();
+            if (health.IsAlive) Hands.StartPresentation();
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
             contextDirty = IsOwner;
         }
@@ -81,10 +86,10 @@ namespace TwoBirds
         {
             Hands.StopPresentation();
             hasReceived = hasPending = false;
-            presentation.SetVisual(!IsOwner && IsClientInitialized);
+            presentation.SetVisual(IsClientInitialized && (!IsOwner || health.IsDowned));
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
             contextDirty = IsOwner;
-            if (IsClientInitialized) Hands.StartPresentation();
+            if (IsClientInitialized && health.IsAlive) Hands.StartPresentation();
         }
         public override void OnOwnershipServer(NetworkConnection previousOwner) => hasServerSample = false;
         public override void OnSpawnServer(NetworkConnection connection)
@@ -103,6 +108,7 @@ namespace TwoBirds
         public void RequestAvatar(AvatarId id)
         {
             if (!IsOwner || !IsClientInitialized) return;
+            if (health.IsDowned) { deferredSelection = id; hasDeferredSelection = true; return; }
             presentation.RequestAvatar(id);
             ServerAvatar(id);
         }
@@ -129,7 +135,7 @@ namespace TwoBirds
 
         private void LateUpdate()
         {
-            if (!IsClientInitialized || !IsOwner || seating.AwaitingReference) return;
+            if (health.IsDowned || !IsClientInitialized || !IsOwner || seating.AwaitingReference) return;
             float now = Time.unscaledTime;
             if (!contextDirty && now < nextSend) return;
             var aim = player.AimPose;
@@ -197,10 +203,29 @@ namespace TwoBirds
 
         private void OnDestroy()
         {
+            if (health) health.LifeChanged -= LifeChanged;
             selected.OnChange -= IdentityChanged;
             if (seating) seating.PresentationContextChanged -= ContextChanged;
             if (carry) carry.PresentationContextChanged -= ContextChanged;
             if (presentation) { presentation.FallbackChanged -= player.SetFallbackVisible; presentation.InputSource = null; }
+        }
+
+        private void LifeChanged()
+        {
+            if (!IsClientInitialized) return;
+            if (health.IsDowned) Hands.StopPresentation();
+            else
+            {
+                presentation.FinishRagdoll(CurrentPlacement);
+                Hands.StartPresentation();
+                if (hasDeferredSelection)
+                {
+                    hasDeferredSelection = false;
+                    RequestAvatar(deferredSelection);
+                }
+            }
+            presentation.SetVisual(!IsOwner || health.IsDowned);
+            ContextChanged();
         }
     }
 }

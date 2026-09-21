@@ -143,12 +143,6 @@
     border-radius: var(--radius-sm);
 }
 
-.health-text {
-    color: white;
-    font-size: 15px;
-    margin-left: 10px;
-}
-
 .hotbar {
     position: absolute;
     bottom: 24px;
@@ -377,3 +371,30 @@
 .potion-buff { position: absolute; right: 24px; top: 120px; flex-direction: row; align-items: center; display: none; }
 #potion-buff-icon { width: 48px; height: 48px; }
 #potion-buff-time { font-size: 22px; color: white; margin-left: 8px; }
+
+.rescue-overlay {
+    display: none;
+    position: absolute;
+    bottom: 18%;
+    align-self: center;
+    align-items: center;
+    color: var(--text-primary);
+    font-size: 22px;
+    padding: 16px 24px;
+    background-color: rgba(12, 16, 24, 0.85);
+    border-radius: 8px;
+}
+#give-up-prompt { flex-direction: row; align-items: center; margin-top: 10px; font-size: 16px; }
+.give-up-track { width: 180px; height: 4px; margin-top: 10px; background-color: var(--bg-elevated); }
+#give-up-fill { width: 0; height: 100%; background-color: var(--accent); }
+.revive-overlay {
+    display: none;
+    position: absolute;
+    top: 35%;
+    align-self: center;
+    align-items: center;
+    color: var(--text-primary);
+    font-size: 18px;
+}
+.revive-wheel { width: 84px; height: 84px; align-items: center; justify-content: center; }
+.revive-wheel > Label { font-size: 26px; color: var(--text-primary); }

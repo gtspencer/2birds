@@ -25,6 +25,7 @@ namespace TwoBirds
         internal Vector3 PresentedVelocity { get; private set; }
         internal Vector3 PresentationCorrection { get; private set; }
         internal bool Suspended { get; private set; }
+        internal PlayerHealth Health { get; private set; }
 
         internal void SetSuspended(bool value)
         {
@@ -43,6 +44,7 @@ namespace TwoBirds
             var capsule = GetComponent<CapsuleCollider>();
             Collider = capsule;
             Motor = GetComponentInParent<PlayerMotor>();
+            Health = Motor.GetComponent<PlayerHealth>();
             graphics = Motor.GetComponent<PlayerPresentation>().Graphics;
             capsuleCenter = capsule.center;
             Vector3 scale = transform.lossyScale;
@@ -104,6 +106,13 @@ namespace TwoBirds
         {
             batchX = batchY = batchZ = 0d;
             batchCount = 0;
+        }
+
+        internal void Damage(int amount, Vector3 change)
+        {
+            if (Suspended || !Motor.IsOwner || Motor.PredictionManager.IsReconciling) return;
+            Vector3 pending = new((float)batchX, (float)batchY, (float)batchZ);
+            Health.ApplyDamage(amount, Vector3.ClampMagnitude(pending + change, MaximumItemVelocityChange));
         }
 
         internal void FollowMotor()

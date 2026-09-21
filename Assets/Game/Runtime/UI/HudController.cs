@@ -8,6 +8,19 @@ namespace TwoBirds
     public sealed class HudController : MonoBehaviour
     {
         [SerializeField] private ItemRegistry itemRegistry;
+        [Header("Damage Feedback")]
+        [SerializeField, Range(0f, 1f)] private float hitEdgeOpacity = 0.35f;
+        [SerializeField, Range(0f, 1f)] private float persistentEdgeOpacity = 0.15f;
+        [SerializeField, Min(0f)] private float damageFadeDuration = 2f;
+        [SerializeField, Range(0f, 1f)] private float lowHealthFraction = 0.25f;
+        private PlayerHealth health;
+        private PlayerRevival revival;
+        private HealthVignette vignette;
+        private ReviveProgressWheel reviveWheel;
+        private VisualElement rescueOverlay, giveUpPrompt, giveUpFill, reviveOverlay;
+        private Label rescueTime;
+        private IVisualElementScheduledItem rescueSchedule;
+        private int rescueSecond = -1;
 
         private PlayerPotionEffects potionEffects;
         private VisualElement buff;
@@ -24,7 +37,6 @@ namespace TwoBirds
         private VisualElement inventoryGrid;
         private VisualElement healthFill;
         private VisualElement staminaFill;
-        private Label healthText;
         private VisualElement equippedPreview;
         private Image equippedIcon;
         private Label equippedLabel;
@@ -65,6 +77,17 @@ namespace TwoBirds
         private void OnEnable()
         {
             root = GetComponent<UIDocument>().rootVisualElement;
+            vignette = new HealthVignette();
+            root.Insert(0, vignette);
+            rescueOverlay = root.Q("rescue-overlay");
+            rescueTime = root.Q<Label>("rescue-time");
+            giveUpPrompt = root.Q("give-up-prompt");
+            giveUpFill = root.Q("give-up-fill");
+            reviveOverlay = root.Q("revive-overlay");
+            reviveWheel = new ReviveProgressWheel();
+            reviveOverlay.Add(reviveWheel);
+            rescueSchedule = root.schedule.Execute(UpdateRescue).Every(16);
+            rescueSchedule.Pause();
             buff = root.Q("potion-buff");
             buffIcon = root.Q<Image>("potion-buff-icon");
             buffTime = root.Q<Label>("potion-buff-time");
@@ -82,7 +105,6 @@ namespace TwoBirds
             inventoryGrid = root.Q("inventory-grid");
             healthFill = root.Q("health-fill");
             staminaFill = root.Q("stamina-fill");
-            healthText = root.Q<Label>("health-text");
             equippedPreview = root.Q("equipped-preview");
             equippedIcon = root.Q<Image>("equipped-icon");
             equippedLabel = root.Q<Label>("equipped-label");
@@ -165,6 +187,8 @@ namespace TwoBirds
 
         private void RefreshBindings()
         {
+            InputPrompt.Begin(giveUpPrompt);
+            InputPrompt.AddAction(giveUpPrompt, presentation, "Player/GiveUp", "Hold to give up");
             if (presentation.IsController) CancelDrag();
             InputPrompt.Begin(inventoryShortcut);
             InputPrompt.AddAction(inventoryShortcut, presentation, "UI/Submit", moveSource < 0 ? "Select item" : "Move item");
@@ -338,6 +362,13 @@ namespace TwoBirds
 
         private void Bind(PlayerInventory inv, PlayerNetworkState state)
         {
+            if (health)
+            {
+                health.HealthChanged -= RefreshHealth;
+                health.LifeChanged -= RefreshLife;
+                health.DamagingHit -= vignette.Hit;
+            }
+            if (revival) revival.ProgressChanged -= RefreshRescue;
             if (potionEffects) potionEffects.BuffChanged -= RefreshBuff;
             potionEffects = inv ? inv.Effects : null;
             if (potionEffects) potionEffects.BuffChanged += RefreshBuff;
@@ -351,6 +382,16 @@ namespace TwoBirds
             if (!inv) CloseInventory();
             inventory = inv;
             playerState = state;
+            health = state ? state.Health : null;
+            revival = inv ? inv.GetComponent<PlayerRevival>() : null;
+            vignette.Bind(health, hitEdgeOpacity, persistentEdgeOpacity, damageFadeDuration, lowHealthFraction);
+            if (health)
+            {
+                health.HealthChanged += RefreshHealth;
+                health.LifeChanged += RefreshLife;
+                health.DamagingHit += vignette.Hit;
+            }
+            if (revival) revival.ProgressChanged += RefreshRescue;
             equipment = inv ? inv.Equipment : null;
             interaction = inv ? inv.GetComponent<PlayerInteraction>() : null;
             inputReader = inv ? inv.GetComponent<PlayerInputReader>() : null;
@@ -364,7 +405,47 @@ namespace TwoBirds
             }
             EnsureCartHints();
             EnsurePassengerHints();
+            RefreshHealth();
+            RefreshLife();
             Refresh();
+        }
+
+        private void RefreshHealth()
+        {
+            if (healthFill != null) healthFill.style.width = Length.Percent(health ? health.Normalized * 100f : 100f);
+            vignette.Refresh();
+        }
+        private void RefreshLife()
+        {
+            bool downed = health && health.IsDowned;
+            if (downed) { CloseInventory(); CancelItemGestures(); HideCharge(); interactionTooltip.Hide(); }
+            crosshair.style.display = downed ? DisplayStyle.None : DisplayStyle.Flex;
+            hotbar.style.display = downed ? DisplayStyle.None : DisplayStyle.Flex;
+            vignette.Refresh();
+            RefreshRescue();
+        }
+        private void RefreshRescue()
+        {
+            bool downed = health && health.IsDowned;
+            var progress = revival ? revival.ProgressTarget : null;
+            bool active = progress && progress.Claim.Active;
+            rescueOverlay.style.display = downed ? DisplayStyle.Flex : DisplayStyle.None;
+            reviveOverlay.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+            if (downed || active) { UpdateRescue(); rescueSchedule.Resume(); }
+            else { rescueSchedule.Pause(); rescueSecond = -1; }
+        }
+        private void UpdateRescue()
+        {
+            if (!health || !revival) { rescueSchedule.Pause(); return; }
+            if (health.IsDowned)
+            {
+                int second = Mathf.CeilToInt(playerState.RescueRemaining);
+                if (second != rescueSecond) { rescueSecond = second; rescueTime.text = $"Rescue time: {second}s"; }
+                giveUpFill.style.width = Length.Percent(revival.GiveUpProgress * 100f);
+            }
+            var progress = revival.ProgressTarget;
+            if (progress && progress.Claim.Active)
+                reviveWheel.SetProgress(1f - progress.ReviveRemaining / progress.Claim.Duration, progress.ReviveRemaining);
         }
 
         private void Update()
@@ -445,6 +526,7 @@ namespace TwoBirds
 
         private void ToggleInventory()
         {
+            if (health && health.IsDowned || revival && revival.Busy) return;
             if (InventoryInputFrame == Time.frameCount) return;
             InventoryInputFrame = Time.frameCount;
             inventoryInput?.SuppressInput();
@@ -510,12 +592,7 @@ namespace TwoBirds
                 equippedPreview.style.display = equipped.IsEmpty ? DisplayStyle.None : DisplayStyle.Flex;
             }
 
-            if (playerState != null && healthFill != null)
-            {
-                float health = playerState.Health;
-                healthFill.style.width = new StyleLength(new Length(health, LengthUnit.Percent));
-                if (healthText != null) healthText.text = Mathf.CeilToInt(health).ToString();
-            }
+
         }
 
         private void UpdateSlotVisual(VisualElement slot, ItemStack item)
@@ -601,6 +678,9 @@ namespace TwoBirds
             inventoryInput?.Dispose();
             inventoryInput = null;
             Bind(null, null);
+            rescueSchedule?.Pause();
+            vignette?.RemoveFromHierarchy();
+            reviveWheel?.RemoveFromHierarchy();
         }
     }
 }

@@ -255,11 +255,12 @@ namespace TwoBirds
                 foreach (var hit in Physics.RaycastAll(origin, offset.normalized, offset.magnitude, EnvironmentMask, QueryTriggerInteraction.Ignore))
                     if (!hit.collider.transform.IsChildOf(cauldron.transform)) { blocked = true; break; }
                 if (blocked) continue;
-                receiver.Effects.ApplyDamage(cauldron.BlastDamage);
-                if (receiver.Effects.Motor.Suspended) continue;
                 float falloff = Mathf.Lerp(0.35f, 1f, Mathf.Clamp01(1f - offset.magnitude / cauldron.BlastRadius));
                 offset.y = 0f;
-                receiver.Effects.Motor.SubmitWorldImpact((offset.normalized * cauldron.BlastOutward + Vector3.up * cauldron.BlastUpward) * falloff, 0.35f);
+                Vector3 shove = receiver.Effects.Motor.Suspended ? Vector3.zero :
+                    (offset.normalized * cauldron.BlastOutward + Vector3.up * cauldron.BlastUpward) * falloff;
+                receiver.Effects.ApplyDamage(cauldron.BlastDamage, shove);
+                if (!receiver.Effects.Motor.Suspended) receiver.Effects.Motor.SubmitWorldImpact(shove, 0.35f);
             }
         }
     }

@@ -60,6 +60,8 @@ namespace TwoBirds
         [Min(0f)] public float MinimumImpactSpeed = 1f;
         [Tooltip("Scales the shove received by a player. Requires a non-trigger sphere collider. Zero disables shove and recovery.")]
         [InspectorName("Impulse Multiplier"), Min(0f)] public float ImpulseMultiplier = 1f;
+        public bool OverrideCollisionDamage;
+        [Min(0)] public int CollisionDamage;
 
         [Header("Physics")]
         [Tooltip("Synchronize airborne rotation. Disable only for orientation-independent colliders and hit volumes with a collider-free visual root.")]
@@ -96,6 +98,7 @@ namespace TwoBirds
             ThrowChargeTime = Mathf.Max(0.01f, ThrowChargeTime);
             MinimumImpactSpeed = Mathf.Max(0f, MinimumImpactSpeed);
             ImpulseMultiplier = Mathf.Max(0f, ImpulseMultiplier);
+            CollisionDamage = Mathf.Max(0, CollisionDamage);
             ContentChanged?.Invoke();
         }
     }

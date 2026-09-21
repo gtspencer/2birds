@@ -12,6 +12,8 @@ namespace TwoBirds
 
         private PlayerInputReader inputReader;
         private PlayerPresentation presentation;
+        private PlayerNetworkState network;
+        public float PickupRange => pickupRange;
         private int queryMask;
         private int targetMask;
         private readonly RaycastHit[] hits = new RaycastHit[32];
@@ -27,8 +29,10 @@ namespace TwoBirds
         {
             inputReader = GetComponent<PlayerInputReader>();
             presentation = GetComponent<PlayerPresentation>();
+            network = GetComponent<PlayerNetworkState>();
             queryMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("ItemHeld", "PlayerItemHitbox", "Player", "BirdBody", "BirdQuery", "PlayerEffectReceiver", "PotionEffect");
-            targetMask = LayerMask.GetMask("CartSeat", "GolfCart", "Player");
+            queryMask &= ~LayerMask.GetMask("PlayerRagdoll");
+            targetMask = LayerMask.GetMask("CartSeat", "GolfCart", "Player", "PlayerRagdoll");
         }
 
         public override void OnStartClient()
@@ -48,7 +52,7 @@ namespace TwoBirds
         {
             ClearTarget();
             var session = SessionController.Instance;
-            if (!IsOwner || inputReader == null || !inputReader.GameplayActive || inputReader.Carried || session == null ||
+            if (!network.CanGameplayActions || !IsOwner || inputReader == null || !inputReader.GameplayActive || inputReader.Carried || session == null ||
                 session.Phase != SessionPhase.InGame || session.PanelOpen) return;
             if (ViewCamera == null) return;
             var aim = presentation.AimPose;
@@ -72,15 +76,15 @@ namespace TwoBirds
                     SelectableTarget(overlaps[i]))
                 { selected = overlaps[i]; break; }
             if (selected == null) return;
-            var target = selected.GetComponentInParent<IInteractable>();
-            if (target == null || !target.CanInteract) return;
+            IInteractable target = PlayerRagdoll.TryTarget(selected, out var body) ? body : selected.GetComponentInParent<IInteractable>();
+            if (target == null || !target.CanInteract && !(target is PlayerRevival revive && revive.Displayable)) return;
             if (!actions.TryGetValue(target.InputActionPath, out var action) || !action.enabled) return;
             Target = target;
             TargetCollider = selected;
             Action = action;
             if (target.CanSecondaryInteract && actions.TryGetValue(target.SecondaryInputActionPath, out var secondary) && secondary.enabled)
                 SecondaryAction = secondary;
-            if (inputReader.InteractPressed) target.Interact();
+            if (inputReader.InteractPressed && target.CanInteract) target.Interact();
             else if (SecondaryAction != null && inputReader.SecondaryInteractPressed) target.SecondaryInteract();
             else return;
             if (TargetCollider == null || !TargetCollider.gameObject.activeInHierarchy || !target.CanInteract)
@@ -88,6 +92,7 @@ namespace TwoBirds
         }
 
         private static bool SelectableTarget(Collider collider) =>
+            PlayerRagdoll.TryTarget(collider, out var body) && body.Displayable ||
             collider.TryGetComponent<PlayerCarry>(out var player) && player.PhysicalTarget(collider) || collider.isTrigger &&
             (collider.TryGetComponent<CartSeat>(out var seat) && seat.CanInteract ||
              collider.TryGetComponent<SteeringWheelHorn>(out var horn) && horn.CanInteract);

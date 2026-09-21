@@ -13,6 +13,10 @@ namespace TwoBirds
         private InputAction move, look, jump, sprint, drop, use, exit, interact, lights, horn, directUse, secondaryInteract;
         private PlayerSeating seating;
         private PlayerCarry carry;
+        private PlayerHealth health;
+        private PlayerNetworkState network;
+        private InputAction giveUp;
+        private bool giveUpBlocked;
         public bool Carried => carry && carry.IsCarried || seating && seating.AwaitingReference;
         private SessionController session;
         private bool exitBlocked, interactBlocked, directUseBlocked, secondaryInteractBlocked;
@@ -38,10 +42,13 @@ namespace TwoBirds
                 if (inventoryOpen == value) return;
                 ClearContext();
                 inventoryOpen = value;
-                presentation?.SetGameplay(GameplayActive);
+                presentation?.SetGameplay(SessionInputAvailable);
             }
         }
-        public bool GameplayActive => gameplay && !InventoryOpen;
+        public bool SessionInputAvailable => gameplay && !InventoryOpen;
+        public bool GameplayActive => SessionInputAvailable && (!health || health.IsAlive);
+        public bool InteractHeld => GameplayActive && !InputSuppressed && !interactBlocked && ButtonHeld(interact);
+        public bool GiveUpHeld => SessionInputAvailable && health && health.IsDowned && !InputSuppressed && !giveUpBlocked && ButtonHeld(giveUp);
         public Vector2 CartMove => GameplayActive && !seating.TransitionPending ? movement : default;
         internal bool InputSuppressed => presentation == null || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount;
         public bool Handbrake => GameplayActive && !jumpBlocked && !seating.TransitionPending && jump.IsPressed();
@@ -70,6 +77,9 @@ namespace TwoBirds
             lights = actions.FindAction("Lights");
             horn = actions.FindAction("Horn");
             sprint = actions.FindAction("Sprint");
+            giveUp = actions.FindAction("GiveUp");
+            health = GetComponent<PlayerHealth>();
+            network = GetComponent<PlayerNetworkState>();
             seating = GetComponent<PlayerSeating>();
             carry = GetComponent<PlayerCarry>();
             inventory = GetComponent<PlayerInventory>();
@@ -90,7 +100,7 @@ namespace TwoBirds
             Clear();
             if (actions == null) return;
             if (gameplay) actions.Enable(); else actions.Disable();
-            presentation?.SetGameplay(GameplayActive);
+            presentation?.SetGameplay(SessionInputAvailable);
         }
 
         private void ReadInput()
@@ -109,19 +119,21 @@ namespace TwoBirds
             if (dropBlocked && !ButtonHeld(drop)) dropBlocked = false;
             if (lightsBlocked && !ButtonHeld(lights)) lightsBlocked = false;
             if (hornBlocked && !ButtonHeld(horn)) hornBlocked = false;
-            if (!GameplayActive || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount)
+            if (giveUpBlocked && !ButtonHeld(giveUp)) giveUpBlocked = false;
+            if (!SessionInputAvailable || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount)
             {
                 if (equipment.IsCharging || carry && carry.IsCharging) CancelUse();
                 return;
             }
-            movement = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
-            if (!Carried && !blockJump && !seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
+            movement = health.IsAlive ? Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f) : Vector2.zero;
+            if (health.IsAlive && !Carried && !blockJump && !seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
             Vector2 delta = look.ReadValue<Vector2>();
             float sensitivity = look.activeControl?.device is Gamepad ?
                 session.ControllerSensitivity * Time.unscaledDeltaTime : session.MouseSensitivity;
-            if (seating.Seated) seating.AddLook(delta.x * sensitivity);
+            if (health.IsAlive && seating.Seated) seating.AddLook(delta.x * sensitivity);
             else Yaw = Mathf.Repeat(Yaw + delta.x * sensitivity, 360f);
             Pitch = Mathf.Clamp(Pitch - delta.y * sensitivity, -89f, 89f);
+            if (!network.CanGameplayActions) return;
             if (Carried) { Clear(); return; }
             if (!blockExit && exit.WasPressedThisFrame() && seating.Seated && !seating.TransitionPending)
             {
@@ -173,7 +185,7 @@ namespace TwoBirds
 
         public MoveInput Consume()
         {
-            if (Carried) return default;
+            if (Carried || health && health.IsDowned) return default;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (AutomatedInput != null) return AutomatedInput();
 #endif
@@ -199,6 +211,7 @@ namespace TwoBirds
             dropBlocked = ButtonHeld(drop);
             lightsBlocked = ButtonHeld(lights);
             hornBlocked = ButtonHeld(horn);
+            giveUpBlocked = ButtonHeld(giveUp);
             suppressedInteractionFrame = Time.frameCount;
         }
         public override void OnOwnershipClient(NetworkConnection previousOwner)

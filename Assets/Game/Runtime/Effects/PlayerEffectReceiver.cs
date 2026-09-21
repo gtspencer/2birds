@@ -8,11 +8,13 @@ namespace TwoBirds
         public PlayerPotionEffects Effects { get; private set; }
         public Collider Collider { get; private set; }
         private bool eligible;
-        public bool Eligible => isActiveAndEnabled && Collider && Collider.enabled && Effects && Effects.IsSpawned;
+        private PlayerHealth health;
+        public bool Eligible => isActiveAndEnabled && Collider && Collider.enabled && Effects && Effects.IsSpawned && health.IsAlive;
         private void Awake()
         {
             Collider = GetComponent<Collider>();
             Effects = GetComponentInParent<PlayerPotionEffects>();
+            health = GetComponentInParent<PlayerHealth>();
         }
         private void OnEnable() => eligible = false;
         private void OnDisable()

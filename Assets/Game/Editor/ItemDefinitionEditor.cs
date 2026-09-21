@@ -17,6 +17,13 @@ namespace TwoBirds.Editor
             var property = serializedObject.GetIterator();
             for (bool enter = true; property.NextVisible(enter); enter = false)
             {
+                if (property.name == "CollisionDamage")
+                {
+                    var damageOverride = serializedObject.FindProperty("OverrideCollisionDamage");
+                    if (damageOverride.boolValue || damageOverride.hasMultipleDifferentValues)
+                        EditorGUILayout.PropertyField(property);
+                    continue;
+                }
                 if (property.name == "FirstPersonPose")
                 {
                     var localOverride = serializedObject.FindProperty("OverrideFirstPersonPose");

@@ -33,6 +33,11 @@ namespace TwoBirds
         private PlayerInputReader input;
         private PlayerNetworkState state;
         private Camera localCamera;
+        private PlayerHealth health;
+        private PlayerRagdoll ragdoll;
+        private PlayerNameLabel nameLabel;
+        private int cameraMask;
+        internal static event System.Action<Camera> LocalCameraChanged;
         [SerializeField] private Renderer[] fallbackRenderers = System.Array.Empty<Renderer>();
         private bool[] bodyRendererStates;
         private uint resetRevision;
@@ -55,6 +60,10 @@ namespace TwoBirds
             input = GetComponent<PlayerInputReader>();
             state = GetComponent<PlayerNetworkState>();
             seating = GetComponent<PlayerSeating>();
+            health = GetComponent<PlayerHealth>();
+            ragdoll = GetComponent<PlayerRagdoll>();
+            nameLabel = GetComponentInChildren<PlayerNameLabel>(true);
+            cameraMask = LayerMask.GetMask("Ground", "Environment", "GolfCart");
             tickSmoother = graphics.GetComponent<NetworkTickSmoother>();
             bodyRendererStates = new bool[fallbackRenderers.Length];
             for (int i = 0; i < fallbackRenderers.Length; i++)
@@ -63,10 +72,9 @@ namespace TwoBirds
 
         public override void OnStartClient()
         {
+            if (nameLabel) nameLabel.gameObject.SetActive(!IsOwner);
             if (!IsOwner) return;
             CreateCamera();
-            var nameLabel = GetComponentInChildren<PlayerNameLabel>(true);
-            if (nameLabel) nameLabel.gameObject.SetActive(false);
         }
 
         private void CreateCamera()
@@ -79,6 +87,7 @@ namespace TwoBirds
             localCamera.tag = "MainCamera";
             SetFallbackVisible(false);
             UpdateCamera();
+            LocalCameraChanged?.Invoke(localCamera);
         }
 
         private void LateUpdate()
@@ -100,6 +109,21 @@ namespace TwoBirds
         private void UpdateCamera()
         {
             if (localCamera == null) return;
+            if (health.IsDowned)
+            {
+                const float radius = 0.18f;
+                Vector3 root = ragdoll.RootPosition;
+                Vector3 target = root + Vector3.up * 0.45f;
+                if (Physics.SphereCast(root, radius, Vector3.up, out var overhead, 0.45f, cameraMask, QueryTriggerInteraction.Ignore))
+                    target = root + Vector3.up * Mathf.Max(0f, overhead.distance - 0.02f);
+                if (Physics.CheckSphere(target, radius, cameraMask, QueryTriggerInteraction.Ignore)) target = root;
+                Quaternion rotation = Quaternion.Euler(input.Pitch, input.Yaw, 0f);
+                Vector3 direction = rotation * Vector3.back;
+                float distance = Physics.SphereCast(target, radius, direction, out var wall, 3f, cameraMask, QueryTriggerInteraction.Ignore)
+                    ? Mathf.Max(0f, wall.distance - 0.02f) : 3f;
+                localCamera.transform.SetPositionAndRotation(target + direction * distance, rotation);
+                return;
+            }
             var aim = AimPose;
             localCamera.transform.SetPositionAndRotation(aim.position, aim.rotation);
         }
@@ -137,6 +161,7 @@ namespace TwoBirds
         }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
+            if (nameLabel) nameLabel.gameObject.SetActive(!IsOwner);
             if (IsOwner) CreateCamera();
             else ReleaseCamera();
         }
@@ -147,6 +172,7 @@ namespace TwoBirds
             localCamera.gameObject.SetActive(false);
             Destroy(localCamera.gameObject);
             localCamera = null;
+            LocalCameraChanged?.Invoke(null);
         }
 
         public void SetFallbackVisible(bool value)

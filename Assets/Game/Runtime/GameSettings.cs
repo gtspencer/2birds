@@ -25,6 +25,14 @@ namespace TwoBirds
         [Min(0)] public float PlayerThrowRecoveryMax = 1.5f;
         [Min(0)] public float CarryImmunityDuration = 2f;
         public float FallBoundary = -15f;
+        [Header("Player Health")]
+        [Min(0)] public int ItemCollisionDamage = 10;
+        [Min(0)] public float ItemDamageSpeed = 3f;
+        [Min(0)] public int CartContactDamage = 25;
+        [Min(0)] public int CrashEjectionDamage = 25;
+        public bool FallDamageEnabled = true;
+        [Min(0)] public float LandingDamageSpeed = 8f;
+        [Min(0)] public int LandingDamage = 25;
         public LayerMask GroundLayers = 1 << 7;
         [Min(1)] public float ConnectTimeout = 10f;
         [Min(1)] public float LoadTimeout = 30f;

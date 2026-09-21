@@ -10,7 +10,6 @@ namespace TwoBirds
     {
         public byte SpawnSlot;
         public uint Revision;
-        public float Health;
     }
 
     public enum ItemActionState : byte { Idle, Charging, Recovering }
@@ -28,7 +27,7 @@ namespace TwoBirds
             State == ItemActionState.Recovering && WorldId == worldId && Operation == operation;
     }
 
-    public sealed class PlayerNetworkState : NetworkBehaviour
+    public sealed partial class PlayerNetworkState : NetworkBehaviour
     {
         private readonly SyncVar<PublicPlayerState> state = new();
         private ItemActionSnapshot localAction, replicatedAction, pendingAction;
@@ -44,17 +43,17 @@ namespace TwoBirds
             seating = GetComponent<PlayerSeating>();
             motor = GetComponent<PlayerMotor>();
             carry = GetComponent<PlayerCarry>();
+            AwakeHealth();
         }
-        internal bool CanCharge => (!seating || seating.CanEquip) && (!carry || carry.Role == CarryRole.Free);
+        internal bool CanCharge => CanGameplayActions && (!seating || seating.CanEquip) && (!carry || carry.Role == CarryRole.Free);
         public PublicPlayerState Snapshot => state.Value;
-        public float Health => state.Value.Health;
         public ItemActionSnapshot ItemAction => IsOwner && hasLocal ? localAction : replicatedAction;
         public bool HasActionSnapshot => IsOwner ? hasLocal : hasReplicated;
         public bool IsChargingUse => CanCharge && ItemAction.State == ItemActionState.Charging;
 
         internal void Initialize(byte slot)
         {
-            state.Value = new PublicPlayerState { SpawnSlot = slot, Revision = 1, Health = 100f };
+            state.Value = new PublicPlayerState { SpawnSlot = slot, Revision = 1 };
             ResetLifetime();
         }
 
@@ -193,13 +192,15 @@ namespace TwoBirds
             ActionChanged?.Invoke();
         }
 
-        public override void OnStartServer() => ResetLifetime();
+        public override void OnStartNetwork() => StartHealthNetwork();
+        public override void OnStartServer() { ResetLifetime(); StartHealthServer(); }
         public override void OnStartClient()
         {
             if (IsOwner && !hasLocal) ApplyLocal(new ItemActionSnapshot { ControlRevision = motor.ControlRevision });
         }
-        public override void OnOwnershipServer(NetworkConnection previousOwner) => ResetLifetime();
-        public override void OnOwnershipClient(NetworkConnection previousOwner) => ResetLifetime();
-        public override void OnStopNetwork() => ResetLifetime(false);
+        public override void OnSpawnServer(NetworkConnection connection) => SendHealthBaseline(connection);
+        public override void OnOwnershipServer(NetworkConnection previousOwner) { ResetLifetime(); ClearRescueClaims(); }
+        public override void OnOwnershipClient(NetworkConnection previousOwner) { ResetLifetime(); LoseHealthOwnership(); }
+        public override void OnStopNetwork() { StopHealthNetwork(); ResetLifetime(false); }
     }
 }

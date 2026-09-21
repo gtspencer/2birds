@@ -148,6 +148,8 @@ namespace TwoBirds
             potionEffects = GetComponent<PlayerPotionEffects>();
             Body = GetComponent<Rigidbody>();
             capsule = GetComponent<CapsuleCollider>();
+            health = GetComponent<PlayerHealth>();
+            supportMask = LayerMask.GetMask("Ground", "Environment");
             carry = GetComponent<PlayerCarry>();
             seating = GetComponent<PlayerSeating>();
             cartMask = LayerMask.GetMask("GolfCart");
@@ -373,6 +375,8 @@ namespace TwoBirds
         internal void ApplyPlacement(bool seated, uint revision, uint generation, Vector3 position, Quaternion rotation, Vector3 velocity, float recovery = 0.2f)
         {
             SynchronizeBouncy();
+            ResetLanding();
+            resetRevision = revision;
             Suspended = seated;
             ControlRevision = revision;
             ClearReplicateCache();
@@ -541,12 +545,6 @@ namespace TwoBirds
                 TraceImpact($"force delta={pendingVelocityChange:F6} expectedVelocity={Body.linearVelocity + pendingVelocityChange:F6}");
                 predictedBody.AddForce(pendingVelocityChange, ForceMode.VelocityChange);
                 pendingVelocityChange = default;
-            }
-            if (IsServerInitialized && !PredictionManager.IsReconciling && Body.position.y < settings.FallBoundary)
-            {
-                if (carry) carry.BreakForReset();
-                resetRevision++;
-                seating.ResetToSpawn();
             }
             predictedBody.Simulate();
         }

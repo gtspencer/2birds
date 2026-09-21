@@ -5,6 +5,16 @@
             <ui:Label name="bird-balance" text="0" picking-mode="Ignore" />
             <ui:Label name="bird-reward" picking-mode="Ignore" />
         </ui:VisualElement>
+        <ui:VisualElement name="rescue-overlay" class="rescue-overlay" picking-mode="Ignore">
+            <ui:Label name="rescue-time" picking-mode="Ignore" />
+            <ui:VisualElement name="give-up-prompt" picking-mode="Ignore" />
+            <ui:VisualElement class="give-up-track" picking-mode="Ignore">
+                <ui:VisualElement name="give-up-fill" picking-mode="Ignore" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="revive-overlay" class="revive-overlay" picking-mode="Ignore">
+            <ui:Label text="Reviving" picking-mode="Ignore" />
+        </ui:VisualElement>
         <ui:VisualElement name="crosshair" class="crosshair" picking-mode="Ignore" />
         <ui:VisualElement name="charge-track" class="charge-track" picking-mode="Ignore">
             <ui:VisualElement name="charge-fill" class="charge-fill" picking-mode="Ignore" />
@@ -28,7 +38,6 @@
             <ui:VisualElement class="health-bar-bg">
                 <ui:VisualElement name="health-fill" class="health-fill" />
             </ui:VisualElement>
-            <ui:Label name="health-text" class="health-text" text="100" />
         </ui:VisualElement>
         <ui:VisualElement class="stamina-container" picking-mode="Ignore">
             <ui:VisualElement class="stamina-bar-bg">

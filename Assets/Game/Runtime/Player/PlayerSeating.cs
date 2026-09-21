@@ -13,7 +13,6 @@ namespace TwoBirds
         internal static readonly Dictionary<int, PlayerSeating> Players = new();
         private static readonly Dictionary<int, (PlayerControlTransition state, bool impulse)> unresolved = new();
         public static PlayerSeating Local { get; private set; }
-        private readonly Collider[] query = new Collider[64];
         private readonly RaycastHit[] pathHits = new RaycastHit[64];
         private CapsuleCollider capsule;
         private PlayerInventory inventory;
@@ -25,7 +24,10 @@ namespace TwoBirds
         private GolfCartNetwork exitCart;
         private uint requestId;
         private float retryTime, seatYaw, lookOffset;
-        private int clearanceMask, groundMask;
+        private int clearanceMask;
+        private PlayerPlacement placement;
+        internal PlayerHealth Health { get; private set; }
+        internal bool CanGameplayActions => networkState.CanGameplayActions;
         private bool receivedState;
         private string requestFeedback;
         private float feedbackUntil;
@@ -43,7 +45,7 @@ namespace TwoBirds
         public float AttachmentLookYaw => lookOffset;
         public PlayerInputReader Input { get; private set; }
         public PlayerMotor Motor { get; private set; }
-        public bool CanEquip => !AwaitingReference && (!Carry || !Carry.IsCarried) && !IsDriver && !PlacementPending && !TransitionPending;
+        public bool CanEquip => CanGameplayActions && !AwaitingReference && (!Carry || !Carry.IsCarried) && !IsDriver && !PlacementPending && !TransitionPending;
         internal float WorldYaw => Seated ? UpdateSeatHeading() + lookOffset : Input.Yaw;
 
         private void Awake()
@@ -58,7 +60,9 @@ namespace TwoBirds
             Carry = GetComponent<PlayerCarry>();
             capsule = GetComponent<CapsuleCollider>();
             clearanceMask = Physics.DefaultRaycastLayers & ~LayerMask.GetMask("CartSeat", "ItemHeld", "PlayerItemHitbox", "BirdBody", "BirdQuery");
-            groundMask = clearanceMask & ~LayerMask.GetMask("Player", "GolfCart", "ItemWorld");
+            clearanceMask &= ~LayerMask.GetMask("PlayerRagdoll", "PlayerEffectReceiver");
+            placement = GetComponent<PlayerPlacement>();
+            Health = GetComponent<PlayerHealth>();
         }
 
         public override void OnStartNetwork()
@@ -88,6 +92,7 @@ namespace TwoBirds
             state.Rotation = Motor.Body.rotation;
             state.Velocity = Motor.Suspended ? Vector3.zero : Motor.Body.linearVelocity;
             state.Ejection = Vector3.zero;
+            state.CrashDamage = false;
             state.Recovery = Motor.RemainingRecovery;
             state.ContextOnly = false;
             state.ItemAction = default;
@@ -108,6 +113,12 @@ namespace TwoBirds
         {
             if (Players.TryGetValue(state.Player, out var player))
             {
+                if (!player.networkState.LifeReady)
+                {
+                    if (!unresolved.TryGetValue(state.Player, out var queued) || queued.state.ControlRevision <= state.ControlRevision)
+                        unresolved[state.Player] = (state, impulse);
+                    return;
+                }
                 if (player.receivedState && state.ControlRevision <= player.current.ControlRevision) return;
                 if (unresolved.TryGetValue(state.Player, out var newer) && newer.state.ControlRevision > state.ControlRevision) return;
                 bool ready = (state.Seat < 0 || GolfCartNetwork.Carts.ContainsKey(state.Cart)) &&
@@ -147,7 +158,7 @@ namespace TwoBirds
 
         internal void Request(GolfCartNetwork cart, int destination)
         {
-            if (!IsOwner || AwaitingReference || TransitionPending || PlacementPending || !Input.GameplayActive ||
+            if (!CanGameplayActions || !IsOwner || AwaitingReference || TransitionPending || PlacementPending || !Input.GameplayActive ||
                 Carry && (Carry.IsCarried || Carry.RequestPending)) return;
             int partner = Carry && Carry.IsCarrying && Carry.Partner ? Carry.Partner.ObjectId : -1;
             uint partnerRevision = partner >= 0 ? Carry.Partner.Seating.Motor.ControlRevision : 0;
@@ -196,7 +207,9 @@ namespace TwoBirds
             receivedState = true;
             AwaitingReference = false;
             float worldYaw = WorldYaw;
-            bool wasDriver = IsDriver;
+            PlayerRagdollSeed? crashSeed = impulse && state.CrashDamage && IsOwner && Health.IsAlive
+                ? Health.CaptureDownSeed(state.Velocity + state.Ejection) : null;
+
             Pose? releasePreview = Carry && Carry.ReleasePreview && state.Role == CarryRole.Free &&
                 state.Seat < 0 && !state.PlacementPending ? new Pose(presentation.Graphics.position, presentation.Graphics.rotation) : null;
             exitCart = Cart;
@@ -211,7 +224,7 @@ namespace TwoBirds
             TransitionPending = false;
             ServerRequestPending = false;
             if (Carry) Carry.Install(state.Role, state.Partner, state.Immunity);
-            Input.ClearContext();
+            if (!Health.PreserveDownInput) Input.ClearContext();
             if (Seated)
             {
                 lookOffset = 0f;
@@ -221,8 +234,8 @@ namespace TwoBirds
                 state.Rotation = anchor.rotation;
             }
             else Input.SetWorldYaw(worldYaw);
-            bool suspended = Seated || PlacementPending || Carry && Carry.IsCarried;
-            if (state.ContextOnly && !Motor.Suspended) Motor.SetControlRevision(state.ControlRevision);
+            bool suspended = Health.IsDowned || Seated || PlacementPending || Carry && Carry.IsCarried;
+            if (state.ContextOnly && !Motor.Suspended && Health.IsAlive) Motor.SetControlRevision(state.ControlRevision);
             else
             {
                 Motor.ApplyPlacement(suspended, state.ControlRevision, state.Generation, state.Position, state.Rotation, state.Velocity,
@@ -232,28 +245,16 @@ namespace TwoBirds
             }
             if (!suspended && !state.ContextOnly) Motor.SuppressExitLaunch(exitCart);
             inventory.ApplyControlPermissions();
-            if (IsDriver || wasDriver) inventory.ApplySeatPermissions();
+
             networkState.ApplyControlState(state.ItemAction);
-            if (impulse && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
+            if (impulse && state.CrashDamage && IsOwner && Health.IsAlive)
+            {
+                current.CrashDamage = false;
+                Health.ApplyDamage(Health.Settings.CrashEjectionDamage, Vector3.zero, crashSeed);
+            }
+            if (impulse && Health.IsAlive && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
                 Motor.SubmitWorldImpact(state.Ejection, 0.2f);
             PresentationContextChanged?.Invoke();
-        }
-
-        internal void ResetToSpawn()
-        {
-            var state = CaptureCurrent();
-            state.EffectReset = EffectReset + 1;
-            state.Role = CarryRole.Free;
-            state.Partner = -1;
-            state.ControlRevision++;
-            state.Generation++;
-            state.Position = Motor.SpawnPoint;
-            state.Rotation = Quaternion.identity;
-            state.Velocity = Vector3.zero;
-            state.PlacementPending = !CapsuleClear(state.Position, null);
-            state.CarryPlacement = true;
-            Apply(state, false);
-            ObserversPlacement(state);
         }
 
         internal void ShowFeedback(string message)
@@ -304,7 +305,7 @@ namespace TwoBirds
 
         internal void RefreshPhysicalAttachment()
         {
-            if (!Seated) return;
+            if (!Seated || Health.IsDowned) return;
             var physical = Cart.GetSeat(SeatIndex).PhysicalRider;
             Motor.Body.position = physical.position;
             Motor.Body.rotation = physical.rotation;
@@ -314,7 +315,7 @@ namespace TwoBirds
         private void LateUpdate()
         {
             if (!IsServerInitialized && !IsClientInitialized) return;
-            if (Seated)
+            if (Seated && Health.IsAlive)
             {
                 var seat = Cart.GetSeat(SeatIndex);
                 RefreshPhysicalAttachment();
@@ -324,8 +325,11 @@ namespace TwoBirds
             if (PlacementPending && IsServerInitialized && Time.unscaledTime >= retryTime)
             {
                 retryTime = Time.unscaledTime + 0.25f;
-                if (current.CarryPlacement ? TryCarryPlacement(current.Position, current.Rotation.eulerAngles.y, null, true, out var position) :
-                    TryExit(current.Position, null, out position))
+                Vector3 position;
+                bool clear = current.LifePlacement ? placement.TrySpawn(Motor.SpawnPoint, out position) :
+                    current.CarryPlacement ? TryCarryPlacement(current.Position, current.Rotation.eulerAngles.y, null, true, out position) :
+                    TryExit(current.Position, null, out position);
+                if (clear)
                 {
                     var state = current;
                     state.Revision++;
@@ -334,6 +338,7 @@ namespace TwoBirds
                     state.Generation = Motor.ImpactGeneration + 1;
                     state.Position = position;
                     state.PlacementPending = false;
+                    state.CrashDamage = false;
                     state.Immunity = Carry ? Carry.RemainingImmunity : 0f;
                     Apply(state, true);
                     ObserversPlacement(state);
@@ -348,52 +353,9 @@ namespace TwoBirds
                 TryExitNear(Motor.SpawnPoint, reserved, out position);
         }
 
-        private bool TryExitNear(Vector3 desired, List<Vector3> reserved, out Vector3 position)
-        {
-            for (int pass = 0; pass < 5; pass++)
-            {
-                // Prefer ground, then clear air at increasing heights.
-                float lift = pass < 2 ? 0f : Mathf.Pow(2f, pass - 2);
-                for (int ring = 0; ring < 6; ring++)
-                {
-                    float radius = ring == 0 ? 0f : Mathf.Pow(2f, ring - 1);
-                    int steps = ring == 0 ? 1 : 16;
-                    for (int step = 0; step < steps; step++)
-                    {
-                        float angle = step * Mathf.PI / 8f;
-                        position = desired + new Vector3(Mathf.Cos(angle) * radius, lift, Mathf.Sin(angle) * radius);
-                        if (pass == 0)
-                        {
-                            if (!Physics.Raycast(position + Vector3.up * 1.5f, Vector3.down, out var ground, 6f,
-                                groundMask, QueryTriggerInteraction.Ignore)) continue;
-                            position.y = ground.point.y + capsule.height * 0.5f - capsule.center.y + 0.05f;
-                        }
-                        if (CapsuleClear(position, reserved)) return true;
-                    }
-                }
-            }
-            position = desired;
-            return false;
-        }
-
-        internal bool CapsuleClear(Vector3 position, List<Vector3> reserved)
-        {
-            if (reserved != null)
-                foreach (var other in reserved)
-                    if ((position - other).sqrMagnitude < capsule.height * capsule.height) return false;
-            CapsulePoints(position, out var bottom, out var top);
-            int count = Physics.OverlapCapsuleNonAlloc(bottom, top, capsule.radius + 0.03f, query, clearanceMask, QueryTriggerInteraction.Ignore);
-            if (count == query.Length) return false;
-            for (int i = 0; i < count; i++) if (query[i] != capsule) return false;
-            return true;
-        }
-        internal void CapsulePoints(Vector3 position, out Vector3 bottom, out Vector3 top)
-        {
-            Vector3 center = position + capsule.center;
-            float half = Mathf.Max(0f, capsule.height * 0.5f - capsule.radius);
-            bottom = center - Vector3.up * half;
-            top = center + Vector3.up * half;
-        }
+        private bool TryExitNear(Vector3 desired, List<Vector3> reserved, out Vector3 position) => placement.TryExitNear(desired, reserved, out position);
+        internal bool CapsuleClear(Vector3 position, List<Vector3> reserved) => placement.CapsuleClear(position, reserved);
+        internal void CapsulePoints(Vector3 position, out Vector3 bottom, out Vector3 top) => placement.CapsulePoints(position, out bottom, out top);
 
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {

@@ -38,7 +38,8 @@ namespace TwoBirds
         public void Update(PlayerInteraction interaction)
         {
             if (interaction == null || !interaction.IsOwner || interaction.TargetCollider == null ||
-                !interaction.TargetCollider.gameObject.activeInHierarchy || !interaction.Target.CanInteract)
+                !interaction.TargetCollider.gameObject.activeInHierarchy || !interaction.Target.CanInteract &&
+                !(interaction.Target is PlayerRevival body && body.Displayable))
             {
                 Hide();
                 return;
@@ -65,7 +66,9 @@ namespace TwoBirds
                 interaction.Target.ActionText : interaction.Target.TooltipTextOverride;
             tooltip.style.display = DisplayStyle.Flex;
             var anchor = interaction.Target.TooltipAnchor;
-            if (interaction.Target is CartSeat seat)
+            if (interaction.Target is PlayerRevival revive)
+                PositionAtPoint(interaction.ViewCamera, revive.RootPosition);
+            else if (interaction.Target is CartSeat seat)
                 PositionAtPoint(interaction.ViewCamera, seat.VisualTooltipPosition);
             else if (anchor)
                 PositionAtPoint(interaction.ViewCamera, anchor.position);

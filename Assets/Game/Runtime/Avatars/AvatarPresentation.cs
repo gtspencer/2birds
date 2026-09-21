@@ -51,8 +51,11 @@ namespace TwoBirds
         public event Action BeforeEvaluation;
         internal event Action<AvatarBinding, float> PreparingHands;
         internal event Action<AvatarBinding> HandsEvaluated;
-        internal bool EvaluatesTargets => system && !Failed && Binding != null;
-        internal void PrepareTargets() => BeforeEvaluation?.Invoke();
+        internal bool EvaluatesTargets => !Physical && system && !Failed && Binding != null;
+        internal void PrepareTargets() { if (!Physical) BeforeEvaluation?.Invoke(); }
+        internal bool Physical { get; private set; }
+        private bool lifeLocked, hasDeferredIdentity;
+        private AvatarId deferredIdentity;
         internal readonly AvatarAnimationState State = new();
         internal AvatarPresentationInput Input;
         internal bool AnimationEnabled { get; private set; } = true;
@@ -132,6 +135,7 @@ namespace TwoBirds
 
         public void RequestAvatar(AvatarId id)
         {
+            if (lifeLocked) { deferredIdentity = id; hasDeferredIdentity = true; return; }
             RequestedId = id;
             RequestGeneration++;
             NeedsPreparation = false;
@@ -186,7 +190,8 @@ namespace TwoBirds
 
         internal void UpdateInput(float dt, bool gap)
         {
-            if (InputSource != null) Input = InputSource();
+            if (Physical) return;
+            if (!lifeLocked && InputSource != null) Input = InputSource();
             bool attached = Input.Seated || Input.Carried && !Input.ReleasePreview || Input.Pending && wasAttached;
             float facing = Input.Facing.rotation.eulerAngles.y;
             if (!facingInitialized) { BodyYaw = facing; facingInitialized = true; }
@@ -223,6 +228,7 @@ namespace TwoBirds
 
         internal void Prepare(Transform staging)
         {
+            if (lifeLocked && active) return;
             NeedsPreparation = false;
             CancelCandidate();
             candidateEntry = Resolved;
@@ -243,6 +249,7 @@ namespace TwoBirds
 
         internal void Evaluate(float dt)
         {
+            if (Physical) return;
             if (candidate && candidateRequest != RequestGeneration) CancelCandidate();
             if (active)
             {
@@ -265,6 +272,7 @@ namespace TwoBirds
 
         internal void Commit()
         {
+            if (Physical) return;
             if (!candidate || !candidate.Initialized || Time.frameCount <= candidateFrame + 1 || candidateRequest != RequestGeneration)
             { if (active) HandsEvaluated?.Invoke(active.Binding); return; }
             using (AvatarPresentationSystem.CommitMarker.Auto())
@@ -273,9 +281,12 @@ namespace TwoBirds
                 if (old) WillUnbind?.Invoke(old.Binding);
                 active = candidate; candidate = null;
                 DidBind?.Invoke(active.Binding);
-                PreparingHands?.Invoke(active.Binding, 0f);
-                active.Evaluate(0f, true);
-                HandsEvaluated?.Invoke(active.Binding);
+                if (!Physical)
+                {
+                    PreparingHands?.Invoke(active.Binding, 0f);
+                    active.Evaluate(0f, true);
+                    HandsEvaluated?.Invoke(active.Binding);
+                }
                 if (old) old.SetVisible(false);
                 active.SetVisible(true);
                 FallbackChanged?.Invoke(false);
@@ -288,6 +299,37 @@ namespace TwoBirds
             CancelCandidate();
             Debug.LogError($"Avatar {RequestedId} preparation failed: {exception.Message}", this);
             FallbackChanged?.Invoke(visual && !active);
+        }
+
+        internal void PrepareRagdoll(AvatarPresentationInput input)
+        {
+            Input = input;
+            lifeLocked = true;
+            SetVisual(true);
+            UpdateInput(0f, true);
+            if (Resolved != null && animationsValid) State.Snap(Input, BodyYaw, Resolved.Settings, registry.Animations);
+            if (active) active.Evaluate(0f, true);
+        }
+        internal void SetPhysical(bool value)
+        {
+            Physical = value;
+            if (active) active.SetPhysical(value);
+        }
+        internal void FinishRagdoll(AvatarPresentationInput input)
+        {
+            lifeLocked = false;
+            Input = input;
+            Input.WorldVelocity = Vector3.zero;
+            Input.Grounded = true;
+            Input.Mode = MovementMode.Walking;
+            if (Resolved != null && animationsValid) State.Snap(Input, input.Facing.rotation.eulerAngles.y, Resolved.Settings, registry.Animations);
+            UpdateInput(0f, true);
+            if (active) active.Evaluate(0f, true);
+            if (hasDeferredIdentity)
+            {
+                hasDeferredIdentity = false;
+                RequestAvatar(deferredIdentity);
+            }
         }
         internal void PresentationFailed(Exception exception)
         {

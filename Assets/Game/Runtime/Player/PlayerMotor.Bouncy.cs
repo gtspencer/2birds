@@ -39,6 +39,7 @@ namespace TwoBirds
             if (Suspended) SynchronizeBouncy();
         }
         internal void ClearBouncy() { bounce = default; bounceDoses.Clear(); }
+        internal void ResumeBouncy() => SynchronizeBouncy();
         private void SynchronizeBouncy()
         {
             foreach (var dose in bounceDoses)
@@ -53,6 +54,7 @@ namespace TwoBirds
         }
         private bool StepBouncy(bool grounded, bool jump)
         {
+            if (health.IsDowned) return false;
             uint simulationTick = PredictionManager.IsReconciling ? PredictionManager.ServerReplayTick : TimeManager.Tick;
             foreach (var dose in bounceDoses)
             {

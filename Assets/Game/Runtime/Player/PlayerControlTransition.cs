@@ -10,6 +10,7 @@ namespace TwoBirds
         public Vector3 Position, Velocity, Ejection;
         public Quaternion Rotation;
         public bool PlacementPending, ContextOnly, CarryPlacement;
+        public bool LifePlacement, CrashDamage;
         public ItemActionSnapshot ItemAction;
         public CarryRole Role;
         public int Partner;

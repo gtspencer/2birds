@@ -46,6 +46,7 @@ namespace TwoBirds
             Add("Drop", "Drop");
             Add("Inventory", "Inventory");
             Add("Jump", "Jump / Handbrake");
+            Add("GiveUp", "Give Up");
             Add("ExitVehicle", "Exit Vehicle");
             Add("Lights", "Lights");
             Add("Horn", "Horn");

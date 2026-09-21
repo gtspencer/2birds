@@ -119,6 +119,13 @@ namespace TwoBirds
                 throw new InvalidOperationException("Avatar prefab is missing required runtime components.");
             foreach (var bone in RequiredBones)
                 if (!animator.GetBoneTransform(bone)) throw new InvalidOperationException($"Missing required Humanoid mapping: {bone}.");
+            if (!firstPerson)
+            {
+                var ragdoll = root.GetComponent<AvatarRagdoll>();
+                if (!ragdoll || !ragdoll.Pelvis || ragdoll.Bodies == null || ragdoll.Bodies.Length < 11 ||
+                    ragdoll.Colliders.Length != ragdoll.Bodies.Length || ragdoll.Joints.Length != ragdoll.Bodies.Length - 1)
+                    throw new InvalidOperationException("Avatar ragdoll is missing; Process Avatar again.");
+            }
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
             {
                 Mesh mesh = renderer is SkinnedMeshRenderer skin ? skin.sharedMesh : renderer.GetComponent<MeshFilter>()?.sharedMesh;

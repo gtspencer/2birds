@@ -55,7 +55,7 @@ namespace TwoBirds
         public PlayerEquipment Equipment { get; private set; }
         public PlayerItemHitbox Hitbox { get; private set; }
         public int Count => SlotCount;
-        public bool CanAct => (!carry || !carry.IsCarried) && (!seating || !seating.PlacementPending && !seating.AwaitingReference);
+        public bool CanAct => networkState.CanGameplayActions && (!carry || !carry.IsCarried) && (!seating || !seating.PlacementPending && !seating.AwaitingReference);
         public bool CanCraft => CanEquip && (!carry || carry.Role == CarryRole.Free) && (!seating || !seating.TransitionPending);
         public bool CanEquip => CanAct && (!seating || seating.CanEquip);
         public sbyte SelectedSlot => !CanEquip ? (sbyte)-1 : IsServerInitialized && !IsOwner ? serverSelection : viewSelection;
@@ -416,7 +416,6 @@ namespace TwoBirds
             foreach (var stack in (ItemStack[])viewSlots.Clone())
                 if (!stack.IsEmpty) foreach (uint id in stack.WorldIds)
                     if (registry.TryGetRecord(id, out var record) && record.State == WorldItemState.Removed) RemoveId(viewSlots, id);
-            if (!CanEquip) viewSelection = -1;
             RefreshHeldPresentation();
             InventoryChanged?.Invoke();
         }
@@ -445,28 +444,10 @@ namespace TwoBirds
             registry.RefreshHolders();
         }
 
-        internal void ApplySeatPermissions()
-        {
-            Equipment.CancelUse();
-            confirmedSelection = viewSelection = -1;
-            if (IsServerInitialized)
-            {
-                serverSelection = -1;
-                serverRevision++;
-                registry.UpdateEquipment(this, 0);
-                ReplyInventory(true, 0);
-            }
-            foreach (var request in pending)
-                if (request.Kind == InventoryOperation.Release && request.ControlRevision != motor.ControlRevision)
-                    foreach (uint id in request.Ids) registry.Rollback(id, request.Operation);
-            RebuildView();
-            registry.RefreshHolders();
-        }
-
         internal void RefreshHeldPresentation()
         {
             if (!IsOwner) return;
-            uint equipped = EquippedId(viewSlots, viewSelection);
+            uint equipped = CanEquip ? EquippedId(viewSlots, viewSelection) : 0;
             foreach (var stack in viewSlots)
             {
                 if (stack.IsEmpty) continue;

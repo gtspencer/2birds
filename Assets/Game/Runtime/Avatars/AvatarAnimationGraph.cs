@@ -20,6 +20,12 @@ namespace TwoBirds
 
         internal AvatarAnimationState() => Weights[(int)AvatarPose.Locomotion] = 1f;
         internal void Seed(float seed) { Phase = seed; IdleTime = seed; }
+        internal void Snap(in AvatarPresentationInput input, float yaw, AvatarSettings settings, AvatarAnimationSet clips)
+        {
+            initialized = false;
+            duration = transition = Speed = Motion = Run = 0f;
+            Advance(input, yaw, settings, clips, 0f);
+        }
         internal void Advance(in AvatarPresentationInput input, float bodyYaw, AvatarSettings settings,
             AvatarAnimationSet clips, float dt)
         {

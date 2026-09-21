@@ -1,0 +1,5 @@
+- make knockback when failed brewing larger and more pronounced.
+- when 3 items are added, auto brew (don't require brew input)
+- rotate and bounce the brewed potion above the cauldron
+- if holding an item, still show the brew/dispose tooltips (still allow brewing/disposing while an item is equipped)
+- change health potions so they're instantaneous (i.e. they act more like the bounce potion and instantly apply health instead of creating the health zone -- leave the 'add health' logic as a todo)
