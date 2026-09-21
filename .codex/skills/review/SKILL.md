@@ -32,4 +32,4 @@ For each issue include:
 
 If there are no meaningful issues, say so.
 
-Write your findings to a doc named `{Feature_Name}_Review.md`
+Write your findings to a doc named `{Feature_Name}_Review.md` at the root of the project
