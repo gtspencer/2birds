@@ -33,6 +33,7 @@ namespace TwoBirds
         public GolfCartNetwork Cart { get; private set; }
         public int SeatIndex { get; private set; } = -1;
         public uint Revision { get; private set; }
+        internal uint EffectReset => inventory.Effects.Reset;
         public bool Seated => Cart != null && SeatIndex >= 0;
         public bool IsDriver => Seated && SeatIndex == 0;
         public bool PlacementPending { get; private set; }
@@ -82,6 +83,7 @@ namespace TwoBirds
             state.Cart = Cart ? Cart.ObjectId : -1;
             state.Seat = (sbyte)SeatIndex;
             state.Generation = Motor.ImpactGeneration;
+            state.EffectReset = EffectReset;
             state.Position = Motor.Body.position;
             state.Rotation = Motor.Body.rotation;
             state.Velocity = Motor.Suspended ? Vector3.zero : Motor.Body.linearVelocity;
@@ -199,6 +201,7 @@ namespace TwoBirds
                 state.Seat < 0 && !state.PlacementPending ? new Pose(presentation.Graphics.position, presentation.Graphics.rotation) : null;
             exitCart = Cart;
             inventory.Effects.ResetEffects(state.EffectReset);
+            state.EffectReset = EffectReset;
             current = state;
             Revision = state.Revision;
             SeatIndex = state.Seat;
@@ -239,7 +242,7 @@ namespace TwoBirds
         internal void ResetToSpawn()
         {
             var state = CaptureCurrent();
-            state.EffectReset++;
+            state.EffectReset = EffectReset + 1;
             state.Role = CarryRole.Free;
             state.Partner = -1;
             state.ControlRevision++;

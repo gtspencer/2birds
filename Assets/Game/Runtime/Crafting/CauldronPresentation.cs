@@ -109,9 +109,18 @@ namespace TwoBirds
                 if (arrival.Visual) Destroy(arrival.Visual);
             }
             if (state.Output == 0 || !Registry.TryGetItem(state.Output, out var item)) return;
-            float rise = state.Phase == CauldronPhase.Ready ? 1f : Mathf.Clamp01(((long)Registry.ServerTick - state.StartTick) * (float)Registry.TickDelta / cauldron.RiseSeconds);
-            item.PresentOutput(new Pose(Vector3.Lerp(cauldron.IntakeAnchor.position, cauldron.OutputAnchor.position, rise),
-                cauldron.OutputAnchor.rotation), state.Phase == CauldronPhase.Ready);
+            float elapsed = Mathf.Max(0f, (float)(((long)Registry.ServerTick - state.StartTick +
+                cauldron.TimeManager.GetTickPercentAsDouble()) * Registry.TickDelta));
+            bool available = state.Phase == CauldronPhase.Ready;
+            float rise = available ? 1f : Mathf.Clamp01(elapsed / cauldron.RiseSeconds);
+            Vector3 position = Vector3.Lerp(cauldron.IntakeAnchor.position, cauldron.OutputAnchor.position, rise);
+            Quaternion rotation = cauldron.OutputAnchor.rotation;
+            if (available)
+            {
+                position += Vector3.up * (Mathf.Sin(elapsed * Mathf.PI * 2f) * 0.12f);
+                rotation *= Quaternion.Euler(0f, elapsed * 90f, 0f);
+            }
+            item.PresentOutput(new Pose(position, rotation), available);
         }
         private void OnDestroy()
         {

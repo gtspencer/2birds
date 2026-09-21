@@ -160,12 +160,18 @@ namespace TwoBirds
             if (!IsHost) return;
             cauldronSteps.Clear();
             foreach (var pair in mixtures)
-                if ((pair.Value.Phase is CauldronPhase.Brewing or CauldronPhase.Rising or CauldronPhase.Failed or CauldronPhase.Disposing) &&
+                if ((pair.Value.Phase is CauldronPhase.Brewing or CauldronPhase.Rising or CauldronPhase.Failed or CauldronPhase.Disposing ||
+                    pair.Value.Phase == CauldronPhase.Occupied && pair.Value.Ingredients.Count == 3) &&
                     ServerTick >= pair.Value.Deadline) cauldronSteps.Add(pair.Key);
             foreach (int id in cauldronSteps)
             {
                 if (!cauldrons.TryGetValue(id, out var cauldron)) continue;
                 var state = mixtures[id];
+                if (state.Phase == CauldronPhase.Occupied)
+                {
+                    ResolveMixture(id, state.Revision, false);
+                    continue;
+                }
                 state.Revision++;
                 state.StartTick = ServerTick;
                 var transition = new CraftingTransition { HasCauldron = true };

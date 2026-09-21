@@ -20,7 +20,7 @@ namespace TwoBirds
     {
         public CarryTransitionKind Kind;
         public int Carrier, Carried;
-        public uint CarrierRevision, CarriedRevision, Generation;
+        public uint CarrierRevision, CarriedRevision, Generation, CarrierEffectReset, CarriedEffectReset;
         public PlayerRelease Release;
         public float Immunity;
     }
@@ -125,6 +125,7 @@ namespace TwoBirds
             {
                 Kind = CarryTransitionKind.Pickup, Carrier = ObjectId, Carried = targetId,
                 CarrierRevision = motor.ControlRevision + 1, CarriedRevision = target.motor.ControlRevision + 1,
+                CarrierEffectReset = seating.EffectReset, CarriedEffectReset = target.seating.EffectReset,
                 Generation = target.motor.ImpactGeneration + 1
             };
             Commit(transition);
@@ -219,6 +220,7 @@ namespace TwoBirds
             {
                 Kind = CarryTransitionKind.Release, Carrier = ObjectId, Carried = partner,
                 CarrierRevision = motor.ControlRevision + 1, CarriedRevision = Partner.motor.ControlRevision + 1,
+                CarrierEffectReset = seating.EffectReset, CarriedEffectReset = Partner.seating.EffectReset,
                 Generation = Partner.motor.ImpactGeneration + 1, Release = release, Immunity = settings.CarryImmunityDuration
             });
             Complete(request, CarryRequestResult.Completed);
@@ -228,17 +230,20 @@ namespace TwoBirds
         {
             ApplyTransition(transition);
             if (transition.Kind == CarryTransitionKind.Pickup)
-                ObserversPickup(transition.Carrier, transition.Carried, transition.CarrierRevision, transition.CarriedRevision, transition.Generation);
+                ObserversPickup(transition.Carrier, transition.Carried, transition.CarrierRevision, transition.CarriedRevision,
+                    transition.Generation, transition.CarrierEffectReset, transition.CarriedEffectReset);
             else ObserversRelease(transition);
         }
 
         [ObserversRpc]
-        private void ObserversPickup(int carrier, int carried, uint carrierRevision, uint carriedRevision, uint generation)
+        private void ObserversPickup(int carrier, int carried, uint carrierRevision, uint carriedRevision, uint generation,
+            uint carrierEffectReset, uint carriedEffectReset)
         {
             if (!IsServerInitialized) ApplyTransition(new CarryTransition
             {
                 Kind = CarryTransitionKind.Pickup, Carrier = carrier, Carried = carried,
-                CarrierRevision = carrierRevision, CarriedRevision = carriedRevision, Generation = generation
+                CarrierRevision = carrierRevision, CarriedRevision = carriedRevision, Generation = generation,
+                CarrierEffectReset = carrierEffectReset, CarriedEffectReset = carriedEffectReset
             });
         }
 
@@ -254,6 +259,7 @@ namespace TwoBirds
             var carrier = new PlayerControlTransition
             {
                 Player = transition.Carrier, Cart = -1, Seat = -1, ControlRevision = transition.CarrierRevision,
+                EffectReset = transition.CarrierEffectReset,
                 ContextOnly = true, Role = pickup ? CarryRole.Carrying : CarryRole.Free,
                 Partner = transition.Carried, Rotation = Quaternion.identity
             };
@@ -269,6 +275,7 @@ namespace TwoBirds
             var carried = new PlayerControlTransition
             {
                 Player = transition.Carried, Cart = -1, Seat = -1, ControlRevision = transition.CarriedRevision,
+                EffectReset = transition.CarriedEffectReset,
                 Generation = transition.Generation, Role = pickup ? CarryRole.Carried : CarryRole.Free,
                 Partner = transition.Carrier, Position = transition.Release.Position,
                 Rotation = Quaternion.Euler(0f, transition.Release.Yaw, 0f), Velocity = transition.Release.Velocity,

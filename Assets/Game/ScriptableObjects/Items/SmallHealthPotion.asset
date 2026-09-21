@@ -59,7 +59,7 @@ MonoBehaviour:
   OverrideSleepThreshold: 0
   SleepThreshold: 0.005
   Effect: 0
-  Application: 1
+  Application: 0
   Radius: 3
   ZoneLifetime: 8
   BuffDuration: 10

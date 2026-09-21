@@ -11,7 +11,7 @@ namespace TwoBirds
     public struct CartOccupant
     {
         public int Player;
-        public uint Revision, ControlRevision, Generation;
+        public uint Revision, ControlRevision, Generation, EffectReset;
     }
 
     [RequireComponent(typeof(GolfCartController))]
@@ -256,19 +256,22 @@ namespace TwoBirds
                 }
                 else transition = new PlayerControlTransition { Player = player.ObjectId, Cart = ObjectId, Seat = (sbyte)change.Seat,
                     Revision = player.Revision + 1, ControlRevision = player.Motor.ControlRevision + 1,
+                    EffectReset = player.EffectReset,
                     Immunity = player.Carry ? player.Carry.RemainingImmunity : 0f, Generation = player.Motor.ImpactGeneration + 1 };
                 if (player.Cart == this) occupants[player.SeatIndex] = new CartOccupant { Player = -1 };
                 if (change.Seat >= 0) occupants[change.Seat] = new CartOccupant { Player = player.ObjectId,
-                    Revision = transition.Revision, ControlRevision = transition.ControlRevision, Generation = transition.Generation };
+                    Revision = transition.Revision, ControlRevision = transition.ControlRevision, Generation = transition.Generation,
+                    EffectReset = transition.EffectReset };
                 transitions.Add(transition);
                 if (change.Partner)
                 {
                     var partner = change.Partner;
                     var paired = new PlayerControlTransition { Player = partner.ObjectId, Cart = ObjectId, Seat = (sbyte)change.PartnerSeat,
                         Revision = partner.Revision + 1, ControlRevision = partner.Motor.ControlRevision + 1,
+                        EffectReset = partner.EffectReset,
                         Generation = partner.Motor.ImpactGeneration + 1, Immunity = partner.Carry ? partner.Carry.RemainingImmunity : 0f };
                     occupants[change.PartnerSeat] = new CartOccupant { Player = partner.ObjectId, Revision = paired.Revision,
-                        ControlRevision = paired.ControlRevision, Generation = paired.Generation };
+                        ControlRevision = paired.ControlRevision, Generation = paired.Generation, EffectReset = paired.EffectReset };
                     transitions.Add(paired);
                     partner.ServerRequestPending = false;
                 }
@@ -297,6 +300,7 @@ namespace TwoBirds
             Vector3 outward = Vector3.ProjectOnPlane(riderPosition - center, Vector3.up).normalized;
             return new PlayerControlTransition { Player = player.ObjectId, Cart = ObjectId, Seat = -1,
                 Revision = player.Revision + 1, ControlRevision = player.Motor.ControlRevision + 1,
+                EffectReset = player.EffectReset,
                     Immunity = player.Carry ? player.Carry.RemainingImmunity : 0f, Generation = player.Motor.ImpactGeneration + 1,
                 Position = position, Rotation = Quaternion.Euler(0f, controller.Heading, 0f), Velocity = velocity,
                 Ejection = forced ? outward * controller.Settings.EjectionSpeed + Vector3.up * controller.Settings.EjectionLift : Vector3.zero,
@@ -332,7 +336,8 @@ namespace TwoBirds
                 if (occupants[i].Player >= 0) PlayerSeating.Receive(new PlayerControlTransition
                 {
                     Player = occupants[i].Player, Cart = ObjectId, Seat = (sbyte)i,
-                    Revision = occupants[i].Revision, ControlRevision = occupants[i].ControlRevision, Generation = occupants[i].Generation
+                    Revision = occupants[i].Revision, ControlRevision = occupants[i].ControlRevision, Generation = occupants[i].Generation,
+                    EffectReset = occupants[i].EffectReset
                 }, false);
         }
 

@@ -8,7 +8,7 @@ namespace TwoBirds
         public CraftingRecipeBook Recipes;
         public Transform IntakeAnchor, CurveAnchor, OutputAnchor, BlastAnchor;
         [Min(0.01f)] public float InsertionSeconds = 0.6f, BrewSeconds = 1.5f, RiseSeconds = 0.5f, ResultSeconds = 0.5f;
-        [Min(0f)] public float BlastRadius = 3f, BlastDamage = 25f, BlastOutward = 6f, BlastUpward = 3f;
+        [Min(0f)] public float BlastRadius = 3f, BlastDamage = 25f, BlastOutward = 14f, BlastUpward = 8f;
         public CauldronRecord State { get; private set; }
         public CauldronPresentation Presentation { get; private set; }
         private WorldItemRegistry registry;

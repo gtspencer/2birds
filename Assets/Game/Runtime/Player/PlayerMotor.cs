@@ -258,7 +258,7 @@ namespace TwoBirds
 
         private void BeginGeneration(uint generation)
         {
-            ClearBouncy();
+            bounce.Sequence = bounce.TookOff = false;
             ClearImpacts();
             impactGeneration = generation;
             generationOwner = OwnerId;

@@ -548,8 +548,8 @@ MonoBehaviour:
   ResultSeconds: 0.5
   BlastRadius: 3
   BlastDamage: 25
-  BlastOutward: 6
-  BlastUpward: 3
+  BlastOutward: 14
+  BlastUpward: 8
 --- !u!114 &2853315592232691299
 MonoBehaviour:
   m_ObjectHideFlags: 0
