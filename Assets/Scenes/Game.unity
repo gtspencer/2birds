@@ -7944,6 +7944,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.HudController
   itemRegistry: {fileID: 11400000, guid: f1a2b3c4d5e6f7080912345678abcdef, type: 2}
+  hitEdgeOpacity: 0.35
+  persistentEdgeOpacity: 0.15
+  damageFadeDuration: 2
+  lowHealthFraction: 0.25
 --- !u!114 &2000000003
 MonoBehaviour:
   m_ObjectHideFlags: 0
