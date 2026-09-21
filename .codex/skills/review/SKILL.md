@@ -5,13 +5,12 @@ description: Thoroughly review the current implementation for correctness, regre
 
 # Review
 
-Review the working changes.
+Review the changes presented.
 
 ## Process
 
 1. Understand the intended behavior.
 2. Inspect the relevant implementation.
-3. Inspect the git diff.
 4. Look for:
    - correctness problems
    - regressions
@@ -33,4 +32,4 @@ For each issue include:
 
 If there are no meaningful issues, say so.
 
-Write your findings to a doc named `{Feature_Name}_Implementation_Review.md`
+Write your findings to a doc named `{Feature_Name}_Review.md`
