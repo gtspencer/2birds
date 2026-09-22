@@ -3,6 +3,8 @@ using UnityEngine.Serialization;
 
 namespace TwoBirds
 {
+    public enum ItemHoldMode { Hand = 0, Heavy = 1 }
+
     public struct ItemStack
     {
         public byte ItemId;
@@ -44,6 +46,7 @@ namespace TwoBirds
         [Min(0.01f)] public float ThrowChargeTime = 1f;
 
         [Header("Held Item Grip")]
+        public ItemHoldMode HoldMode;
         [Tooltip("Item origin in metres along the palm axes: right, out of palm, toward fingers.")] public Vector3 GripPosition;
         [Tooltip("Item rotation in degrees relative to the palm. Recompute the held offset after changing this.")] public Vector3 GripEuler;
 
@@ -57,6 +60,7 @@ namespace TwoBirds
         [Header("Player Impacts")]
         [Tooltip("When true, the item bounces off players without shoving them.")]
         public bool DontPushPlayer;
+        public bool UseSharedImpactThreshold;
         [Tooltip("Minimum incoming contact speed (m/s) that shoves a player.")]
         [Min(0f)] public float MinimumImpactSpeed = 1f;
         [Tooltip("Scales the shove received by a player. Requires a non-trigger sphere collider. Zero disables shove and recovery.")]
@@ -87,6 +91,8 @@ namespace TwoBirds
         [Min(0f)] public float MaxSpeed = 50f;
         [Tooltip("When true, uses the per-item SleepThreshold instead of the global Physics.sleepThreshold.")]
         public bool OverrideSleepThreshold;
+        public bool CollideWhileSleeping;
+        public bool SimulateOnReleasingClient;
         [Tooltip("Energy below which the rigidbody sleeps (only when OverrideSleepThreshold is on). Lower = simulates longer before resting.")]
         [Min(0f)] public float SleepThreshold = 0.005f;
 

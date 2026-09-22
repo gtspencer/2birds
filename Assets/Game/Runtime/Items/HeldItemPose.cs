@@ -24,6 +24,15 @@ namespace TwoBirds
             ChargePoseDuration = 0.35f, FollowReachFraction = 0.85f,
             MaximumFollowDuration = 0.20f, ReturnBlendDuration = 0.20f
         };
+
+        public static HeldItemPoseSettings HeavyDefault => new()
+        {
+            HoldPosition = new(0f, -0.40f, 0.50f),
+            ChargeControlPosition = new(0f, 0.10f, 0.70f),
+            ChargedPosition = new(0f, 0.60f, 0.25f),
+            ChargePoseDuration = 0.35f, FollowReachFraction = 0.85f,
+            MaximumFollowDuration = 0.20f, ReturnBlendDuration = 0.20f
+        };
     }
 
     [Serializable]
@@ -49,16 +58,27 @@ namespace TwoBirds
         internal readonly Vector3 FollowPosition, WristPosition;
         internal readonly Quaternion WristRotation, FollowRotation;
         internal readonly Pose Item;
+        internal readonly Pose LeftPalm;
+        internal readonly bool Heavy;
 
         internal HeldItemPose(Vector3 follow, Quaternion wrist, AvatarSettings avatar, in HeldItemPoseData item)
             : this(follow, wrist, avatar.Generated, avatar.Scale, item) { }
         internal HeldItemPose(Vector3 follow, Quaternion wrist, AvatarSettings.GeneratedSkeleton data, float scale, in HeldItemPoseData item)
         {
+            LeftPalm = default; Heavy = false;
             FollowPosition = follow;
             WristRotation = wrist;
             WristPosition = follow - wrist * (data.RightWristToPalmPosition * scale);
             FollowRotation = wrist * data.RightWristToPalmRotation;
             Item = new Pose(follow + FollowRotation * item.GripPosition, FollowRotation * item.GripRotation);
+        }
+
+        internal HeldItemPose(Pose root, Pose left, Pose right, in HeldItemBodyFrame body, bool heavy = true)
+        {
+            Item = root; LeftPalm = left; Heavy = heavy;
+            FollowPosition = right.position; FollowRotation = right.rotation;
+            WristRotation = right.rotation * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation);
+            WristPosition = right.position - WristRotation * (body.Measurements.RightWristToPalmPosition * body.Scale);
         }
     }
 
@@ -69,12 +89,24 @@ namespace TwoBirds
         internal readonly SlingshotChargePoseSettings SlingshotCharge;
         internal readonly Vector3 GripPosition;
         internal readonly Quaternion GripRotation, HoldRotation, ChargedRotation;
+        internal readonly ItemHoldMode HoldMode;
+        internal readonly Quaternion PrefabRotation;
+        internal readonly HeavyItemGrips Grips;
+        internal readonly ItemReleaseSphere Sphere;
+        internal bool Heavy => HoldMode == ItemHoldMode.Heavy;
         private readonly bool firstPerson;
-        internal HeldItemPoseData(ItemDefinition definition, HeldItemSettings defaults, bool firstPerson = false)
+        internal HeldItemPoseData(ItemDefinition definition, HeldItemSettings defaults, bool firstPerson = false, WorldItem worldItem = null)
         {
             this.firstPerson = firstPerson;
-            Settings = definition.OverrideHoldSettings ? definition.HandPose : defaults.HoldSettings;
-            Spatial = firstPerson ? definition.OverrideFirstPersonPose ? definition.FirstPersonPose : defaults.FirstPersonPose :
+            HoldMode = definition.HoldMode;
+            bool heavy = definition.HoldMode == ItemHoldMode.Heavy;
+            PrefabRotation = definition.WorldPrefab.transform.localRotation;
+            var geometry = worldItem ? worldItem : definition.WorldPrefab.GetComponent<WorldItem>();
+            if (geometry) geometry.CacheReleaseGeometry();
+            Grips = geometry ? geometry.HeavyGrips : default;
+            Sphere = geometry ? geometry.ReleaseSphere : default;
+            Settings = definition.OverrideHoldSettings ? definition.HandPose : heavy ? defaults.HeavyHoldSettings : defaults.HoldSettings;
+            Spatial = firstPerson && (!heavy || definition.OverrideFirstPersonPose) ? definition.OverrideFirstPersonPose ? definition.FirstPersonPose : defaults.FirstPersonPose :
                 HeldItemSpatialSettings.From(Settings);
             GripPosition = definition.GripPosition;
             GripRotation = Quaternion.Euler(definition.GripEuler);
@@ -85,41 +117,119 @@ namespace TwoBirds
         }
         internal float Reach => Mathf.Clamp(Settings.FollowReachFraction, 0.01f, 0.85f);
         internal Vector3 HoldPosition(AvatarSettings avatar) => Spatial.HoldPosition +
-            (firstPerson && avatar ? avatar.FirstPersonHoldOffset : Vector3.zero);
+            (firstPerson && !Heavy && avatar ? avatar.FirstPersonHoldOffset : Vector3.zero);
     }
 
     internal readonly struct HeldItemBodyFrame
     {
         internal readonly Vector3 Shoulder;
+        private readonly Vector3 leftShoulder;
         internal readonly Quaternion Rotation;
         internal readonly float ArmLength, Scale;
         internal readonly AvatarSettings.GeneratedSkeleton Measurements;
-        internal HeldItemBodyFrame(Vector3 shoulder, Quaternion rotation, AvatarSettings.GeneratedSkeleton measurements, float scale)
+        private readonly Vector3 poseCenter;
+        private readonly float poseArmLength;
+        internal HeldItemBodyFrame(Vector3 shoulder, Quaternion rotation, AvatarSettings.GeneratedSkeleton measurements, float scale,
+            Vector3? referenceCenter = null, float referenceArmLength = 0f, Vector3? leftShoulder = null)
         {
             Shoulder = shoulder; Rotation = rotation; Measurements = measurements; Scale = scale;
+            this.leftShoulder = leftShoulder ?? shoulder + rotation * ((measurements.LeftShoulder - measurements.RightShoulder) * scale);
             ArmLength = (measurements.RightArm.x + measurements.RightArm.y) * scale;
+            poseCenter = referenceCenter ?? shoulder + rotation * ((measurements.LeftShoulder - measurements.RightShoulder) * (scale * 0.5f));
+            poseArmLength = referenceArmLength > 0f ? referenceArmLength :
+                (ArmLength + (measurements.LeftArm.x + measurements.LeftArm.y) * scale) * 0.5f;
         }
-        internal HeldItemBodyFrame(AvatarSettings settings, AvatarRegistry registry, in AvatarPresentationInput input, Quaternion torso, float seatedWeight)
+        internal HeldItemBodyFrame(AvatarSettings settings, AvatarRegistry registry, in AvatarPresentationInput input, Quaternion torso, float seatedWeight, bool heavy = false)
         {
             float scale = settings.Scale;
             Scale = scale; Measurements = settings.Generated;
             Rotation = torso * Quaternion.Euler(0f, settings.YawOffset, 0f);
             ArmLength = (settings.Generated.RightArm.x + settings.Generated.RightArm.y) * scale;
             Vector3 standing = input.SolePosition + torso * (settings.StandingOffset + (input.Carried ? settings.CarriedOffset : Vector3.zero))
-                + Rotation * (settings.Generated.RightShoulder * scale);
+                + Rotation * ((settings.Generated.RightShoulder - Vector3.up * (heavy ? settings.Generated.SolePlane : 0f)) * scale);
             Vector3 seated = input.Facing.position + input.Facing.rotation *
                 AvatarDriverPose.SeatedOffset(settings, registry, input.Seated && input.Driver)
                 + Rotation * ((settings.Generated.RightShoulder - settings.Generated.Hips) * scale);
             Shoulder = Vector3.Lerp(standing, seated, seatedWeight);
+            leftShoulder = Shoulder + Rotation * ((Measurements.LeftShoulder - Measurements.RightShoulder) * scale);
+            poseCenter = Shoulder + Rotation * ((Measurements.LeftShoulder - Measurements.RightShoulder) * (scale * 0.5f));
+            poseArmLength = (ArmLength + (Measurements.LeftArm.x + Measurements.LeftArm.y) * scale) * 0.5f;
         }
         internal Vector3 ToWorld(Vector3 position) => Shoulder + Rotation * (position * ArmLength);
         internal Vector3 ToLocal(Vector3 position) => Quaternion.Inverse(Rotation) * (position - Shoulder) / ArmLength;
+        internal Vector3 LeftShoulder => leftShoulder;
+        internal Vector3 Center => (Shoulder + LeftShoulder) * 0.5f;
+        internal float LeftArmLength => (Measurements.LeftArm.x + Measurements.LeftArm.y) * Scale;
+        internal Vector3 CenterToWorld(Vector3 position) => poseCenter + Rotation * (position * poseArmLength);
+        internal Vector3 CenterToLocal(Vector3 position) => Quaternion.Inverse(Rotation) * (position - poseCenter) / poseArmLength;
+        internal HeldItemBodyFrame WithMeasurements(AvatarSettings.GeneratedSkeleton measurements, float scale) =>
+            new(Center + Rotation * ((measurements.RightShoulder - measurements.LeftShoulder) * (scale * 0.5f)), Rotation, measurements, scale,
+                poseCenter, poseArmLength);
+        internal HeldItemBodyFrame WithReference(in HeldItemBodyFrame reference) =>
+            new(Shoulder, Rotation, Measurements, Scale, reference.poseCenter, reference.poseArmLength, LeftShoulder);
+    }
+
+    internal readonly struct HeavyItemGrips
+    {
+        internal readonly Pose Left, Right;
+        internal readonly bool Valid;
+        internal HeavyItemGrips(Transform root, Transform left, Transform right, Vector3 scale)
+        {
+            Valid = left && right;
+            Left = Read(root, left, scale); Right = Read(root, right, scale);
+        }
+        private static Pose Read(Transform root, Transform grip, Vector3 scale) => grip
+            ? new Pose(Vector3.Scale(root.InverseTransformPoint(grip.position), scale), Quaternion.Inverse(root.rotation) * grip.rotation)
+            : new Pose(Vector3.zero, Quaternion.identity);
+    }
+
+    internal static class HeavyItemPoseCalculation
+    {
+        internal static HeldItemPose FromItem(Pose root, in HeldItemBodyFrame body, in HeldItemPoseData data) =>
+            new(root, Palm(root, data.Grips.Left), Palm(root, data.Grips.Right), body);
+
+        private static Pose Palm(Pose root, Pose grip) => new(root.position + root.rotation * grip.position, root.rotation * grip.rotation);
+
+        internal static ItemReleaseReach Reach(Pose root, in HeldItemBodyFrame body, in HeldItemPoseData data)
+        {
+            var pose = FromItem(root, body, data);
+            Quaternion leftWrist = pose.LeftPalm.rotation * Quaternion.Inverse(body.Measurements.LeftWristToPalmRotation);
+            Vector3 left = pose.LeftPalm.position - leftWrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
+            return new ItemReleaseReach(body.Shoulder + root.position - pose.WristPosition, body.ArmLength * data.Reach,
+                body.LeftShoulder + root.position - left, body.LeftArmLength * data.Reach, data.Grips.Valid);
+        }
+
+        internal static bool InReach(in HeldItemPose pose, in HeldItemBodyFrame body, float reach)
+        {
+            Quaternion leftWrist = pose.LeftPalm.rotation * Quaternion.Inverse(body.Measurements.LeftWristToPalmRotation);
+            Vector3 left = pose.LeftPalm.position - leftWrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
+            return Vector3.Distance(pose.WristPosition, body.Shoulder) <= body.ArmLength * reach &&
+                Vector3.Distance(left, body.LeftShoulder) <= body.LeftArmLength * reach;
+        }
+
+        internal static Pose Blend(Pose from, Pose to, float t) =>
+            new(Vector3.Lerp(from.position, to.position, t), Quaternion.Slerp(from.rotation, to.rotation, t));
+
+        internal static HeldItemPose Place(Vector3 center, Quaternion rotation, in HeldItemBodyFrame body, in HeldItemPoseData data)
+        {
+            Quaternion orientation = body.Rotation * rotation * data.PrefabRotation;
+            Pose root = new(body.CenterToWorld(center) - orientation * data.Sphere.Center, orientation);
+            var reach = Reach(root, body, data);
+            if (reach.TryProject(root.position, out var position)) root.position = position;
+            return FromItem(root, body, data);
+        }
+
+        internal static Pose ToLocal(Pose pose, in HeldItemBodyFrame body) =>
+            new(body.CenterToLocal(pose.position), Quaternion.Inverse(body.Rotation) * pose.rotation);
+        internal static Pose ToWorld(Pose pose, in HeldItemBodyFrame body) =>
+            new(body.CenterToWorld(pose.position), body.Rotation * pose.rotation);
     }
 
     internal static class HeldItemPoseCalculation
     {
         internal static HeldItemPose FromItem(Pose pose, in HeldItemBodyFrame body, in HeldItemPoseData item)
         {
+            if (item.Heavy) return HeavyItemPoseCalculation.FromItem(pose, body, item);
             Quaternion palm = pose.rotation * Quaternion.Inverse(item.GripRotation);
             return new HeldItemPose(pose.position - palm * item.GripPosition,
                 palm * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, item);
@@ -144,6 +254,7 @@ namespace TwoBirds
         }
 
         internal static HeldItemPose Hold(in HeldItemBodyFrame body, AvatarSettings avatar, in HeldItemPoseData item) =>
+            item.Heavy ? HeavyItemPoseCalculation.Place(item.HoldPosition(avatar), item.HoldRotation, body, item) :
             Resolve(body.ToWorld(item.HoldPosition(avatar)), body.Rotation * item.HoldRotation *
                 Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body, avatar, item, out _);
 
@@ -213,6 +324,8 @@ namespace TwoBirds
         {
             float t = LeanTween.easeOutBack(0f, 1f, Mathf.Clamp01(progress), 0.65f), v = 1f - t;
             Vector3 position = v * v * start + 2f * v * t * item.Spatial.ChargeControlPosition + t * t * item.Spatial.ChargedPosition;
+            if (item.Heavy) return HeavyItemPoseCalculation.Place(position,
+                Quaternion.SlerpUnclamped(rotation, item.ChargedRotation, t), body, item);
             Quaternion wrist = body.Rotation * Quaternion.SlerpUnclamped(rotation, item.ChargedRotation, t) *
                 Quaternion.Inverse(body.Measurements.RightWristToPalmRotation);
             return Resolve(body.ToWorld(position), wrist, body, avatar, item, out _);

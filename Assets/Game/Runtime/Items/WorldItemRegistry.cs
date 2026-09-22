@@ -25,6 +25,7 @@ namespace TwoBirds
         private readonly Dictionary<uint, ItemRecord> records = new();
         private readonly Dictionary<uint, ItemMotion> earlyMotion = new();
         private readonly Dictionary<uint, uint> pendingReleases = new();
+        private readonly HashSet<uint> pendingCartContacts = new();
         private readonly Dictionary<int, PlayerInventory> players = new();
         private readonly Dictionary<byte, RigidbodyInstancePool<WorldItem>> pools = new();
         private readonly RuntimeItemIds runtimeIds = new();
@@ -62,8 +63,8 @@ namespace TwoBirds
 
         internal HeldItemSettings HeldDefaults => itemRegistry.HeldItemDefaults;
 
-        internal HeldItemPoseData GetHeldPose(ItemDefinition definition, bool firstPerson = false) =>
-            new(definition, itemRegistry.HeldItemDefaults, firstPerson);
+        internal HeldItemPoseData GetHeldPose(ItemDefinition definition, bool firstPerson = false, uint worldId = 0) =>
+            new(definition, itemRegistry.HeldItemDefaults, firstPerson, items.GetValueOrDefault(worldId));
 
         private void NotifyPresentation(uint id, int previousHolder)
         {
@@ -96,6 +97,7 @@ namespace TwoBirds
             RegisterCraftingMessages();
             network.ServerManager.RegisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ServerManager.RegisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
+            network.ServerManager.RegisterBroadcast<ItemCartContact>(ReceiveCartContact);
             network.ClientManager.RegisterBroadcast<ItemBaselineStart>(BeginBaseline);
             network.ClientManager.RegisterBroadcast<ItemBaselineComplete>(CompleteBaseline);
             network.ClientManager.RegisterBroadcast<ItemLifecycleBatch>(ReceiveLifecycle);
@@ -218,6 +220,7 @@ namespace TwoBirds
                 uint id = record.Motion.Id;
                 if (records.TryGetValue(id, out var previous) && !Newer(record.Motion, previous.Motion)) continue;
                 records[id] = record;
+                pendingCartContacts.Remove(id);
                 if (record.State == WorldItemState.Held) ClearPredictedClouds(id);
                 if (record.State == WorldItemState.Removed)
                 {
@@ -483,6 +486,9 @@ namespace TwoBirds
             }
         }
 
+        private bool SimulateOnReleaser(ItemDefinition definition) => definition.SimulateOnReleasingClient ||
+            definition is PotionDefinition || BirdRegistry.Instance && BirdRegistry.Instance.IsRock(definition);
+
         internal void PredictRelease(uint id, uint operation, ItemMotion motion, PlayerInventory player, ItemReleaseIntent intent)
         {
             if (IsHost) return;
@@ -497,7 +503,7 @@ namespace TwoBirds
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             pendingReleases[id] = operation;
-            record.Simulator = (itemRegistry.Get(record.DefinitionId) is PotionDefinition || BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId)))
+            record.Simulator = SimulateOnReleaser(itemRegistry.Get(record.DefinitionId)) && player.Owner.IsActive
                 ? player.Owner.ClientId : -1;
             items[id].Initialize(this, itemRegistry.Get(record.DefinitionId), record, true);
             items[id].Launch(motion);
@@ -529,7 +535,7 @@ namespace TwoBirds
             record.Operation = operation;
             record.LaunchTick = ServerTick;
             record.BirdPlayer = BirdRegistry.Instance ? BirdRegistry.Instance.PlayerToken(releaser) : 0;
-            record.Simulator = (itemRegistry.Get(record.DefinitionId) is PotionDefinition || BirdRegistry.Instance && BirdRegistry.Instance.IsRock(itemRegistry.Get(record.DefinitionId))) &&
+            record.Simulator = SimulateOnReleaser(itemRegistry.Get(record.DefinitionId)) &&
                 players.TryGetValue(releaser, out var simulator) && simulator.Owner.IsActive ? simulator.Owner.ClientId : -1;
             records[id] = record;
             BirdRegistry.Instance?.AcceptRelease(record);
@@ -643,6 +649,7 @@ namespace TwoBirds
         {
             ClearPredictedClouds(id);
             pendingReleases.Remove(id);
+            pendingCartContacts.Remove(id);
             contacts.Remove(id);
             if (!items.Remove(id, out var item) || item == null) return;
             if (item.Definition == null)
@@ -680,6 +687,7 @@ namespace TwoBirds
             players.Clear();
             pendingReleases.Clear();
             earlyMotion.Clear();
+            pendingCartContacts.Clear();
             observers.Clear();
             motionBatch.Clear();
             lifecycleBatch.Clear();
@@ -698,6 +706,7 @@ namespace TwoBirds
             UnregisterCraftingMessages();
             network.ServerManager.UnregisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ServerManager.UnregisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
+            network.ServerManager.UnregisterBroadcast<ItemCartContact>(ReceiveCartContact);
             network.ClientManager.UnregisterBroadcast<ItemBaselineStart>(BeginBaseline);
             network.ClientManager.UnregisterBroadcast<ItemBaselineComplete>(CompleteBaseline);
             network.ClientManager.UnregisterBroadcast<ItemLifecycleBatch>(ReceiveLifecycle);

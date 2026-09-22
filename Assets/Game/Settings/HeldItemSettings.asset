@@ -29,3 +29,14 @@ MonoBehaviour:
     MaximumFollowDuration: 0.2
     EndPosePauseDuration: 0
     ReturnBlendDuration: 0.2
+  HeavyHoldSettings:
+    HoldPosition: {x: 0, y: -0.4, z: 0.5}
+    HoldWristEuler: {x: 0, y: 0, z: 0}
+    ChargeControlPosition: {x: 0, y: 0.1, z: 0.7}
+    ChargedPosition: {x: 0, y: 0.6, z: 0.25}
+    ChargedWristEuler: {x: 0, y: 0, z: 0}
+    ChargePoseDuration: 0.35
+    FollowReachFraction: 0.85
+    MaximumFollowDuration: 0.2
+    EndPosePauseDuration: 0
+    ReturnBlendDuration: 0.2

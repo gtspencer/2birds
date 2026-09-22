@@ -16,6 +16,7 @@ namespace TwoBirds
         private Transform[] parts;
         private WorldItemRegistry registry;
         private OfflineRigidbody offlineRigidbody;
+        private ItemCartPhysics cartPhysics;
         private Collider ignoredPlayer;
         private float ignoreUntil;
         private uint localLaunchTick;
@@ -53,6 +54,10 @@ namespace TwoBirds
         private float sphereRadius;
         internal float DropDiameter { get; private set; }
         internal float ReleaseRadius { get; private set; }
+        internal ItemReleaseSphere ReleaseSphere { get; private set; }
+        internal HeavyItemGrips HeavyGrips { get; private set; }
+        private Transform leftHandGrip, rightHandGrip;
+        private bool geometryCached;
         internal bool ReleaseAvailable => isActiveAndEnabled && Record.State == WorldItemState.World && !optimisticPickup && !RemovalPending;
         internal int PresentedHolder { get; private set; } = -1;
         private Vector3 incomingVelocity;
@@ -115,6 +120,19 @@ namespace TwoBirds
 
         public void Interact() => registry.LocalInventory?.Collect(this);
 
+        internal void CacheReleaseGeometry()
+        {
+            if (geometryCached) return;
+            geometryCached = true;
+            colliders ??= GetComponentsInChildren<Collider>(true);
+            Vector3 scale = Definition ? Definition.WorldPrefab.transform.localScale : transform.localScale;
+            ReleaseRadius = ItemReleaseClearance.EnvelopeRadius(transform, scale, colliders);
+            ReleaseSphere = ItemReleaseClearance.Sphere(transform, scale, colliders, ReleaseRadius);
+            leftHandGrip = transform.Find("LeftHandGrip"); rightHandGrip = transform.Find("RightHandGrip");
+            HeavyGrips = new HeavyItemGrips(transform, leftHandGrip, rightHandGrip, scale);
+            DropDiameter = Mathf.Max(DropDiameter, 2f * ReleaseRadius);
+        }
+
         internal void StartPickupCooldown()
         {
             if (Record.State != WorldItemState.World || registry.LocalInventory == null ||
@@ -149,7 +167,7 @@ namespace TwoBirds
             CancelUse();
         }
 
-        private void OnDisable() { InterruptUse(); CancelHandoff(); hasHeldPose = false; }
+        private void OnDisable() { InterruptUse(); CancelHandoff(); cartPhysics?.Stop(); hasHeldPose = false; }
 
         internal void Initialize(WorldItemRegistry owner, ItemDefinition definition, ItemRecord record, bool predicted)
         {
@@ -159,12 +177,12 @@ namespace TwoBirds
             registry = owner;
             playerContact ??= new ItemPlayerContact(owner, motionState, MotionSpherePosition, ReportImpact);
             Definition = definition;
+            if (definition.CollideWhileSleeping) cartPhysics ??= new ItemCartPhysics(this, owner);
             if (potionPresentation) potionPresentation.ApplyDefinition(definition);
             defaultScale = definition.WorldPrefab.transform.localScale;
             if (firstInitialization)
             {
-                ReleaseRadius = ItemReleaseClearance.EnvelopeRadius(transform, defaultScale, colliders);
-                DropDiameter = Mathf.Max(DropDiameter, 2f * ReleaseRadius);
+                CacheReleaseGeometry();
             }
             birdRegistry = BirdRegistry.Instance;
             birdRock = birdRegistry && birdRegistry.IsRock(definition);
@@ -190,7 +208,7 @@ namespace TwoBirds
                     Body.position = MotionBodyPosition(record.Motion, Body.rotation);
                     transform.position = Body.position;
                 }
-                if (!Simulating)
+                if (!Simulating && cartPhysics == null)
                 {
                     motionState.Count = 0;
                     AddSample(record.Motion);
@@ -218,6 +236,7 @@ namespace TwoBirds
             bool smoothCosmetic = CosmeticRotation && !newRelease &&
                 Record.State == WorldItemState.World && motionState.Count > 0;
             SetRecord(record);
+            if (cartPhysics != null && !registry.Simulates(record)) Predicted = false;
             for (int i = 0; i < colliders.Length; i++)
             {
                 colliders[i].includeLayers = record.State == WorldItemState.CauldronOutput ? (LayerMask)0 : colliderIncludes[i];
@@ -229,6 +248,7 @@ namespace TwoBirds
             optimisticPickup = false;
             if (record.State == WorldItemState.Held)
             {
+                cartPhysics?.Stop();
                 cosmeticSpin = Vector3.zero;
                 ClearVisualOffset();
                 ClearIgnore();
@@ -243,6 +263,7 @@ namespace TwoBirds
 
             if (record.State == WorldItemState.CauldronOutput)
             {
+                cartPhysics?.Stop();
                 Predicted = false;
                 StopBody(); ClearIgnore(); ClearVisualOffset();
                 PresentedHolder = -1;
@@ -256,13 +277,14 @@ namespace TwoBirds
             PresentedHolder = -1;
             transform.SetParent(null, true);
             transform.localScale = defaultScale;
-            offlineRigidbody.SetPredictionManager(registry.PredictionManager);
+            offlineRigidbody.SetPredictionManager(cartPhysics != null ? null : registry.PredictionManager);
+            cartPhysics?.Start();
             CacheImpactSphere();
             SetLayer(registry.WorldLayer);
             SetVisible(true);
             foreach (var collider in colliders) collider.enabled = collider != potionTrigger || record.Armed;
             Body.collisionDetectionMode = CollisionDetectionMode.Discrete;
-            Body.isKinematic = !Simulating || record.Sleeping && !registry.Simulates(record);
+            Body.isKinematic = cartPhysics == null && (!Simulating || record.Sleeping && !registry.Simulates(record));
             Body.collisionDetectionMode = Body.isKinematic ? CollisionDetectionMode.Discrete :
                 birdRock ? CollisionDetectionMode.ContinuousDynamic : Definition.CollisionDetection;
             if (!preserveMotion && (!activeSimulation || !wasPredicted || record.Sleeping || !Simulating))
@@ -271,7 +293,7 @@ namespace TwoBirds
             if (newRelease) { playerContact.Rebase = false; birdRebase = false; }
             if (!Body.isKinematic && record.Sleeping) Body.Sleep();
             if (record.Sleeping) Predicted = false;
-            if (!Simulating)
+            if (!Simulating && cartPhysics == null)
             {
                 motionState.Count = 0;
                 AddSample(record.Motion);
@@ -327,7 +349,7 @@ namespace TwoBirds
             if (record.State == WorldItemState.Removed) InterruptUse();
             Record = record;
             int sleepMask = playerHitboxMask | golfCartMask;
-            int excludedLayers = record.Sleeping
+            int excludedLayers = record.Sleeping && !Definition.CollideWhileSleeping
                 ? Body.excludeLayers.value | sleepMask
                 : Body.excludeLayers.value & ~sleepMask;
             if (Body.excludeLayers.value == excludedLayers) return;
@@ -339,6 +361,13 @@ namespace TwoBirds
             CorrectBody(motion, false);
             playerContact.Rebase = false;
             birdRebase = false;
+        }
+
+        internal void PredictCartContact(ItemRecord record)
+        {
+            Predicted = true;
+            record.Sleeping = false;
+            SetRecord(record);
         }
 
         internal void PresentHeld(PlayerInventory holder, bool equipped)
@@ -372,8 +401,8 @@ namespace TwoBirds
             var grip = equipment.HeldPresentation.Grip(Definition);
             Vector3 scale = parent.lossyScale;
             transform.localScale = new Vector3(defaultScale.x / scale.x, defaultScale.y / scale.y, defaultScale.z / scale.z);
-            transform.position = parent.position + parent.rotation * grip.GripPosition;
-            transform.localRotation = grip.GripRotation;
+            transform.position = grip.Heavy ? parent.position : parent.position + parent.rotation * grip.GripPosition;
+            transform.localRotation = grip.Heavy ? Quaternion.identity : grip.GripRotation;
             ClearVisualOffset();
         }
 
@@ -455,6 +484,12 @@ namespace TwoBirds
             }
             SetRecord(record);
             if (optimisticPickup) return;
+            if (cartPhysics != null)
+            {
+                CorrectBody(motion, true);
+                if (motion.Sleeping) Body.Sleep();
+                return;
+            }
             if (!Predicted)
             {
                 if (motion.Boundary)
@@ -522,7 +557,7 @@ namespace TwoBirds
             RemoveHandoffPose();
             if (registry == null || optimisticPickup || Record.State != WorldItemState.World) return;
             Vector3 presentedVelocity = Vector3.zero;
-            if (!Simulating && motionState.Count > 0)
+            if (!Simulating && cartPhysics == null && motionState.Count > 0)
             {
                 ItemMotion latest = motionState.Samples[motionState.Count - 1];
                 double tick = latest.Tick + (Time.unscaledTime - motionState.ReceivedAt - registry.InterpolationDelay) / registry.TickDelta;
@@ -702,6 +737,7 @@ namespace TwoBirds
 
         internal void BeforePhysics()
         {
+            cartPhysics?.BeforePhysics();
             BeforeBirdPhysics();
             UpdateIgnore();
             incomingSampled = ContactEligible && !Body.isKinematic && !Body.IsSleeping();
@@ -739,10 +775,13 @@ namespace TwoBirds
         private void ReportImpact(PlayerItemHitbox player, Vector3 rockVelocity, Vector3 playerVelocity, Vector3 intoPlayer)
         {
             float speed = Mathf.Max(0f, Vector3.Dot(rockVelocity - playerVelocity, intoPlayer));
-            bool shove = !Definition.DontPushPlayer && Definition.ImpulseMultiplier > 0f && speed >= Definition.MinimumImpactSpeed;
+            float incoming = Vector3.Dot(rockVelocity, intoPlayer);
+            bool qualifies = incoming >= Definition.MinimumImpactSpeed && speed >= Definition.MinimumImpactSpeed;
+            bool shove = !Definition.DontPushPlayer && Definition.ImpulseMultiplier > 0f &&
+                (Definition.UseSharedImpactThreshold ? qualifies : speed >= Definition.MinimumImpactSpeed);
             Vector3 velocityChange = shove ? intoPlayer * speed * Definition.ImpulseMultiplier : Vector3.zero;
             var tuning = player.Health.Settings;
-            if (Vector3.Dot(rockVelocity, intoPlayer) >= tuning.ItemDamageSpeed && speed >= tuning.ItemDamageSpeed)
+            if (Definition.UseSharedImpactThreshold ? qualifies : incoming >= tuning.ItemDamageSpeed && speed >= tuning.ItemDamageSpeed)
             {
                 playerContact.Damage(player, Definition.OverrideCollisionDamage ? Definition.CollisionDamage : tuning.ItemCollisionDamage, velocityChange);
             }
@@ -753,6 +792,8 @@ namespace TwoBirds
 
         private void OnCollisionEnter(Collision collision)
         {
+            if (registry && registry.Replaying) return;
+            cartPhysics?.Contact(collision);
             CancelHandoff();
             BirdContact(collision);
             PotionCollision(collision);

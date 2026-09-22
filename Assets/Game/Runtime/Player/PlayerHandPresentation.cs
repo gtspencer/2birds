@@ -147,7 +147,9 @@ namespace TwoBirds
             if (owner.IsOwner) return;
             Contacts(dt, binding.Settings);
             var body = new HeldItemBodyFrame(binding.GetBone(HumanBodyBones.RightUpperArm).position,
-                binding.Animator.transform.rotation, binding.Measurements, binding.Scale);
+                binding.Animator.transform.rotation, binding.Measurements, binding.Scale,
+                leftShoulder: binding.GetBone(HumanBodyBones.LeftUpperArm).position);
+            if (held.HeavyFrameWeight > 0f) body = body.WithReference(held.HeavyBody(binding.Settings));
             if (avatar.Binding != null && binding != avatar.Binding) held.PrepareCandidate(binding, body);
             else held.PrepareHands(binding, body);
         }
@@ -155,7 +157,7 @@ namespace TwoBirds
 
         internal bool TryBody(out HeldItemBodyFrame body)
         {
-            if (active) { body = active.BodyFrame; return true; }
+            if (active) { body = BodyFor(active); return true; }
             var settings = avatar.Resolved?.Settings;
             if (!settings) { body = default; return false; }
             var data = settings.FirstPersonGenerated.FormatVersion == AvatarSettings.CurrentFormatVersion ? settings.FirstPersonGenerated : settings.Generated;
@@ -163,8 +165,18 @@ namespace TwoBirds
             Vector3 shoulder = aim.position + aim.rotation * (avatar.Registry.FirstPerson.ShoulderOffset +
                 settings.FirstPersonPlacementOffset + Vector3.right * ((data.RightShoulder.x - data.LeftShoulder.x) * settings.Scale * 0.5f));
             body = new HeldItemBodyFrame(shoulder, aim.rotation, data, settings.Scale);
+            float heavy = held.HeavyFrameWeight;
+            if (heavy > 0f)
+            {
+                var frame = held.HeavyBody(settings).WithMeasurements(data, settings.Scale);
+                body = new HeldItemBodyFrame(Vector3.Lerp(body.Shoulder, frame.Shoulder, heavy),
+                    Quaternion.Slerp(body.Rotation, frame.Rotation, heavy), data, settings.Scale);
+            }
             return true;
         }
+
+        private HeldItemBodyFrame BodyFor(LocalFirstPersonHands rig) => held.HeavyFrameWeight >= 1f
+            ? rig.BodyFrame.WithReference(held.HeavyBody(rig.Binding.Settings)) : rig.BodyFrame;
 
         private void LateUpdate()
         {
@@ -196,7 +208,7 @@ namespace TwoBirds
                         candidate.Initialize(entry, avatar.Registry.Animations, avatar.HandTargets, ++generation);
                         Place(candidate, 0f);
                         FreeHands(candidate, 0f); Contacts(0f, candidate.Binding.Settings);
-                        held.PrepareHands(candidate.Binding, candidate.BodyFrame);
+                        held.PrepareHands(candidate.Binding, BodyFor(candidate));
                         candidate.Evaluate(0f, avatar.Registry.Animations);
                         var nextCosmetics = new AvatarCosmeticPresentation(candidate.Binding,
                             SessionController.Instance.Hats, SessionController.Instance.Tattoos, true);
@@ -239,8 +251,15 @@ namespace TwoBirds
             Vector3 cameraPosition = camera.position + camera.rotation * tuning.ShoulderOffset;
             Pose frame = new(Vector3.Lerp(cameraPosition, contactFrame.position + contactFrame.rotation * bodyOffset, placementWeight),
                 Quaternion.Slerp(camera.rotation, contactFrame.rotation, placementWeight));
+            float heavy = held.HeavyFrameWeight;
+            if (heavy > 0f)
+            {
+                var body = held.HeavyBody(rig.Binding.Settings);
+                frame.position = Vector3.Lerp(frame.position, body.Center, heavy);
+                frame.rotation = Quaternion.Slerp(frame.rotation, body.Rotation, heavy);
+            }
             placed = true;
-            rig.Place(frame, Vector3.zero);
+            rig.Place(frame, Vector3.zero, heavy);
         }
 
         private void FreeHands(LocalFirstPersonHands rig, float dt)

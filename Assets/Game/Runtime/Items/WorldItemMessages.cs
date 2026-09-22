@@ -55,8 +55,23 @@ namespace TwoBirds
         public List<ItemMotion> Items;
     }
 
+    public struct ItemCartContact : IBroadcast
+    {
+        public uint Epoch;
+        public ItemMotion Motion;
+    }
+
     public static class ItemMotionBatchSerializer
     {
+        public static void WriteItemCartContact(this Writer writer, ItemCartContact contact)
+        {
+            writer.WriteUInt32(contact.Epoch);
+            writer.WritePackedMotion(contact.Motion);
+        }
+
+        public static ItemCartContact ReadItemCartContact(this Reader reader) => new()
+        { Epoch = reader.ReadUInt32(), Motion = reader.ReadPackedMotion() };
+
         private const byte OmitRotation = 1, FullVelocity = 2, FullAngularVelocity = 4, Sleeping = 8, Boundary = 16, Removed = 32,
             SphereCenter = 64;
 

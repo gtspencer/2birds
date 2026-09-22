@@ -201,19 +201,17 @@ namespace TwoBirds
             }
             Vector3 origin = aimPose.position;
             Vector3 position = origin + forward * 0.65f;
-            if (Physics.SphereCast(origin, 0.12f, forward, out var wall, 0.65f, registry.EnvironmentMask, QueryTriggerInteraction.Ignore))
-                position = origin + forward * Mathf.Max(0f, wall.distance - 0.01f);
+            Quaternion rotation = aim * definition.WorldPrefab.transform.localRotation;
             var releases = new ItemMotion[count];
             for (int i = 0; i < count; i++)
             {
                 // Spread stack drops to avoid spawning mutually overlapping bodies.
                 Vector3 offset = aim * new Vector3((i % 4 - (Mathf.Min(count, 4) - 1) * 0.5f) * 0.24f, (i / 4) * 0.24f, 0f);
-                Vector3 releasePosition = position + offset;
-                if (offset != Vector3.zero && Physics.SphereCast(position, 0.12f, offset.normalized, out wall,
-                    offset.magnitude, registry.EnvironmentMask, QueryTriggerInteraction.Ignore))
-                    releasePosition = position + offset.normalized * Mathf.Max(0f, wall.distance - 0.01f);
-                releases[i] = new ItemMotion { Id = ids[i], Position = releasePosition,
-                    Rotation = aim * definition.WorldPrefab.transform.localRotation,
+                if (!registry.TryGetItem(ids[i], out var item) || !item ||
+                    !ItemReleaseClearance.TryDrop(new Pose(position + offset, rotation), origin, item.ReleaseSphere,
+                        aim, registry.EnvironmentMask, out var release)) return false;
+                releases[i] = new ItemMotion { Id = ids[i], Position = release.position,
+                    Rotation = rotation,
                     Velocity = forward * launchSpeed + ItemReleaseVelocity.Movement(seating, motor) * definition.VelocityInheritance,
                     AngularVelocity = aim * definition.InitialSpin };
             }

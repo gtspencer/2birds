@@ -19,7 +19,8 @@ namespace TwoBirds
         private bool evaluating, applied;
         internal AvatarBinding Binding { get; private set; }
         internal HeldItemBodyFrame BodyFrame => new(Binding.GetBone(HumanBodyBones.RightUpperArm).position,
-            transform.rotation, Binding.Measurements, Binding.Scale);
+            transform.rotation, Binding.Measurements, Binding.Scale,
+            leftShoulder: Binding.GetBone(HumanBodyBones.LeftUpperArm).position);
 
         internal void Initialize(AvatarRegistry.Entry entry, AvatarAnimationSet clips, AvatarHandTargets targets, ulong generation)
         {
@@ -50,10 +51,10 @@ namespace TwoBirds
             ik = new AvatarHandIK(Binding);
         }
 
-        internal void Place(Pose frame, Vector3 offset)
+        internal void Place(Pose frame, Vector3 offset, float heavyWeight = 0f)
         {
             transform.SetPositionAndRotation(frame.position + frame.rotation *
-                (offset + Binding.Settings.FirstPersonPlacementOffset - shoulderCenter * Binding.Scale), frame.rotation);
+                (offset + Binding.Settings.FirstPersonPlacementOffset * (1f - heavyWeight) - shoulderCenter * Binding.Scale), frame.rotation);
         }
 
         internal void Evaluate(float dt, AvatarAnimationSet clips)

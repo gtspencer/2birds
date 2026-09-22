@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 907777a9d2d92aa4b85683d696523192, type: 3}
+  m_Name: Boulder
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.ItemDefinition
+  ItemId: 9
+  ItemName: Boulder
+  Icon: {fileID: 21300000, guid: e9d8498d13592184288b77ddd5addb39, type: 3}
+  WorldPrefab: {fileID: 7974782111585877173, guid: 7b0c66c1a6868e849a8516be733f4f9c, type: 3}
+  Stackable: 0
+  MaxStack: 1
+  MinThrowSpeed: 2
+  MaxThrowSpeed: 5
+  ThrowChargeTime: 1
+  HoldMode: 1
+  GripPosition: {x: 0, y: 0, z: 0}
+  GripEuler: {x: 0, y: 0, z: 0}
+  OverrideHoldSettings: 0
+  OverrideFirstPersonPose: 0
+  FirstPersonPose:
+    HoldPosition: {x: -0.05, y: -0.25, z: 0.78}
+    HoldWristEuler: {x: 0, y: 0, z: 15}
+    ChargeControlPosition: {x: 0.05, y: -0.05, z: 0.72}
+    ChargedPosition: {x: 0.18, y: 0.12, z: 0.5}
+    ChargedWristEuler: {x: -35, y: 0, z: 100}
+  GripFingers: {fileID: 0}
+  HandPose:
+    HoldPosition: {x: 0, y: -0.4, z: 0.5}
+    HoldWristEuler: {x: 0, y: 0, z: 0}
+    ChargeControlPosition: {x: 0, y: 0.1, z: 0.7}
+    ChargedPosition: {x: 0, y: 0.6, z: 0.25}
+    ChargedWristEuler: {x: 0, y: 0, z: 0}
+    ChargePoseDuration: 0.35
+    FollowReachFraction: 0.85
+    MaximumFollowDuration: 0.2
+    EndPosePauseDuration: 0
+    ReturnBlendDuration: 0.2
+  DontPushPlayer: 0
+  UseSharedImpactThreshold: 1
+  MinimumImpactSpeed: 8
+  ImpulseMultiplier: 1
+  OverrideCollisionDamage: 1
+  CollisionDamage: 25
+  SyncRotation: 1
+  DropSpeed: 1.5
+  VelocityInheritance: 1
+  Mass: 10
+  LinearDamping: 0.05
+  AngularDamping: 0.1
+  InitialSpin: {x: 3, y: 1, z: 2}
+  PhysicsMaterial: {fileID: 0}
+  CollisionDetection: 2
+  MaxSpeed: 0
+  OverrideSleepThreshold: 0
+  CollideWhileSleeping: 1
+  SimulateOnReleasingClient: 1
+  SleepThreshold: 0.005

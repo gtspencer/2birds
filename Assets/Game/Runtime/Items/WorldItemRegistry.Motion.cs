@@ -11,6 +11,50 @@ namespace TwoBirds
 
         internal bool ReleasePending(uint id) => pendingReleases.ContainsKey(id);
 
+        internal void ReportCartContact(WorldItem item)
+        {
+            var record = item.Record;
+            if (Simulates(record) || ReleasePending(record.Motion.Id) || pendingCartContacts.Contains(record.Motion.Id)) return;
+            var motion = item.Capture(ServerTick);
+            if (IsHost) TransferCartMotion(record, motion, network.IsClientStarted ? network.ClientManager.Connection.ClientId : -1);
+            else
+            {
+                pendingCartContacts.Add(motion.Id);
+                record.Simulator = network.ClientManager.Connection.ClientId;
+                records[motion.Id] = record;
+                item.PredictCartContact(record);
+                network.ClientManager.Broadcast(new ItemCartContact { Epoch = epoch, Motion = motion }, Channel.Reliable);
+            }
+        }
+
+        private void ReceiveCartContact(NetworkConnection connection, ItemCartContact message, Channel channel)
+        {
+            if (!worldReady || message.Epoch != epoch || !records.TryGetValue(message.Motion.Id, out var record)) return;
+            if (record.State != WorldItemState.World || record.Motion.Revision != message.Motion.Revision ||
+                !itemRegistry.Get(record.DefinitionId).CollideWhileSleeping)
+            {
+                lifecycleBatch.Add(record);
+                FlushLifecycle(connection);
+                return;
+            }
+            TransferCartMotion(record, message.Motion, connection.ClientId);
+        }
+
+        private void TransferCartMotion(ItemRecord record, ItemMotion motion, int simulator)
+        {
+            motion.Revision = record.Motion.Revision + 1;
+            motion.Sequence = 0;
+            motion.Path = record.Motion.Path + 1;
+            motion.Tick = ServerTick;
+            motion.Boundary = true;
+            record.Motion = motion;
+            record.Sleeping = motion.Sleeping;
+            record.Simulator = simulator;
+            records[motion.Id] = record;
+            items[motion.Id].ApplyRecord(record);
+            Publish(record);
+        }
+
         private void ReceiveSimulatorMotion(NetworkConnection connection, ItemMotionBatch message, Channel channel)
         {
             if (!worldReady || message.Epoch != epoch) return;
@@ -68,6 +112,7 @@ namespace TwoBirds
                 item.Tick();
                 var record = item.Record;
                 if (record.State != WorldItemState.World || !Simulates(record) || ReleasePending(record.Motion.Id) ||
+                    pendingCartContacts.Contains(record.Motion.Id) ||
                     !item.MotionAvailable) continue;
                 var motion = item.Capture(ServerTick);
                 motion.Removed = item.RemovalPending || OutsideWorld(motion);

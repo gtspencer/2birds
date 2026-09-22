@@ -34,3 +34,8 @@ MonoBehaviour:
       Quantity: 3
     Output: {fileID: 11400000, guid: 72f4368d9cb37ac48ac1c0b75de493d2, type: 2}
     MinimumTotal: 1
+  - Ingredients:
+    - Item: {fileID: 11400000, guid: 9f574bf6e57f89d4cb07ba4618076463, type: 2}
+      Quantity: 3
+    Output: {fileID: 11400000, guid: 674208308395f4f4391f7da80d92e4ca, type: 2}
+    MinimumTotal: 3

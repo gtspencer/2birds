@@ -40,7 +40,11 @@ namespace TwoBirds
             birdRegistry.ReportRockContact(Record, contact, registry.ReleasePending(Record.Motion.Id));
         }
 
-        private void OnCollisionStay(Collision collision) => BirdContact(collision);
+        private void OnCollisionStay(Collision collision)
+        {
+            BirdContact(collision);
+            cartPhysics?.Contact(collision, false);
+        }
         private void OnCollisionExit(Collision collision) => touchingBirds.Remove(collision.collider.GetEntityId());
 
         private void AfterBirdPhysics(float seconds)

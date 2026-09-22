@@ -9,5 +9,6 @@ namespace TwoBirds
         private void OnValidate() => ContentChanged?.Invoke();
         public HeldItemSpatialSettings FirstPersonPose = HeldItemSpatialSettings.FirstPersonDefault;
         public HeldItemPoseSettings HoldSettings = HeldItemPoseSettings.Default;
+        public HeldItemPoseSettings HeavyHoldSettings = HeldItemPoseSettings.HeavyDefault;
     }
 }
