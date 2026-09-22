@@ -16,6 +16,13 @@ namespace TwoBirds
             if (!worldReady || message.Epoch != epoch) return;
             foreach (var motion in message.Items)
             {
+                if (Pebbles.AcceptsMotion(motion, connection.ClientId))
+                {
+                    Pebbles.ReceiveMotion(motion, connection.ClientId);
+                    motionBatch.Add(motion);
+                    if (motionBatch.Count == BatchSize) FlushMotion(channel, connection);
+                    continue;
+                }
                 if (!records.TryGetValue(motion.Id, out var record) || record.State != WorldItemState.World ||
                     record.Simulator != connection.ClientId || motion.Revision != record.Motion.Revision ||
                     !Newer(motion, record.Motion)) continue;
@@ -27,11 +34,12 @@ namespace TwoBirds
             FlushMotion(channel, connection);
         }
 
-        private bool OutsideWorld(ItemMotion motion) => !Finite(motion.Position) || !Finite(motion.Velocity) ||
+        internal bool OutsideWorld(ItemMotion motion) => !Finite(motion.Position) || !Finite(motion.Velocity) ||
             !Finite(motion.AngularVelocity) || motion.Position.y < settings.FallBoundary || !worldBounds.Contains(motion.Position);
 
         private void TakeOverMotion(int simulator)
         {
+            Pebbles.TakeOver(simulator);
             cleanup.Clear();
             foreach (var record in records.Values)
                 if (record.State == WorldItemState.World && record.Simulator == simulator) cleanup.Add(record.Motion.Id);
@@ -80,6 +88,7 @@ namespace TwoBirds
                 motionBatch.Add(motion);
                 if (boundary || motionBatch.Count == BatchSize) FlushMotion(boundary ? Channel.Reliable : Channel.Unreliable);
             }
+            Pebbles.Tick(snapshot);
             FlushMotion();
             foreach (uint id in cleanup) Remove(id);
         }

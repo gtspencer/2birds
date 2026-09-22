@@ -66,24 +66,7 @@ namespace TwoBirds
             writer.WriteInt32(batch.Items.Count);
             foreach (var motion in batch.Items)
             {
-                byte flags = motion.RotationOmitted ? OmitRotation : (byte)0;
-                if (motion.Sleeping) flags |= Sleeping;
-                if (motion.Boundary) flags |= Boundary;
-                if (motion.Removed) flags |= Removed;
-                if (motion.PositionIsSphereCenter) flags |= SphereCenter;
-                if (!Fits(motion.Velocity)) flags |= FullVelocity;
-                if (!motion.RotationOmitted && !Fits(motion.AngularVelocity)) flags |= FullAngularVelocity;
-                writer.WriteUInt32(motion.Id);
-                writer.WriteUInt32(motion.Revision);
-                writer.WriteUInt32(motion.Tick);
-                writer.WriteUInt32(motion.Sequence);
-                writer.WriteUInt32(motion.Path);
-                writer.WriteUInt8Unpacked(flags);
-                writer.WriteVector3(motion.Position);
-                WriteVelocity(writer, motion.Velocity, (flags & FullVelocity) != 0);
-                if (motion.RotationOmitted) continue;
-                writer.WriteQuaternion32(motion.Rotation);
-                WriteVelocity(writer, motion.AngularVelocity, (flags & FullAngularVelocity) != 0);
+                writer.WritePackedMotion(motion);
             }
         }
 
@@ -94,24 +77,54 @@ namespace TwoBirds
             var items = new List<ItemMotion>(count);
             for (int i = 0; i < count; i++)
             {
-                var motion = new ItemMotion { Id = reader.ReadUInt32(), Revision = reader.ReadUInt32(), Tick = reader.ReadUInt32(),
-                    Sequence = reader.ReadUInt32(), Path = reader.ReadUInt32() };
-                byte flags = reader.ReadUInt8Unpacked();
-                motion.RotationOmitted = (flags & OmitRotation) != 0;
-                motion.Sleeping = (flags & Sleeping) != 0;
-                motion.Boundary = (flags & Boundary) != 0;
-                motion.Removed = (flags & Removed) != 0;
-                motion.PositionIsSphereCenter = (flags & SphereCenter) != 0;
-                motion.Position = reader.ReadVector3();
-                motion.Velocity = ReadVelocity(reader, (flags & FullVelocity) != 0);
-                if (!motion.RotationOmitted)
-                {
-                    motion.Rotation = reader.ReadQuaternion32();
-                    motion.AngularVelocity = ReadVelocity(reader, (flags & FullAngularVelocity) != 0);
-                }
+                var motion = reader.ReadPackedMotion();
                 items.Add(motion);
             }
             return new ItemMotionBatch { Epoch = epoch, Items = items };
+        }
+
+        [FishNet.CodeGenerating.NotSerializer]
+        public static void WritePackedMotion(this Writer writer, ItemMotion motion)
+        {
+            byte flags = motion.RotationOmitted ? OmitRotation : (byte)0;
+            if (motion.Sleeping) flags |= Sleeping;
+            if (motion.Boundary) flags |= Boundary;
+            if (motion.Removed) flags |= Removed;
+            if (motion.PositionIsSphereCenter) flags |= SphereCenter;
+            if (!Fits(motion.Velocity)) flags |= FullVelocity;
+            if (!motion.RotationOmitted && !Fits(motion.AngularVelocity)) flags |= FullAngularVelocity;
+            writer.WriteUInt32(motion.Id);
+            writer.WriteUInt32(motion.Revision);
+            writer.WriteUInt32(motion.Tick);
+            writer.WriteUInt32(motion.Sequence);
+            writer.WriteUInt32(motion.Path);
+            writer.WriteUInt8Unpacked(flags);
+            writer.WriteVector3(motion.Position);
+            WriteVelocity(writer, motion.Velocity, (flags & FullVelocity) != 0);
+            if (motion.RotationOmitted) return;
+            writer.WriteQuaternion32(motion.Rotation);
+            WriteVelocity(writer, motion.AngularVelocity, (flags & FullAngularVelocity) != 0);
+        }
+
+        [FishNet.CodeGenerating.NotSerializer]
+        public static ItemMotion ReadPackedMotion(this Reader reader)
+        {
+            var motion = new ItemMotion { Id = reader.ReadUInt32(), Revision = reader.ReadUInt32(), Tick = reader.ReadUInt32(),
+                Sequence = reader.ReadUInt32(), Path = reader.ReadUInt32() };
+            byte flags = reader.ReadUInt8Unpacked();
+            motion.RotationOmitted = (flags & OmitRotation) != 0;
+            motion.Sleeping = (flags & Sleeping) != 0;
+            motion.Boundary = (flags & Boundary) != 0;
+            motion.Removed = (flags & Removed) != 0;
+            motion.PositionIsSphereCenter = (flags & SphereCenter) != 0;
+            motion.Position = reader.ReadVector3();
+            motion.Velocity = ReadVelocity(reader, (flags & FullVelocity) != 0);
+            if (!motion.RotationOmitted)
+            {
+                motion.Rotation = reader.ReadQuaternion32();
+                motion.AngularVelocity = ReadVelocity(reader, (flags & FullAngularVelocity) != 0);
+            }
+            return motion;
         }
 
         private static bool Fits(Vector3 value) =>

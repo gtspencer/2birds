@@ -120,6 +120,21 @@ namespace TwoBirds
                 Contact = ++contactSequence, Speed = speed, Position = BirdMotion.Quantize(position) } });
             QueueContacts(source, speed, waiting);
         }
+        internal bool TakeContact(BirdHitReport source, BirdRecord bird, float speed, Vector3 position, out BirdHitReport report)
+        {
+            RockContact(source, bird, speed, position, true);
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                var entry = pending[i];
+                if (entry.Report.Source != source.Source || entry.Report.Operation != source.Operation) continue;
+                report = entry.Report;
+                pending.RemoveAt(i);
+                return true;
+            }
+            report = default;
+            return false;
+        }
+
         private void QueueContacts(BirdHitReport source, float speed, bool waiting)
         {
             contacts.Sort(CompareContacts);

@@ -231,6 +231,7 @@ namespace TwoBirds
         private void OnCollisionStay(Collision collision) => AccumulateCollision(collision);
         private void AccumulateCollision(Collision collision)
         {
+            if (ItemContactPhysics.NoImpulse(collision.collider)) return;
             if (!network.SimulatesPhysics) return;
             if (collision.rigidbody && !collision.rigidbody.isKinematic) dynamicContact = true;
             if (collision.gameObject.layer == playerLayer) return;

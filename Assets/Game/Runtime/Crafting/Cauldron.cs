@@ -21,7 +21,8 @@ namespace TwoBirds
         public string InputActionPath => "Player/Interact";
         public string SecondaryActionText => "Dispose";
         public string SecondaryInputActionPath => "Player/SecondaryInteract";
-        public bool CanInteract => User && User.CanCraft && (!User.GetEquipped().IsEmpty ? Accepting : Settled);
+        public bool CanInteract => User && User.CanCraft && (!User.GetEquipped().IsEmpty
+            ? Accepting && registry.GetDefinition(User.GetEquipped().ItemId).CanBeIngredient : Settled);
         public bool CanSecondaryInteract => User && User.CanCraft && User.GetEquipped().IsEmpty && Settled;
         private void Awake() => Presentation = GetComponent<CauldronPresentation>();
         public override void OnStartNetwork()

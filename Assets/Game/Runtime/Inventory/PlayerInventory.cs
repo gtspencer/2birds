@@ -146,6 +146,7 @@ namespace TwoBirds
             var stack = GetEquipped();
             if (stack.IsEmpty || !registry.TryGetItem(stack.WorldIds[0], out var item)) return false;
             if (operation == InventoryOperation.DirectUse && item.Definition is not PotionDefinition) return false;
+            if (operation == InventoryOperation.Insert && !item.Definition.CanBeIngredient) return false;
             return Submit(new InventoryRequest { Kind = operation, From = SelectedSlot, To = cauldron ? cauldron.ObjectId : -1,
                 DefinitionId = stack.ItemId, Ids = new[] { stack.WorldIds[0] }, Rotation = item.PresentedRotation,
                 Position = operation == InventoryOperation.Insert ? item.PresentedRootPosition : motor.PhysicalFeet });
@@ -193,7 +194,7 @@ namespace TwoBirds
                     !Equipment.HeldPresentation.TryPrepareRelease(item, out var release, out byte progress)) return false;
                 var motion = new ItemMotion { Id = ids[0], Position = release.position, Rotation = release.rotation,
                     PositionIsSphereCenter = false,
-                    Velocity = forward * launchSpeed + (seating ? seating.PointVelocity : motor.Body.linearVelocity) * definition.VelocityInheritance,
+                    Velocity = forward * launchSpeed + ItemReleaseVelocity.Movement(seating, motor) * definition.VelocityInheritance,
                     AngularVelocity = aim * definition.InitialSpin };
                 return Submit(new InventoryRequest { Kind = InventoryOperation.Release, From = index, DefinitionId = stack.ItemId,
                     Ids = ids, Releases = new[] { motion }, ReleaseIntent = intent, ReleaseArcProgress = progress });
@@ -213,7 +214,7 @@ namespace TwoBirds
                     releasePosition = position + offset.normalized * Mathf.Max(0f, wall.distance - 0.01f);
                 releases[i] = new ItemMotion { Id = ids[i], Position = releasePosition,
                     Rotation = aim * definition.WorldPrefab.transform.localRotation,
-                    Velocity = forward * launchSpeed + (seating != null ? seating.PointVelocity : motor.Body.linearVelocity) * definition.VelocityInheritance,
+                    Velocity = forward * launchSpeed + ItemReleaseVelocity.Movement(seating, motor) * definition.VelocityInheritance,
                     AngularVelocity = aim * definition.InitialSpin };
             }
             return Submit(new InventoryRequest { Kind = InventoryOperation.Release, From = index, DefinitionId = stack.ItemId,

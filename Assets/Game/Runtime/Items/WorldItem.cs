@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using FishNet.Component.Prediction;
 using UnityEngine;
 
@@ -7,19 +6,10 @@ namespace TwoBirds
     [RequireComponent(typeof(Rigidbody))]
     public sealed partial class WorldItem : MonoBehaviour, IInteractable
     {
-        private struct ContactSegment
-        {
-            public Vector3 End;
-            public Vector3 Velocity;
-            public float Seconds;
-            public uint Tick;
-        }
-
         [SerializeField] private Transform visualRoot;
         [SerializeField, Tooltip("Replaces the default hover tooltip text when set.")] private string tooltipTextOverride;
         [SerializeField, Tooltip("Show only the interaction glyph in the hover tooltip.")] private bool hideTooltipText;
-        private readonly ItemMotion[] history = new ItemMotion[128];
-        private readonly ItemMotion[] samples = new ItemMotion[16];
+        private readonly RigidbodyMotionState motionState = new();
         private Collider[] colliders;
         private LayerMask[] colliderIncludes, colliderExcludes;
         private Renderer[] renderers;
@@ -28,8 +18,6 @@ namespace TwoBirds
         private OfflineRigidbody offlineRigidbody;
         private Collider ignoredPlayer;
         private float ignoreUntil;
-        private float sampleReceivedAt;
-        private int sampleCount;
         private uint localLaunchTick;
         private uint historyStart;
         private Vector3 visualOffset;
@@ -69,25 +57,8 @@ namespace TwoBirds
         internal int PresentedHolder { get; private set; } = -1;
         private Vector3 incomingVelocity;
         private bool incomingSampled;
-        private Vector3 physicsStartSphere;
-        private readonly List<ContactSegment> physicsSegments = new();
-        private float contactSeconds;
-        private bool physicsContactSampled;
-        private PlayerItemHitbox contactPlayer;
-        private PlayerItemHitbox damagedPlayer;
-        private uint damagedGeneration;
-        private uint contactGeneration;
-        private uint contactReset;
-        private Vector3 previousSphere;
-        private Vector3 previousCorrectionOffset;
-        private Vector3 previousPlayer;
-        private Vector3 previousPlayerVelocity;
-        private Vector3 previousPlayerCorrection;
+        private ItemPlayerContact playerContact;
         private double presentedMotionTick;
-        private double previousMotionTick;
-        private bool hasContactPose;
-        private bool touchingPlayer;
-        private bool rebaseContactPose;
         private int releasePlayer = -1;
         private uint releaseOperation;
 
@@ -186,6 +157,7 @@ namespace TwoBirds
             Vector3 initialScale = transform.localScale;
             InterruptUse();
             registry = owner;
+            playerContact ??= new ItemPlayerContact(owner, motionState, MotionSpherePosition, ReportImpact);
             Definition = definition;
             if (potionPresentation) potionPresentation.ApplyDefinition(definition);
             defaultScale = definition.WorldPrefab.transform.localScale;
@@ -220,7 +192,7 @@ namespace TwoBirds
                 }
                 if (!Simulating)
                 {
-                    sampleCount = 0;
+                    motionState.Count = 0;
                     AddSample(record.Motion);
                 }
             }
@@ -244,7 +216,7 @@ namespace TwoBirds
             bool newRelease = record.State == WorldItemState.World &&
                 (Record.State != WorldItemState.World || record.Releaser != releasePlayer || record.Operation != releaseOperation);
             bool smoothCosmetic = CosmeticRotation && !newRelease &&
-                Record.State == WorldItemState.World && sampleCount > 0;
+                Record.State == WorldItemState.World && motionState.Count > 0;
             SetRecord(record);
             for (int i = 0; i < colliders.Length; i++)
             {
@@ -265,7 +237,7 @@ namespace TwoBirds
                 SetLayer(registry.HeldLayer);
                 foreach (var collider in colliders) collider.enabled = false;
                 AttachHolder();
-                sampleCount = 0;
+                motionState.Count = 0;
                 return;
             }
 
@@ -296,12 +268,12 @@ namespace TwoBirds
             if (!preserveMotion && (!activeSimulation || !wasPredicted || record.Sleeping || !Simulating))
                 CorrectBody(record.Motion, wasPredicted || smoothCosmetic);
             cosmeticSpin = record.Sleeping ? Vector3.zero : record.Motion.AngularVelocity;
-            if (newRelease) { rebaseContactPose = false; birdRebase = false; }
+            if (newRelease) { playerContact.Rebase = false; birdRebase = false; }
             if (!Body.isKinematic && record.Sleeping) Body.Sleep();
             if (record.Sleeping) Predicted = false;
             if (!Simulating)
             {
-                sampleCount = 0;
+                motionState.Count = 0;
                 AddSample(record.Motion);
             }
             if (newRelease && !record.Sleeping && registry.TryGetPlayer(record.Releaser, out var releaser))
@@ -365,7 +337,7 @@ namespace TwoBirds
         internal void Launch(ItemMotion motion)
         {
             CorrectBody(motion, false);
-            rebaseContactPose = false;
+            playerContact.Rebase = false;
             birdRebase = false;
         }
 
@@ -454,23 +426,14 @@ namespace TwoBirds
 
         internal ItemMotion Capture(uint tick)
         {
-            return new ItemMotion
-            {
-                Id = Record.Motion.Id, Revision = Record.Motion.Revision, Tick = tick, Sequence = Record.Motion.Sequence,
-                Path = Record.Motion.Path,
-                Sleeping = !Body.isKinematic && Body.IsSleeping(),
-                Position = CenteredMotion ? BodySpherePosition : Body.position, Rotation = Body.rotation,
-                PositionIsSphereCenter = CenteredMotion,
-                Velocity = Body.isKinematic ? Vector3.zero : CenteredMotion ? Body.GetPointVelocity(BodySpherePosition) : Body.linearVelocity,
-                AngularVelocity = Body.isKinematic ? Vector3.zero : Body.angularVelocity
-            };
+            return RigidbodyMotionState.Capture(Body, Record.Motion, tick, CenteredMotion, BodySpherePosition);
         }
 
         internal void Tick()
         {
             UpdateIgnore();
             if (Predicted && !optimisticPickup)
-                history[registry.LocalTick % (uint)history.Length] = Capture(registry.LocalTick);
+                motionState.History[registry.LocalTick % (uint)motionState.History.Length] = Capture(registry.LocalTick);
         }
 
         internal void ReceiveMotion(ItemMotion motion)
@@ -496,7 +459,7 @@ namespace TwoBirds
             {
                 if (motion.Boundary)
                 {
-                    sampleCount = 0;
+                    motionState.Count = 0;
                     CorrectBody(motion, CosmeticRotation);
                 }
                 AddSample(motion);
@@ -504,7 +467,7 @@ namespace TwoBirds
             }
 
             uint correspondingTick = localLaunchTick + motion.Tick - Record.LaunchTick;
-            var predicted = history[correspondingTick % (uint)history.Length];
+            var predicted = motionState.History[correspondingTick % (uint)motionState.History.Length];
             if (correspondingTick >= registry.LocalTick) return;
             Vector3 predictedPosition = CenteredMotion ? MotionSpherePosition(predicted) : predicted.Position;
             Vector3 receivedPosition = CenteredMotion ? MotionSpherePosition(motion) : motion.Position;
@@ -521,21 +484,12 @@ namespace TwoBirds
             RemoveHandoffPose();
             ResetBirdContact(true);
             ResetIncomingMotion();
-            rebaseContactPose = true;
-            presentedMotionTick = previousMotionTick = motion.Tick;
+            playerContact.Rebase = true;
+            presentedMotionTick = motion.Tick;
             Vector3 visiblePosition = visualRoot.position;
             Quaternion visibleRotation = visualRoot.rotation;
             Vector3 visibleCenter = PresentedSpherePosition;
-            if (!motion.RotationOmitted) Body.rotation = motion.Rotation;
-            Body.position = MotionBodyPosition(motion, Body.rotation);
-            transform.SetPositionAndRotation(Body.position, Body.rotation);
-            if (!Body.isKinematic)
-            {
-                if (!motion.RotationOmitted) Body.angularVelocity = motion.AngularVelocity;
-                Body.linearVelocity = motion.PositionIsSphereCenter
-                    ? motion.Velocity - Vector3.Cross(Body.angularVelocity, BodySpherePosition - Body.worldCenterOfMass)
-                    : motion.Velocity;
-            }
+            RigidbodyMotionState.Apply(Body, motion, bodySphereCenter);
             if (smooth)
             {
                 visualRoot.SetPositionAndRotation(visiblePosition, visibleRotation);
@@ -543,15 +497,12 @@ namespace TwoBirds
                 visualRotation = CosmeticRotation ? visibleRotation : visualRoot.localRotation;
                 cosmeticRotation = visibleRotation;
                 correctionRemaining = registry.CorrectionDuration;
+                if (!CosmeticRotation) motionState.Departure(visualOffset, registry.CorrectionDuration);
             }
             else ClearVisualOffset();
             if (!motion.RotationOmitted) cosmeticSpin = motion.Sleeping ? Vector3.zero : motion.AngularVelocity;
             rollingSupported = false;
-            if (hasContactPose)
-            {
-                previousSphere = PresentedSpherePosition;
-                previousCorrectionOffset = previousSphere - BodySpherePosition;
-            }
+            playerContact.Reposition(PresentedSpherePosition, BodySpherePosition);
         }
 
         private void AddSample(ItemMotion motion)
@@ -563,13 +514,7 @@ namespace TwoBirds
                 motion.Velocity += Vector3.Cross(motion.AngularVelocity, motion.Rotation * centerFromMass);
                 motion.PositionIsSphereCenter = true;
             }
-            if (sampleCount == samples.Length)
-            {
-                System.Array.Copy(samples, 1, samples, 0, samples.Length - 1);
-                sampleCount--;
-            }
-            samples[sampleCount++] = motion;
-            sampleReceivedAt = Time.unscaledTime;
+            motionState.Add(motion);
         }
 
         internal void Present()
@@ -577,11 +522,11 @@ namespace TwoBirds
             RemoveHandoffPose();
             if (registry == null || optimisticPickup || Record.State != WorldItemState.World) return;
             Vector3 presentedVelocity = Vector3.zero;
-            if (!Simulating && sampleCount > 0)
+            if (!Simulating && motionState.Count > 0)
             {
-                ItemMotion latest = samples[sampleCount - 1];
-                double tick = latest.Tick + (Time.unscaledTime - sampleReceivedAt - registry.InterpolationDelay) / registry.TickDelta;
-                presentedMotionTick = System.Math.Max(presentedMotionTick, System.Math.Max(samples[0].Tick, tick));
+                ItemMotion latest = motionState.Samples[motionState.Count - 1];
+                double tick = latest.Tick + (Time.unscaledTime - motionState.ReceivedAt - registry.InterpolationDelay) / registry.TickDelta;
+                presentedMotionTick = System.Math.Max(presentedMotionTick, System.Math.Max(motionState.Samples[0].Tick, tick));
                 ItemMotion motion = PresentedMotionAt(presentedMotionTick, out presentedVelocity);
                 if (!motion.RotationOmitted) Body.rotation = motion.Rotation;
                 Body.position = MotionBodyPosition(motion, Body.rotation);
@@ -598,11 +543,11 @@ namespace TwoBirds
                 }
                 else
                 {
-                    visualRoot.localPosition = visualOffset * remaining;
+                    motionState.PresentOffset(visualRoot, registry.CorrectionDuration);
                     visualRoot.localRotation = Quaternion.Slerp(Quaternion.identity, visualRotation, remaining);
                 }
             }
-            if (!CosmeticRotation || sampleCount == 0) { ApplyHandoffPose(); return; }
+            if (!CosmeticRotation || motionState.Count == 0) { ApplyHandoffPose(); return; }
             if (!Record.Sleeping)
             {
                 float radius = impactSphere ? sphereRadius : DropDiameter * 0.25f;
@@ -626,48 +571,8 @@ namespace TwoBirds
             ApplyHandoffPose();
         }
 
-        private ItemMotion PresentedMotionAt(double tick, out Vector3 velocity)
-        {
-            ItemMotion from = samples[0], to = from;
-            for (int i = 1; i < sampleCount; i++)
-            {
-                to = samples[i];
-                if (to.Tick >= tick) break;
-                from = to;
-            }
-            float amount = to.Tick == from.Tick ? 1f : Mathf.Clamp01((float)((tick - from.Tick) / (to.Tick - from.Tick)));
-            var motion = new ItemMotion { Position = Vector3.Lerp(from.Position, to.Position, amount),
-                Rotation = Quaternion.Slerp(from.Rotation, to.Rotation, amount), RotationOmitted = to.RotationOmitted,
-                PositionIsSphereCenter = to.PositionIsSphereCenter };
-            velocity = to.Tick > from.Tick && tick >= from.Tick
-                ? (to.Position - from.Position) / (float)((to.Tick - from.Tick) * registry.TickDelta) : Vector3.zero;
-            ItemMotion latest = samples[sampleCount - 1];
-            if (!Record.Sleeping && tick > latest.Tick)
-            {
-                float seconds = Mathf.Min((float)((tick - latest.Tick) * registry.TickDelta), 0.1f);
-                Vector3 travel = latest.Velocity * seconds;
-                velocity = seconds < 0.1f ? latest.Velocity : Vector3.zero;
-                RaycastHit hit;
-                bool blocked = motion.PositionIsSphereCenter
-                    ? Physics.SphereCast(latest.Position, sphereRadius, travel.normalized, out hit, travel.magnitude,
-                        registry.EnvironmentMask, QueryTriggerInteraction.Ignore)
-                    : Physics.Raycast(latest.Position, travel.normalized, out hit, travel.magnitude,
-                        registry.EnvironmentMask, QueryTriggerInteraction.Ignore);
-                if (!blocked) motion.Position += travel;
-                else
-                {
-                    motion.Position = latest.Position + travel.normalized * Mathf.Max(0f, hit.distance - 0.01f);
-                    velocity = Vector3.zero;
-                }
-            }
-            return motion;
-        }
-
-        private Vector3 SphereAt(double tick)
-        {
-            ItemMotion motion = PresentedMotionAt(tick, out _);
-            return MotionSpherePosition(motion);
-        }
+        private ItemMotion PresentedMotionAt(double tick, out Vector3 velocity) =>
+            motionState.Sample(tick, Record.Sleeping, sphereRadius, registry.EnvironmentMask, registry.TickDelta, out velocity);
 
         private Vector3 MotionSpherePosition(ItemMotion motion) => motion.PositionIsSphereCenter
             ? motion.Position : motion.Position + motion.Rotation * bodySphereCenter;
@@ -738,6 +643,7 @@ namespace TwoBirds
             cosmeticRotation = visualRoot.rotation;
             rollingSupported = false;
             correctionRemaining = 0f;
+            motionState.Departure(Vector3.zero, 0f);
         }
 
         private void ResetPresentation()
@@ -747,12 +653,12 @@ namespace TwoBirds
             PresentedHolder = -1;
             ClearIgnore();
             ClearVisualOffset();
-            presentedMotionTick = previousMotionTick = 0d;
+            presentedMotionTick = 0d;
             ResetContactState();
-            System.Array.Clear(history, 0, history.Length);
-            System.Array.Clear(samples, 0, samples.Length);
-            sampleCount = 0;
-            sampleReceivedAt = 0f;
+            System.Array.Clear(motionState.History, 0, motionState.History.Length);
+            System.Array.Clear(motionState.Samples, 0, motionState.Samples.Length);
+            motionState.Count = 0;
+            motionState.ReceivedAt = 0f;
             localLaunchTick = historyStart = 0;
             optimisticPickup = false;
             MotionBoundary = RemovalPending = false;
@@ -789,176 +695,43 @@ namespace TwoBirds
             Record.State == WorldItemState.World && !Record.Sleeping &&
             !optimisticPickup && Record.Motion.Id != 0;
 
+        private ItemContactFrame ContactFrame => new() { Eligible = ContactEligible, Simulating = Simulating,
+            Sleeping = !Body.isKinematic && Body.IsSleeping(), PresentedCenter = PresentedSpherePosition,
+            BodyCenter = BodySpherePosition, Radius = sphereRadius, IgnoredPlayer = ignoredPlayer,
+            PresentedTick = presentedMotionTick };
+
         internal void BeforePhysics()
         {
-            if (!registry.Replaying && registry.IsHost && damagedPlayer &&
-                !damagedPlayer.OverlapsSphere(BodySpherePosition, sphereRadius + 0.03f, damagedPlayer.PresentedCenter)) damagedPlayer = null;
             BeforeBirdPhysics();
             UpdateIgnore();
             incomingSampled = ContactEligible && !Body.isKinematic && !Body.IsSleeping();
             incomingVelocity = incomingSampled ? Body.linearVelocity : Vector3.zero;
-            if (!ContactEligible) ResetContactSamples();
-            physicsContactSampled = incomingSampled && !registry.IsHost;
-            if (physicsContactSampled) physicsStartSphere = BodySpherePosition;
+            playerContact.BeforePhysics(ContactFrame, incomingSampled);
         }
 
         internal void AfterPhysics(float seconds)
         {
             AfterBirdPhysics(seconds);
-            if (!physicsContactSampled) return;
-            Vector3 end = BodySpherePosition;
-            physicsSegments.Add(new ContactSegment { End = end, Velocity = (end - physicsStartSphere) / seconds,
-                Seconds = seconds, Tick = registry.LocalTick });
-            contactSeconds += seconds;
-            physicsContactSampled = false;
+            playerContact.AfterPhysics(BodySpherePosition, seconds);
         }
 
         internal void SamplePlayerContact(PlayerItemHitbox player)
         {
-            if (!ContactEligible || player == null || player.Suspended || !player.Motor.IsOwner ||
-                !Body.isKinematic && Body.IsSleeping())
-            {
-                ResetContactSamples();
-                return;
-            }
-            if (contactPlayer != player || contactGeneration != player.Motor.ImpactGeneration || contactReset != player.Motor.ResetRevision)
-            {
-                bool rebase = rebaseContactPose || contactPlayer != null;
-                ResetContactSamples();
-                contactPlayer = player;
-                contactGeneration = player.Motor.ImpactGeneration;
-                contactReset = player.Motor.ResetRevision;
-                rebaseContactPose = rebase;
-            }
-            Vector3 sphere = PresentedSpherePosition;
-            Vector3 correctionOffset = sphere - BodySpherePosition;
-            Vector3 correctionDelta = correctionOffset - previousCorrectionOffset;
-            Vector3 from = previousSphere + correctionDelta;
-            Vector3 center = player.PresentedCenter;
-            Vector3 playerCorrection = player.PresentationCorrection - previousPlayerCorrection;
-            Vector3 playerFrom = previousPlayer + playerCorrection;
             UpdateIgnore();
-            if (rebaseContactPose || correctionDelta.sqrMagnitude > 0f || playerCorrection.sqrMagnitude > 0f)
-            {
-                touchingPlayer = hasContactPose
-                    ? player.OverlapsSphere(from, sphereRadius, playerFrom)
-                    : player.OverlapsSphere(sphere, sphereRadius, center);
-                rebaseContactPose = false;
-            }
-            if (hasContactPose)
-            {
-                if (Simulating)
-                {
-                    float elapsed = 0f;
-                    Vector3 startPlayer = playerFrom;
-                    foreach (var segment in physicsSegments)
-                    {
-                        elapsed += segment.Seconds;
-                        Vector3 endPlayer = Vector3.Lerp(playerFrom, center, elapsed / contactSeconds);
-                        Vector3 end = segment.End + correctionOffset;
-                        Vector3 playerVelocity = player.IncomingVelocityAt(segment.Tick);
-                        SweepContact(player, from, end, startPlayer, endPlayer, segment.Velocity, playerVelocity, playerVelocity);
-                        from = end;
-                        startPlayer = endPlayer;
-                    }
-                    if (physicsSegments.Count == 0)
-                        SweepContact(player, from, sphere, playerFrom, center, Vector3.zero, previousPlayerVelocity, player.PresentedVelocity);
-                }
-                else SweepRemoteContacts(player, from, sphere, correctionOffset, playerFrom, center);
-            }
-            previousSphere = sphere;
-            previousCorrectionOffset = correctionOffset;
-            previousPlayer = center;
-            previousPlayerVelocity = player.PresentedVelocity;
-            previousPlayerCorrection = player.PresentationCorrection;
-            previousMotionTick = presentedMotionTick;
-            hasContactPose = true;
-            physicsSegments.Clear();
-            contactSeconds = 0f;
-        }
-
-        private void SweepRemoteContacts(PlayerItemHitbox player, Vector3 from, Vector3 sphere, Vector3 offset,
-            Vector3 playerFrom, Vector3 center)
-        {
-            double start = previousMotionTick;
-            if (sampleCount == 0 || presentedMotionTick <= start)
-            {
-                SweepContact(player, from, sphere, playerFrom, center, Vector3.zero, previousPlayerVelocity, player.PresentedVelocity);
-                return;
-            }
-            if (start < samples[0].Tick)
-            {
-                start = samples[0].Tick;
-                from = SphereAt(start) + offset;
-                touchingPlayer = player.OverlapsSphere(from, sphereRadius, playerFrom);
-            }
-            double duration = presentedMotionTick - start;
-            if (duration <= 0d)
-            {
-                SweepContact(player, from, sphere, playerFrom, center, Vector3.zero, previousPlayerVelocity, player.PresentedVelocity);
-                return;
-            }
-            double cursor = start;
-            Vector3 startPlayer = playerFrom;
-            Vector3 startVelocity = previousPlayerVelocity;
-            while (cursor < presentedMotionTick)
-            {
-                double endTick = presentedMotionTick;
-                for (int i = 0; i < sampleCount; i++)
-                    if (samples[i].Tick > cursor) { endTick = System.Math.Min(endTick, samples[i].Tick); break; }
-                double extrapolationEnd = samples[sampleCount - 1].Tick + 0.1d / registry.TickDelta;
-                if (extrapolationEnd > cursor) endTick = System.Math.Min(endTick, extrapolationEnd);
-                float amount = (float)((endTick - start) / duration);
-                Vector3 end = endTick == presentedMotionTick ? sphere : SphereAt(endTick) + offset;
-                Vector3 endPlayer = Vector3.Lerp(playerFrom, center, amount);
-                Vector3 endVelocity = Vector3.Lerp(previousPlayerVelocity, player.PresentedVelocity, amount);
-                PresentedMotionAt((cursor + endTick) * 0.5d, out Vector3 rockVelocity);
-                if ((end - from).sqrMagnitude == 0f) rockVelocity = Vector3.zero;
-                SweepContact(player, from, end, startPlayer, endPlayer, rockVelocity, startVelocity, endVelocity);
-                from = end;
-                startPlayer = endPlayer;
-                startVelocity = endVelocity;
-                cursor = endTick;
-            }
-        }
-
-        private void SweepContact(PlayerItemHitbox player, Vector3 from, Vector3 to, Vector3 playerFrom,
-            Vector3 playerTo, Vector3 rockVelocity, Vector3 playerVelocityFrom, Vector3 playerVelocityTo)
-        {
-            if (damagedPlayer == player && (to - from - (playerTo - playerFrom)).sqrMagnitude > 0.000001f &&
-                !player.OverlapsSphere(from, sphereRadius + 0.03f, playerFrom)) damagedPlayer = null;
-            if (ignoredPlayer != player.Collider && !touchingPlayer &&
-                player.SweepSphere(from, to, sphereRadius, playerFrom, playerTo, out Vector3 intoPlayer, out float fraction))
-                ReportImpact(player, rockVelocity, Vector3.Lerp(playerVelocityFrom, playerVelocityTo, fraction), intoPlayer);
-            touchingPlayer = player.OverlapsSphere(to, sphereRadius, playerTo);
+            playerContact.SamplePlayerContact(player, ContactFrame);
         }
 
         private void ResetIncomingMotion()
         {
-            incomingVelocity = physicsStartSphere = default;
-            physicsSegments.Clear();
-            contactSeconds = 0f;
-            incomingSampled = physicsContactSampled = false;
-        }
-
-        private void ResetContactSamples()
-        {
-            contactPlayer = null;
-            contactGeneration = 0;
-            contactReset = 0;
-            previousSphere = previousPlayer = previousCorrectionOffset = default;
-            previousPlayerVelocity = previousPlayerCorrection = default;
-            previousMotionTick = presentedMotionTick;
-            hasContactPose = touchingPlayer = false;
-            rebaseContactPose = false;
-            ResetIncomingMotion();
+            incomingVelocity = default;
+            incomingSampled = false;
+            playerContact.ResetIncomingMotion();
         }
 
         private void ResetContactState()
         {
-            damagedPlayer = null;
             ResetBirdContact();
-            ResetContactSamples();
+            playerContact?.Reset();
             releasePlayer = -1;
             releaseOperation = 0;
         }
@@ -969,12 +742,9 @@ namespace TwoBirds
             bool shove = !Definition.DontPushPlayer && Definition.ImpulseMultiplier > 0f && speed >= Definition.MinimumImpactSpeed;
             Vector3 velocityChange = shove ? intoPlayer * speed * Definition.ImpulseMultiplier : Vector3.zero;
             var tuning = player.Health.Settings;
-            if ((damagedPlayer != player || damagedGeneration != player.Motor.ImpactGeneration) &&
-                Vector3.Dot(rockVelocity, intoPlayer) >= tuning.ItemDamageSpeed && speed >= tuning.ItemDamageSpeed)
+            if (Vector3.Dot(rockVelocity, intoPlayer) >= tuning.ItemDamageSpeed && speed >= tuning.ItemDamageSpeed)
             {
-                damagedPlayer = player;
-                damagedGeneration = player.Motor.ImpactGeneration;
-                player.Damage(Definition.OverrideCollisionDamage ? Definition.CollisionDamage : tuning.ItemCollisionDamage, velocityChange);
+                playerContact.Damage(player, Definition.OverrideCollisionDamage ? Definition.CollisionDamage : tuning.ItemCollisionDamage, velocityChange);
             }
             if (velocityChange.sqrMagnitude > 0f || !WorldItemRegistry.Finite(velocityChange))
                 player.QueueItemImpact(Record.Motion.Id, Record.Releaser, Record.Operation,
@@ -995,8 +765,7 @@ namespace TwoBirds
             if (contact.thisCollider != impactSphere) return;
             if (!collision.collider.TryGetComponent<PlayerItemHitbox>(out var player) || !player.Motor.IsOwner) return;
             UpdateIgnore();
-            if (ignoredPlayer == player.Collider) return;
-            ReportImpact(player, incomingVelocity, player.IncomingVelocity, -contact.normal);
+            playerContact.HostContact(player, ContactFrame, incomingVelocity, -contact.normal);
         }
 
         private void OnTriggerEnter(Collider other)

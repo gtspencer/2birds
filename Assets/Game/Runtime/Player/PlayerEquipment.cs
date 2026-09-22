@@ -10,6 +10,10 @@ namespace TwoBirds
         private PlayerInventory inventory;
         private PlayerNetworkState networkState;
         private PlayerCarry carry;
+        private PlayerMotor motor;
+        private PlayerSeating seating;
+        private PlayerPresentation presentation;
+        private uint shotSequence, acceptedShot, acceptedLifetime;
         private WorldItemRegistry registry;
         private WorldItem activeItem;
         private uint activeId;
@@ -25,6 +29,9 @@ namespace TwoBirds
             inventory = GetComponent<PlayerInventory>();
             networkState = GetComponent<PlayerNetworkState>();
             carry = GetComponent<PlayerCarry>();
+            motor = GetComponent<PlayerMotor>();
+            seating = GetComponent<PlayerSeating>();
+            presentation = GetComponent<PlayerPresentation>();
             HeldPresentation = GetComponent<PlayerHeldItemPresentation>();
         }
 
@@ -106,6 +113,53 @@ namespace TwoBirds
 
         public bool TryReleaseItem(uint id, float launchSpeed) =>
             HeldPresentation.ReadyForUse && inventory.TryReleaseEquipped(id, launchSpeed);
+
+        internal float ItemCharge01(ItemDefinition definition) => networkState.ItemAction.State == ItemActionState.Charging
+            ? Mathf.Clamp01((float)(networkState.ActionAge(networkState.ItemAction) / definition.ThrowChargeTime)) : 0f;
+
+        internal bool TryFireSlingshot(WorldItem item)
+        {
+            if (!IsOwner || !HeldPresentation.ReadyForUse || item.Definition is not SlingshotDefinition definition ||
+                !definition.PebblePrefab) return false;
+            var stack = inventory.GetEquipped();
+            if (stack.IsEmpty || stack.WorldIds[0] != item.Record.Motion.Id ||
+                !HeldPresentation.TryPreparePebble(item, out Vector3 center, out float charge)) return false;
+            Vector3 direction = SlingshotAim.Direction(presentation.AimPose, center, inventory);
+            uint shot = ++shotSequence;
+            var action = networkState.PredictRecovery(definition.ItemId, item.Record.Motion.Id, shot,
+                (byte)Mathf.RoundToInt(charge * 255f));
+            var fire = new PebbleFire { Epoch = registry.Epoch, Lifetime = networkState.Lifetime, Shot = shot,
+                Weapon = item.Record.Motion.Id, Action = action,
+                Motion = new ItemMotion { Tick = action.StartedTick, Position = center, Rotation = Quaternion.identity,
+                    PositionIsSphereCenter = true, Velocity = direction * Mathf.Lerp(definition.MinThrowSpeed, definition.MaxThrowSpeed, charge) +
+                        ItemReleaseVelocity.Movement(seating, motor) * definition.VelocityInheritance } };
+            registry.Pebbles.Predict(fire, ObjectId);
+            HeldPresentation.ReleaseSubmitted();
+            if (IsServerInitialized) AcceptShot(fire);
+            else CmdFireSlingshot(fire);
+            return true;
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void CmdFireSlingshot(PebbleFire fire) => AcceptShot(fire);
+
+        private void AcceptShot(PebbleFire fire)
+        {
+            if (acceptedLifetime != networkState.Lifetime)
+            { acceptedLifetime = networkState.Lifetime; acceptedShot = 0; }
+            if (fire.Shot <= acceptedShot) return;
+            acceptedShot = fire.Shot;
+            var equipped = inventory.GetEquipped();
+            bool accepted = fire.Epoch == registry.Epoch && fire.Lifetime == networkState.Lifetime &&
+                fire.Action.ControlRevision == motor.ControlRevision && inventory.CanEquip && networkState.CanCharge &&
+                !equipped.IsEmpty && equipped.WorldIds[0] == fire.Weapon && equipped.ItemId == fire.Action.DefinitionId &&
+                fire.Action.MatchesRelease(fire.Weapon, fire.Shot) &&
+                registry.GetDefinition(equipped.ItemId) is SlingshotDefinition &&
+                WorldItemRegistry.Finite(fire.Motion.Position) && WorldItemRegistry.Finite(fire.Motion.Velocity);
+            if (!accepted) { registry.Pebbles.Reject(fire, ObjectId, Owner); return; }
+            networkState.AcceptRecovery(fire.Action);
+            registry.Pebbles.Accept(fire, ObjectId, Owner.ClientId);
+        }
 
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {

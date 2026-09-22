@@ -21,7 +21,7 @@ namespace TwoBirds
 
         internal void QueueIntake(WorldItem item, Cauldron cauldron)
         {
-            if (Replaying || !item.ReleaseAvailable || !item.Simulating) return;
+            if (Replaying || !item.ReleaseAvailable || !item.Simulating || !item.Definition.CanBeIngredient) return;
             var report = ContactFor(item);
             report.Cauldron = cauldron.ObjectId;
             contacts[report.Item] = report;
@@ -94,7 +94,8 @@ namespace TwoBirds
         {
             if (!records.TryGetValue(report.Item, out var item) || item.State != WorldItemState.World ||
                 item.Operation != report.Operation || item.Releaser != report.Releaser || item.Motion.Revision < report.Revision) return;
-            if (report.Cauldron >= 0 && cauldrons.TryGetValue(report.Cauldron, out var cauldron) && cauldron.Accepting)
+            if (report.Cauldron >= 0 && GetDefinition(item.DefinitionId).CanBeIngredient &&
+                cauldrons.TryGetValue(report.Cauldron, out var cauldron) && cauldron.Accepting)
             {
                 var visual = items[report.Item];
                 Admit(item, cauldron, item.Releaser, item.Operation, visual.PresentedRootPosition, visual.PresentedRotation);

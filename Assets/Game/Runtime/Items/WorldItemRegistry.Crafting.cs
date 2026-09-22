@@ -9,7 +9,6 @@ namespace TwoBirds
     {
         private readonly Dictionary<int, Cauldron> cauldrons = new();
         private readonly Dictionary<int, CauldronRecord> mixtures = new();
-        private uint nextCraftedId;
         private readonly List<int> cauldronSteps = new();
         private readonly Queue<CraftingTransition> deferredFeatures = new();
         internal uint Epoch => epoch;
@@ -37,8 +36,7 @@ namespace TwoBirds
         }
         private void BeginCraftingWorld()
         {
-            nextCraftedId = 0;
-            foreach (uint id in records.Keys) if (id > nextCraftedId) nextCraftedId = id;
+            runtimeIds.Seed(records.Keys);
         }
         internal void RegisterCauldron(Cauldron cauldron)
         {
@@ -61,12 +59,14 @@ namespace TwoBirds
         internal bool AdmitHeld(uint id, int cauldronId, PlayerInventory player, uint operation, Vector3 position, Quaternion rotation)
         {
             if (!cauldrons.TryGetValue(cauldronId, out var cauldron) || !cauldron.Accepting ||
-                !records.TryGetValue(id, out var item) || item.State != WorldItemState.Held || item.Holder != player.ObjectId) return false;
+                !records.TryGetValue(id, out var item) || item.State != WorldItemState.Held || item.Holder != player.ObjectId ||
+                !GetDefinition(item.DefinitionId).CanBeIngredient) return false;
             Admit(item, cauldron, player.ObjectId, operation, position, rotation);
             return true;
         }
         private void Admit(ItemRecord item, Cauldron cauldron, int player, uint operation, Vector3 position, Quaternion rotation)
         {
+            if (!GetDefinition(item.DefinitionId).CanBeIngredient) return;
             var state = mixtures[cauldron.ObjectId];
             state.Ingredients = new List<IngredientRecord>(state.Ingredients);
             state.Ingredients.Add(new IngredientRecord { Definition = item.DefinitionId, WorldId = item.Motion.Id, Player = player, Operation = operation,
@@ -179,7 +179,7 @@ namespace TwoBirds
                 {
                     var item = new ItemRecord { DefinitionId = state.Result, State = WorldItemState.CauldronOutput,
                         Cauldron = id, Holder = -1, Releaser = -1, Simulator = -1,
-                        Motion = new ItemMotion { Id = ++nextCraftedId, Revision = 1, Tick = ServerTick,
+                        Motion = new ItemMotion { Id = runtimeIds.Allocate(), Revision = 1, Tick = ServerTick,
                             Position = cauldron.IntakeAnchor.position, Rotation = Quaternion.identity } };
                     state.Output = item.Motion.Id;
                     state.Phase = CauldronPhase.Rising;
@@ -213,7 +213,7 @@ namespace TwoBirds
             foreach (var cloud in predictedClouds.Values) if (cloud) Destroy(cloud);
             predictedClouds.Clear(); deferredDoses.Clear(); reseedAreas = false;
             areas.Clear(); activations.Clear(); doses.Clear(); contacts.Clear(); deferredFeatures.Clear();
-            mixtures.Clear(); cauldrons.Clear(); cauldronSteps.Clear(); nextCraftedId = nextEffectId = 0;
+            mixtures.Clear(); cauldrons.Clear(); cauldronSteps.Clear(); nextEffectId = 0;
         }
     }
 }

@@ -173,6 +173,12 @@ namespace TwoBirds
         }
         internal void SampleImmediately() { if (running && owner.IsOwner) Evaluate(0f); }
 
+        internal void CommitCorrection()
+        {
+            if (active) active.Evaluate(0f, avatar.Registry.Animations);
+            held.CommitHands(active ? active.Binding : null);
+        }
+
         private void Evaluate(float dt)
         {
             if (pending != null)

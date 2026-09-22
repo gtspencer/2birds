@@ -143,6 +143,7 @@ namespace TwoBirds
                 if (!birdFirst && !shapeLives.TryGetValue(pair.otherColliderEntityId, out life)) continue;
                 EntityId rock = birdFirst ? pair.otherColliderEntityId : pair.colliderEntityId;
                 EntityId bird = birdFirst ? pair.colliderEntityId : pair.otherColliderEntityId;
+                if (ItemContactPhysics.NoImpulse(rock)) continue;
                 if (!physicalRocks.Contains(rock) || suppressedRockPairs.Contains((rock, bird)))
                 {
                     for (int i = 0; i < pair.contactCount; i++) pair.IgnoreContact(i);
@@ -150,14 +151,11 @@ namespace TwoBirds
                 }
                 Vector3 velocity = birdFirst ? pair.otherBodyVelocity : pair.bodyVelocity;
                 Vector3 relative = velocity - (birdFirst ? pair.bodyVelocity : pair.otherBodyVelocity);
-                var mass = pair.massProperties;
-                if (birdFirst) { mass.inverseMassScale = 0f; mass.inverseInertiaScale = 0f; }
-                else { mass.otherInverseMassScale = 0f; mass.otherInverseInertiaScale = 0f; }
-                pair.massProperties = mass;
+                ItemContactPhysics.SuppressTarget(ref pair, birdFirst);
                 for (int i = 0; i < pair.contactCount; i++)
                 {
                     if (!ccd && pair.GetSeparation(i) > 0f) { pair.IgnoreContact(i); continue; }
-                    Vector3 normal = pair.GetNormal(i) * (birdFirst ? -1f : 1f) * (ccd ? -1f : 1f);
+                    Vector3 normal = ItemContactPhysics.Normal(pair, i, birdFirst, ccd);
                     float weight = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(1f + normal.y));
                     pair.SetBounciness(i, bounceMultiplier * Mathf.Lerp(undersideMultiplier, 1f, weight));
                     pair.SetStaticFriction(i, 0f);
@@ -179,6 +177,16 @@ namespace TwoBirds
             hitReporter.RockContact(new BirdHitReport { Source = rock.Motion.Id, Player = rock.BirdPlayer,
                 Operation = rock.Operation }, bird, contact.Speed, contact.Position, waiting);
             if (hitReporter.Predicted(contact.Life) && hitShapes.TryGetValue(contact.Life, out var shape)) shape.Collider.enabled = false;
+        }
+
+        internal bool ProjectileBirdContact(BirdHitReport source, Collider collider, float speed,
+            Vector3 position, out BirdHitReport report)
+        {
+            report = default;
+            if (!shapeLives.TryGetValue(collider.GetEntityId(), out uint life) || !records.TryGetValue(life, out var bird)) return false;
+            bool result = hitReporter.TakeContact(source, bird, speed, position, out report);
+            if (hitReporter.Predicted(life) && hitShapes.TryGetValue(life, out var shape)) shape.Collider.enabled = false;
+            return result;
         }
 
         private void ClearRockPhysics()

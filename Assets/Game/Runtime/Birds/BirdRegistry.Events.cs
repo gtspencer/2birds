@@ -44,13 +44,27 @@ namespace TwoBirds
         internal void AcceptRelease(ItemRecord record)
         {
             if (active && Host && IsRock(WorldItemRegistry.Instance.GetDefinition(record.DefinitionId)))
-                ledger.Accept(record.Motion.Id, record.BirdPlayer, record.Operation);
+                AcceptSource(record.Motion.Id, record.BirdPlayer, record.Operation);
         }
         internal void CompleteRelease(ItemRecord record)
         {
             if (active && Host && record.State == WorldItemState.World)
-                ledger.Complete(record.Motion.Id, record.BirdPlayer, record.Operation, Time.unscaledTime);
+                CompleteSource(record.Motion.Id, record.BirdPlayer, record.Operation);
         }
+        internal void AcceptSource(uint source, uint player, uint operation)
+        {
+            if (active && Host) ledger.Accept(source, player, operation);
+        }
+        internal void CompleteSource(uint source, uint player, uint operation)
+        {
+            if (active && Host) ledger.Complete(source, player, operation, Time.unscaledTime);
+        }
+        internal void RejectContact(BirdHitReport report)
+        {
+            if (report.Hits == null) return;
+            foreach (var hit in report.Hits) hitReporter?.Confirmed(hit.Life, false, hit.Contact);
+        }
+
         internal void ReleaseResolved(uint rock, uint operation, bool accepted) => hitReporter?.ReleaseResolved(rock, operation, accepted);
         internal bool IsRock(ItemDefinition definition)
         {
@@ -134,6 +148,15 @@ namespace TwoBirds
             report.Epoch = epoch;
             if (Host) ReceiveHits(null, report, Channel.Reliable);
             else network.ClientManager.Broadcast(report);
+        }
+
+        internal void SubmitProjectileHits(BirdHitReport report, int simulator)
+        {
+            if (!active || !ready || Replaying || report.Hits.Count == 0) return;
+            report.Epoch = epoch;
+            NetworkConnection sender = null;
+            if (simulator >= 0) network.ServerManager.Clients.TryGetValue(simulator, out sender);
+            ReceiveHits(sender != null && sender.IsLocalClient ? null : sender, report, Channel.Reliable);
         }
 
         private void ReceiveHits(NetworkConnection connection, BirdHitReport report, Channel channel)

@@ -26,7 +26,8 @@ namespace TwoBirds
         private readonly Dictionary<uint, ItemMotion> earlyMotion = new();
         private readonly Dictionary<uint, uint> pendingReleases = new();
         private readonly Dictionary<int, PlayerInventory> players = new();
-        private readonly Dictionary<byte, Stack<WorldItem>> pools = new();
+        private readonly Dictionary<byte, RigidbodyInstancePool<WorldItem>> pools = new();
+        private readonly RuntimeItemIds runtimeIds = new();
         private readonly HashSet<NetworkConnection> observers = new();
         private readonly List<uint> cleanup = new();
         private readonly List<ItemMotion> motionBatch = new(BatchSize);
@@ -91,6 +92,7 @@ namespace TwoBirds
         private void Start()
         {
             predictionManager = GetComponent<PredictionManager>();
+            RegisterPebbles();
             RegisterCraftingMessages();
             network.ServerManager.RegisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ServerManager.RegisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
@@ -187,6 +189,7 @@ namespace TwoBirds
             }
             FlushLifecycle(connection);
             SendCraftingBaseline(connection);
+            Pebbles.Baseline(connection);
             network.ServerManager.Broadcast(connection, new ItemBaselineComplete { Session = request.Session, Epoch = epoch });
         }
 
@@ -252,6 +255,8 @@ namespace TwoBirds
 
         private void ApplyMotion(ItemMotion motion)
         {
+            if (Pebbles.ReceiveMotion(motion)) return;
+            if (!records.ContainsKey(motion.Id) && !items.ContainsKey(motion.Id)) return;
             if (!records.TryGetValue(motion.Id, out var record) || motion.Revision > record.Motion.Revision)
             {
                 if (!earlyMotion.TryGetValue(motion.Id, out var earlier) || Newer(motion, earlier))
@@ -564,11 +569,13 @@ namespace TwoBirds
             if (!worldReady) return;
             BirdRegistry.Instance?.PrepareRockPhysics(ServerTick);
             if (Replaying) return;
+            ItemContactPhysics.BeginStep();
             RefreshEffectPoses();
             foreach (var player in players.Values)
                 if (!player.Hitbox.Suspended) player.Hitbox.FollowMotor();
             foreach (var item in items.Values)
                 if (item != null && item.Definition != null && item.gameObject.activeSelf) { item.BeforePhysics(); item.BeforePotionPhysics(); }
+            Pebbles.BeforePhysics();
         }
 
         private void AfterPhysics(float delta)
@@ -577,6 +584,7 @@ namespace TwoBirds
             RefreshEffectPoses();
             foreach (var item in items.Values)
                 if (item != null && item.Definition != null && item.gameObject.activeSelf) { item.AfterPhysics(delta); item.AfterPotionPhysics(); }
+            Pebbles.AfterPhysics(delta);
         }
 
         private void LateUpdate()
@@ -593,6 +601,7 @@ namespace TwoBirds
                 if (!IsHost || !item.Simulating) item.SamplePlayerContact(victim);
             }
             FlushPotionContacts();
+            Pebbles.Present(victim);
         }
 
         private void Publish(ItemRecord record)
@@ -626,10 +635,8 @@ namespace TwoBirds
 
         private WorldItem Rent(byte definition)
         {
-            if (pools.TryGetValue(definition, out var pool) && pool.Count > 0) return pool.Pop();
-            var item = Instantiate(itemRegistry.Get(definition).WorldPrefab).GetComponent<WorldItem>();
-            SceneManager.MoveGameObjectToScene(item.gameObject, worldScene);
-            return item;
+            if (!pools.TryGetValue(definition, out var pool)) pools[definition] = pool = new();
+            return pool.Rent(itemRegistry.Get(definition).WorldPrefab, worldScene);
         }
 
         private void Pool(uint id)
@@ -647,8 +654,8 @@ namespace TwoBirds
             int previousHolder = item.Record.State == WorldItemState.Held ? item.Record.Holder : -1;
             item.ReturnToPool();
             NotifyPresentation(id, previousHolder);
-            if (!pools.TryGetValue(definition, out var pool)) pools[definition] = pool = new Stack<WorldItem>();
-            pool.Push(item);
+            if (!pools.TryGetValue(definition, out var pool)) pools[definition] = pool = new();
+            pool.Return(item);
         }
 
         private void ConnectionChanged(NetworkConnection connection, RemoteConnectionStateArgs args)
@@ -660,14 +667,14 @@ namespace TwoBirds
 
         public void EndWorld()
         {
+            Pebbles?.Clear();
+            ItemContactPhysics.Clear();
             EndCraftingWorld();
             worldReady = false;
             foreach (var item in items.Values)
                 if (item != null) Destroy(item.gameObject);
             items.Clear();
-            foreach (var pool in pools.Values)
-                foreach (var item in pool)
-                    if (item != null) Destroy(item.gameObject);
+            foreach (var pool in pools.Values) pool.Clear();
             pools.Clear();
             records.Clear();
             players.Clear();
@@ -687,6 +694,7 @@ namespace TwoBirds
 
         private void OnDestroy()
         {
+            UnregisterPebbles();
             UnregisterCraftingMessages();
             network.ServerManager.UnregisterBroadcast<ItemBaselineRequest>(SendBaseline);
             network.ServerManager.UnregisterBroadcast<ItemMotionBatch>(ReceiveSimulatorMotion);
