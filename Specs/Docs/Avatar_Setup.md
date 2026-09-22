@@ -28,6 +28,7 @@ Constraints or spring chains that overwrite animated Humanoid bones or their anc
 | Processed prefab | `Assets/Game/Prefabs/Avatars/<avatarId>.prefab` | Contains the presentation model and its runtime components. |
 | Shared `AvatarRegistry` | `Assets/Game/Settings/Avatars/AvatarRegistry.asset` | Connects each ID to its source, settings, and processed prefab; stores the default ID. |
 | Shared `AvatarAnimationSet` | `Assets/Game/Settings/Avatars/AvatarAnimationSet.asset` | Supplies the animation clips and motion calibration for all avatars. |
+| Shared `AvatarDriverSettings` | `Assets/Game/Settings/Avatars/AvatarDriverSettings.asset` | Supplies driver body and steering hand offsets through the registry's Driver reference. |
 
 The processor adds `AvatarInstance` and `AvatarSpringRuntimeProvider` to the processed model. The presentation host initializes animation and VRM processing at runtime. No Animator Controller or manually added spring service is required.
 
@@ -44,9 +45,9 @@ The `AvatarSettings` inspector exposes authored tuning and shows generated ident
 | **Visual Height** | Desired visual height in metres. Initially measured from the source; applies uniform visual scaling. |
 | **Standing Offset** | Placement correction in metres in the visual body's facing space, after aligning its soles. |
 | **Seated Pelvis Offset** | Pelvis alignment relative to the existing seated rider anchor. |
-| **Override Driver Seated Offset** | Enable to replace the registry's driver body offset for this avatar. |
+| **Override Driver Seated Offset** | Enable to replace the shared driver settings' body offset for this avatar. |
 | **Driver Seated Offset** | Additional driver-only offset in seat-relative metres, added to Seated Pelvis Offset. Positive Z moves forward; passengers do not receive it. |
-| **Override Driver Hand Offset** | Enable to replace the registry's steering hand offset for this avatar. |
+| **Override Driver Hand Offset** | Enable to replace the shared driver settings' hand offset for this avatar. |
 | **Driver Hand Offset** | Offset both steering palm targets in seat-relative metres. Positive Y raises them; negative Z brings them toward the driver. |
 | **Carried Offset** | Additional offset for the carried pose. |
 | **Yaw Offset** | Import-facing correction in degrees. |
@@ -58,7 +59,7 @@ The `AvatarSettings` inspector exposes authored tuning and shows generated ident
 
 Use these settings to fit the visual model. They do not resize the gameplay capsule, change camera eye height, or change movement speed. Prefer making persistent tuning changes outside Play Mode, then restart the demo to recompute its shared target and camera framing.
 
-Shared driver defaults are on `Assets/Game/Settings/Avatars/AvatarRegistry.asset`: **Driver Seated Offset** starts at `(0, 0, 0.08)` and **Driver Hand Offset** at `(0, 0.04, -0.04)`. They apply to remote avatars and local driving arms. Each avatar uses these defaults unless its corresponding override is enabled; an override replaces that default rather than adding to it. Hand offsets follow the seat's orientation, independently of camera look and steering-wheel rotation. Contact-point rotations remain authored on the wheel.
+Shared driver defaults are on `Assets/Game/Settings/Avatars/AvatarDriverSettings.asset`, assigned to **Driver** on `AvatarRegistry`: **Driver Seated Offset** starts at `(0, 0, 0.08)` and **Driver Hand Offset** at `(0, 0.04, -0.04)`. They apply to remote avatars and local driving arms. Each avatar uses these defaults unless its corresponding override is enabled; an override replaces that default rather than adding to it. Hand offsets follow the seat's orientation, independently of camera look and steering-wheel rotation. Contact-point rotations remain authored on the wheel.
 
 ### Author spring chains in Unity
 
