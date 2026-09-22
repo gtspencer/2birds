@@ -218,12 +218,14 @@ namespace TwoBirds
         private void Contact(Collision collision)
         {
             if (!simulating || ended || world.Replaying || ItemContactPhysics.NoImpulse(collision.collider)) return;
-            if (!touching.Add(collision.collider)) return;
+            if (touching.Contains(collision.collider)) return;
             if (!ItemContactPhysics.Take(sphere, collision.collider, out var contact))
             {
+                if (collision.contactCount == 0) return;
                 var point = collision.GetContact(0);
                 contact = new ItemContactPhysics.Contact { Point = point.point, Normal = point.normal, Velocity = incoming };
             }
+            touching.Add(collision.collider);
             impacts.Add((collision.collider, contact));
         }
 
