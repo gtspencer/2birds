@@ -84,14 +84,14 @@ namespace TwoBirds
         }
 
         [FishNet.CodeGenerating.NotSerializer]
-        public static void WritePackedMotion(this Writer writer, ItemMotion motion)
+        public static void WritePackedMotion(this Writer writer, ItemMotion motion, bool fullVelocity = false)
         {
             byte flags = motion.RotationOmitted ? OmitRotation : (byte)0;
             if (motion.Sleeping) flags |= Sleeping;
             if (motion.Boundary) flags |= Boundary;
             if (motion.Removed) flags |= Removed;
             if (motion.PositionIsSphereCenter) flags |= SphereCenter;
-            if (!Fits(motion.Velocity)) flags |= FullVelocity;
+            if (fullVelocity || !Fits(motion.Velocity)) flags |= FullVelocity;
             if (!motion.RotationOmitted && !Fits(motion.AngularVelocity)) flags |= FullAngularVelocity;
             writer.WriteUInt32(motion.Id);
             writer.WriteUInt32(motion.Revision);
@@ -110,7 +110,7 @@ namespace TwoBirds
         public static ItemMotion ReadPackedMotion(this Reader reader)
         {
             var motion = new ItemMotion { Id = reader.ReadUInt32(), Revision = reader.ReadUInt32(), Tick = reader.ReadUInt32(),
-                Sequence = reader.ReadUInt32(), Path = reader.ReadUInt32() };
+                Sequence = reader.ReadUInt32(), Path = reader.ReadUInt32(), Rotation = Quaternion.identity };
             byte flags = reader.ReadUInt8Unpacked();
             motion.RotationOmitted = (flags & OmitRotation) != 0;
             motion.Sleeping = (flags & Sleeping) != 0;

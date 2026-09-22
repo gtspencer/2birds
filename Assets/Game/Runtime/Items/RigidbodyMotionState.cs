@@ -68,7 +68,8 @@ namespace TwoBirds
             }
             float amount = to.Tick == from.Tick ? 1f : Mathf.Clamp01((float)((tick - from.Tick) / (to.Tick - from.Tick)));
             var motion = new ItemMotion { Position = Vector3.Lerp(from.Position, to.Position, amount),
-                Rotation = Quaternion.Slerp(from.Rotation, to.Rotation, amount), RotationOmitted = to.RotationOmitted,
+                Rotation = to.RotationOmitted ? Quaternion.identity : from.RotationOmitted ? to.Rotation :
+                    Quaternion.Slerp(from.Rotation, to.Rotation, amount), RotationOmitted = to.RotationOmitted,
                 PositionIsSphereCenter = to.PositionIsSphereCenter };
             velocity = to.Tick > from.Tick && tick >= from.Tick
                 ? (to.Position - from.Position) / (float)((to.Tick - from.Tick) * tickDelta) : Vector3.zero;

@@ -13,6 +13,7 @@ namespace TwoBirds.Editor
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
+            bool slingshot = System.Array.TrueForAll(targets, value => value is SlingshotDefinition);
             var overrideSettings = serializedObject.FindProperty("OverrideHoldSettings");
             var property = serializedObject.GetIterator();
             for (bool enter = true; property.NextVisible(enter); enter = false)
@@ -28,7 +29,7 @@ namespace TwoBirds.Editor
                 {
                     var localOverride = serializedObject.FindProperty("OverrideFirstPersonPose");
                     if (localOverride.boolValue || localOverride.hasMultipleDifferentValues)
-                        EditorGUILayout.PropertyField(property, new GUIContent("First Person Spatial Pose"), true);
+                        DrawPose(property, "First Person Spatial Pose", slingshot);
                     else using (new EditorGUI.DisabledScope(true))
                         EditorGUILayout.ObjectField("First Person Defaults", registry ? registry.HeldItemDefaults : null, typeof(HeldItemSettings), false);
                     continue;
@@ -37,7 +38,7 @@ namespace TwoBirds.Editor
                 {
                     if (overrideSettings.hasMultipleDifferentValues) continue;
                     if (overrideSettings.boolValue)
-                        EditorGUILayout.PropertyField(property, new GUIContent("Hold Settings"), true);
+                        DrawPose(property, "Hold Settings", slingshot);
                     else
                         using (new EditorGUI.DisabledScope(true))
                             EditorGUILayout.ObjectField("System Defaults", registry ? registry.HeldItemDefaults : null,
@@ -51,6 +52,22 @@ namespace TwoBirds.Editor
                     serializedObject.FindProperty("HandPose").isExpanded = true;
             }
             serializedObject.ApplyModifiedProperties();
+        }
+
+        private static void DrawPose(SerializedProperty property, string label, bool slingshot)
+        {
+            if (!slingshot) { EditorGUILayout.PropertyField(property, new GUIContent(label), true); return; }
+            property.isExpanded = EditorGUILayout.Foldout(property.isExpanded, label, true);
+            if (!property.isExpanded) return;
+            EditorGUI.indentLevel++;
+            var child = property.Copy();
+            var end = property.GetEndProperty();
+            for (bool enter = true; child.NextVisible(enter) && !SerializedProperty.EqualContents(child, end); enter = false)
+            {
+                if (child.name is "ChargeControlPosition" or "ChargedPosition" or "ChargedWristEuler" or "ChargePoseDuration") continue;
+                EditorGUILayout.PropertyField(child, true);
+            }
+            EditorGUI.indentLevel--;
         }
     }
 }

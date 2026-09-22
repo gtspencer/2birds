@@ -14,6 +14,7 @@ namespace TwoBirds
         private readonly List<Collider> shooterColliders = new();
         private readonly List<(Collider Target, ItemContactPhysics.Contact Contact)> impacts = new();
         private readonly RaycastHit[] crossings = new RaycastHit[32];
+        private Collider[] overlaps = new Collider[32];
         private Rigidbody body;
         private OfflineRigidbody offline;
         private SphereCollider sphere;
@@ -56,6 +57,9 @@ namespace TwoBirds
             ended = false;
             simulating = simulate;
             body.collisionDetectionMode = CollisionDetectionMode.Discrete;
+            body.rotation = Quaternion.identity;
+            body.isKinematic = false;
+            body.angularVelocity = Vector3.zero;
             body.isKinematic = !simulate;
             body.useGravity = true;
             sphere.enabled = simulate;
@@ -95,7 +99,14 @@ namespace TwoBirds
             Record = current;
         }
 
-        internal ItemMotion Capture(uint tick) => RigidbodyMotionState.Capture(body, Record.Motion, tick, true, body.position);
+        internal ItemMotion Capture(uint tick)
+        {
+            var sample = RigidbodyMotionState.Capture(body, Record.Motion, tick, true, body.position);
+            sample.RotationOmitted = true;
+            sample.Rotation = Quaternion.identity;
+            sample.AngularVelocity = Vector3.zero;
+            return sample;
+        }
         internal void SetRecord(PebbleRecord record) => Record = record;
 
         internal void Receive(ItemMotion next)
@@ -146,8 +157,9 @@ namespace TwoBirds
             stepStart = body.position;
             impacts.Clear();
             separated.Clear();
+            int count = touching.Count > 0 ? QueryOverlaps(radius + 0.002f) : 0;
             foreach (var collider in touching)
-                if (!collider || !collider.enabled || !Overlaps(collider, radius + 0.002f)) separated.Add(collider);
+                if (!collider || !collider.enabled || System.Array.IndexOf(overlaps, collider, 0, count) < 0) separated.Add(collider);
             foreach (var collider in separated) touching.Remove(collider);
             bool contactEnded = Record.Touching && touching.Count == 0;
             var record = Record; record.Touching = touching.Count > 0;
@@ -157,14 +169,22 @@ namespace TwoBirds
             playerContact.BeforePhysics(Frame, true);
         }
 
-        private bool Overlaps(Collider collider, float extent) =>
-            (collider.ClosestPoint(body.position) - body.position).sqrMagnitude <= extent * extent;
+        private int QueryOverlaps(float extent)
+        {
+            int count;
+            while ((count = Physics.OverlapSphereNonAlloc(body.position, extent, overlaps, ~0,
+                QueryTriggerInteraction.Ignore)) == overlaps.Length)
+                System.Array.Resize(ref overlaps, overlaps.Length * 2);
+            return count;
+        }
 
         private void UpdateShooter()
         {
             if (Record.ShooterCleared) return;
+            int count = QueryOverlaps(radius);
             foreach (var collider in shooterColliders)
-                if (collider && !collider.isTrigger && Overlaps(collider, radius)) return;
+                if (collider && collider.enabled && !collider.isTrigger &&
+                    System.Array.IndexOf(overlaps, collider, 0, count) >= 0) return;
             ClearShooter();
             var record = Record; record.ShooterCleared = true;
             if (simulating)
@@ -184,8 +204,12 @@ namespace TwoBirds
 
         private void SeedContacts()
         {
-            foreach (var collider in Physics.OverlapSphere(body.position, radius + 0.002f, ~0, QueryTriggerInteraction.Ignore))
+            int count = QueryOverlaps(radius + 0.002f);
+            for (int i = 0; i < count; i++)
+            {
+                var collider = overlaps[i];
                 if (collider != sphere && !ItemContactPhysics.NoImpulse(collider)) touching.Add(collider);
+            }
         }
 
         private void OnCollisionEnter(Collision collision) => Contact(collision);

@@ -10,7 +10,7 @@ namespace TwoBirds
         private PlayerHeldItemPresentation held;
         private PlayerPresentation player;
         private Transform viewCamera;
-        private Pose CameraPose => viewCamera ? new Pose(viewCamera.position, viewCamera.rotation) : player.AimPose;
+        internal Pose CameraPose => viewCamera ? new Pose(viewCamera.position, viewCamera.rotation) : player.AimPose;
         private PlayerMotor motor;
         private PlayerSeating seating;
         private PlayerCarry carry;
@@ -50,6 +50,8 @@ namespace TwoBirds
         {
             if (running || !isActiveAndEnabled || !owner || !owner.IsClientInitialized) return;
             running = true;
+            LocalCameraChanged(player.ViewCamera);
+            PlayerPresentation.LocalCameraChanged += LocalCameraChanged;
             avatar.IdentityResolved += IdentityResolved;
             avatar.PreparingHands += PrepareRemote;
             avatar.HandsEvaluated += CommitRemote;
@@ -68,6 +70,7 @@ namespace TwoBirds
         }
 
         private void IdentityResolved(AvatarRegistry.Entry entry) { pending = entry; CacheContacts(); }
+        private void LocalCameraChanged(Camera camera) => viewCamera = owner.IsOwner && camera ? camera.transform : null;
         private void ContextChanged()
         {
             seeded = false; falling = descent = landing = 0f;
@@ -166,7 +169,6 @@ namespace TwoBirds
         private void LateUpdate()
         {
             if (!running || !owner.IsOwner) return;
-            if (!viewCamera && player.ViewCamera) viewCamera = player.ViewCamera.transform;
             float dt = advancedFrame == Time.frameCount ? 0f : Mathf.Min(Time.deltaTime, 0.05f);
             advancedFrame = Time.frameCount;
             Evaluate(dt);
@@ -285,6 +287,7 @@ namespace TwoBirds
         {
             if (!running) return;
             running = false;
+            PlayerPresentation.LocalCameraChanged -= LocalCameraChanged;
             cosmetics?.Dispose(); cosmetics = null;
             avatar.IdentityResolved -= IdentityResolved; avatar.PreparingHands -= PrepareRemote; avatar.HandsEvaluated -= CommitRemote;
             seating.PresentationContextChanged -= ContextChanged; carry.PresentationContextChanged -= ContextChanged; motor.Simulated -= Simulated;

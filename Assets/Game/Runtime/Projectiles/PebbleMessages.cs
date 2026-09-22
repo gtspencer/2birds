@@ -42,6 +42,20 @@ namespace TwoBirds
 
     public static class PebbleSerializers
     {
+        public static void WritePebbleFire(this Writer writer, PebbleFire value)
+        {
+            writer.WriteUInt32(value.Epoch); writer.WriteUInt32(value.Lifetime);
+            writer.WriteUInt32(value.Shot); writer.WriteUInt32(value.Weapon);
+            writer.WritePackedMotion(value.Motion, fullVelocity: true);
+            writer.Write<ItemActionSnapshot>(value.Action);
+        }
+        public static PebbleFire ReadPebbleFire(this Reader reader) => new()
+        {
+            Epoch = reader.ReadUInt32(), Lifetime = reader.ReadUInt32(),
+            Shot = reader.ReadUInt32(), Weapon = reader.ReadUInt32(),
+            Motion = reader.ReadPackedMotion(), Action = reader.Read<ItemActionSnapshot>()
+        };
+
         public static void WritePebbleTransition(this Writer writer, PebbleTransition value)
         {
             writer.WriteUInt32(value.Epoch);

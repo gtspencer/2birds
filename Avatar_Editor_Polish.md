@@ -1,0 +1,2 @@
+- Only show tattoos list and color editor when tattoo tab selected
+- Put avatar in the looping idle animation

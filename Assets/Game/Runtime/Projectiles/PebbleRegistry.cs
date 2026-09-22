@@ -34,15 +34,21 @@ namespace TwoBirds
 
         private static (int, uint, uint) Key(PebbleRecord record) => (record.Shooter, record.Lifetime, record.Shot);
 
-        internal PebbleRecord Create(PebbleFire fire, int shooter, int simulator) => new()
+        internal PebbleRecord Create(PebbleFire fire, int shooter, int simulator)
         {
-            Definition = fire.Action.DefinitionId, Shooter = shooter, Simulator = simulator,
-            Lifetime = fire.Lifetime, Weapon = fire.Weapon, Shot = fire.Shot,
-            Motion = fire.Motion, LaunchTick = fire.Action.StartedTick, LaunchFraction = fire.Action.StartedFraction,
-            Expiry = fire.Action.StartedTick + new PreciseTick(fire.Action.StartedTick, fire.Action.StartedFraction).PercentAsDouble +
-                LifetimeSeconds / world.TickDelta,
-            BirdPlayer = BirdRegistry.Instance ? BirdRegistry.Instance.PlayerToken(shooter) : 0
-        };
+            fire.Motion.RotationOmitted = true;
+            fire.Motion.Rotation = Quaternion.identity;
+            fire.Motion.AngularVelocity = Vector3.zero;
+            return new PebbleRecord
+            {
+                Definition = fire.Action.DefinitionId, Shooter = shooter, Simulator = simulator,
+                Lifetime = fire.Lifetime, Weapon = fire.Weapon, Shot = fire.Shot,
+                Motion = fire.Motion, LaunchTick = fire.Action.StartedTick, LaunchFraction = fire.Action.StartedFraction,
+                Expiry = fire.Action.StartedTick + new PreciseTick(fire.Action.StartedTick, fire.Action.StartedFraction).PercentAsDouble +
+                    LifetimeSeconds / world.TickDelta,
+                BirdPlayer = BirdRegistry.Instance ? BirdRegistry.Instance.PlayerToken(shooter) : 0
+            };
+        }
 
         internal void Predict(PebbleFire fire, int shooter)
         {
@@ -247,7 +253,6 @@ namespace TwoBirds
                     if (shot.Pending || !snapshot) continue;
                     var record = shot.Body.Record;
                     motion.Sequence = record.Motion.Sequence + 1;
-                    motion.RotationOmitted = true;
                     record.Motion = motion; shot.Body.SetRecord(record);
                     if (world.IsHost) shot.Record = record;
                     world.QueueMotion(motion);

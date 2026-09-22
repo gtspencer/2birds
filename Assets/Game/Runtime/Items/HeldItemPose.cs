@@ -66,6 +66,7 @@ namespace TwoBirds
     {
         internal readonly HeldItemPoseSettings Settings;
         internal readonly HeldItemSpatialSettings Spatial;
+        internal readonly SlingshotChargePoseSettings SlingshotCharge;
         internal readonly Vector3 GripPosition;
         internal readonly Quaternion GripRotation, HoldRotation, ChargedRotation;
         private readonly bool firstPerson;
@@ -78,7 +79,9 @@ namespace TwoBirds
             GripPosition = definition.GripPosition;
             GripRotation = Quaternion.Euler(definition.GripEuler);
             HoldRotation = Quaternion.Euler(Spatial.HoldWristEuler);
-            ChargedRotation = Quaternion.Euler(Spatial.ChargedWristEuler);
+            SlingshotCharge = definition is SlingshotDefinition slingshot
+                ? firstPerson ? slingshot.FirstPersonChargePose : slingshot.RemoteChargePose : default;
+            ChargedRotation = Quaternion.Euler(definition is SlingshotDefinition ? SlingshotCharge.ChargedPalmEuler : Spatial.ChargedWristEuler);
         }
         internal float Reach => Mathf.Clamp(Settings.FollowReachFraction, 0.01f, 0.85f);
         internal Vector3 HoldPosition(AvatarSettings avatar) => Spatial.HoldPosition +
@@ -123,11 +126,11 @@ namespace TwoBirds
         }
 
         internal static HeldItemPose Resolve(Vector3 follow, Quaternion wrist, in HeldItemBodyFrame body,
-            AvatarSettings avatar, in HeldItemPoseData item, out bool beyondReach, bool soften = true)
+            AvatarSettings avatar, in HeldItemPoseData item, out bool beyondReach, bool soften = true, float effectiveReach = 0f)
         {
             Vector3 offset = wrist * (body.Measurements.RightWristToPalmPosition * body.Scale);
             Vector3 delta = follow - offset - body.Shoulder;
-            float reach = body.ArmLength * item.Reach;
+            float reach = body.ArmLength * (effectiveReach > 0f ? effectiveReach : item.Reach);
             beyondReach = delta.sqrMagnitude > reach * reach;
             float distance = delta.magnitude;
             float softStart = reach * 0.85f;
@@ -143,6 +146,67 @@ namespace TwoBirds
         internal static HeldItemPose Hold(in HeldItemBodyFrame body, AvatarSettings avatar, in HeldItemPoseData item) =>
             Resolve(body.ToWorld(item.HoldPosition(avatar)), body.Rotation * item.HoldRotation *
                 Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body, avatar, item, out _);
+
+        internal static float SlingshotReach(in HeldItemPose pose, in HeldItemBodyFrame body, in HeldItemPoseData item) =>
+            Mathf.Clamp(Vector3.Distance(pose.WristPosition, body.Shoulder) / body.ArmLength, item.Reach, 0.98f);
+
+        internal static HeldItemPose SlingshotCharge(in HeldItemBodyFrame body, in HeldItemPoseData item,
+            SlingshotPresentation slingshot, in HeldItemPose hold, in HeldItemPose start, float progress, bool firstPerson, Pose camera,
+            Quaternion aim, out float reach)
+        {
+            float amount = Mathf.Clamp01(progress);
+            Vector3 forkOffset = slingshot.ForkMidpoint;
+            Vector3 holdFork = hold.Item.position + hold.Item.rotation * forkOffset;
+            Pose frame = hold.Item;
+            if (firstPerson)
+            {
+                Vector3 right = camera.rotation * Vector3.right;
+                frame.rotation = body.Rotation * item.ChargedRotation * item.GripRotation;
+                frame.position = holdFork - right * Vector3.Dot(holdFork - camera.position, right) - frame.rotation * forkOffset;
+            }
+            else
+            {
+                Vector3 leftShoulder = body.Shoulder + body.Rotation *
+                    ((body.Measurements.LeftShoulder - body.Measurements.RightShoulder) * body.Scale);
+                Vector3 center = (body.Shoulder + leftShoulder) * 0.5f;
+                float height = Vector3.Dot(holdFork - center, body.Rotation * Vector3.up);
+                Vector3 origin = center + aim * (Vector3.up * height);
+                Vector3 forward = aim * Vector3.forward;
+                frame.rotation = aim * item.ChargedRotation * item.GripRotation;
+                frame.position = origin - frame.rotation * forkOffset;
+                var holding = FromItem(frame, body, item);
+                Quaternion palm = frame.rotation * Quaternion.Euler(slingshot.PullingPalmEuler);
+                Quaternion wrist = palm * Quaternion.Inverse(body.Measurements.LeftWristToPalmRotation);
+                Vector3 pulling = frame.position + frame.rotation * slingshot.Pouch(amount, item.SlingshotCharge.PullingHandDrawOffset) +
+                    palm * slingshot.PullingPalmOffset - wrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
+                float leftReach = (body.Measurements.LeftArm.x + body.Measurements.LeftArm.y) * body.Scale * 0.85f;
+                ReachInterval(holding.WristPosition - body.Shoulder, forward, body.ArmLength * 0.98f,
+                    out float holdingNear, out float holdingFar);
+                ReachInterval(pulling - leftShoulder, forward, leftReach, out _, out float pullingFar);
+                frame.position += forward * Mathf.Clamp(pullingFar, holdingNear, holdingFar);
+            }
+            frame.position += (firstPerson ? camera.rotation : aim) * item.SlingshotCharge.ChargedPositionOffset;
+            frame.position = Vector3.Lerp(start.Item.position, frame.position, amount);
+            frame.rotation = Quaternion.Slerp(start.Item.rotation, frame.rotation, amount);
+            var result = FromItem(frame, body, item);
+            if (!firstPerson)
+            {
+                Vector3 delta = result.WristPosition - body.Shoulder;
+                result = new HeldItemPose(result.FollowPosition + Vector3.ClampMagnitude(delta, body.ArmLength * 0.98f) - delta,
+                    result.WristRotation, body.Measurements, body.Scale, item);
+            }
+            reach = SlingshotReach(result, body, item);
+            return result;
+        }
+
+        private static void ReachInterval(Vector3 offset, Vector3 forward, float radius, out float near, out float far)
+        {
+            float along = Vector3.Dot(offset, forward);
+            float discriminant = radius * radius - (offset.sqrMagnitude - along * along);
+            // A missed sphere collapses to the closest point on the aim line.
+            float extent = Mathf.Sqrt(Mathf.Max(0f, discriminant));
+            near = -along - extent; far = -along + extent;
+        }
 
         internal static HeldItemPose Charge(in HeldItemBodyFrame body, AvatarSettings avatar, in HeldItemPoseData item,
             Vector3 start, Quaternion rotation, float progress)

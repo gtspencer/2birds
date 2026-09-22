@@ -131,6 +131,7 @@ namespace TwoBirds
             var fire = new PebbleFire { Epoch = registry.Epoch, Lifetime = networkState.Lifetime, Shot = shot,
                 Weapon = item.Record.Motion.Id, Action = action,
                 Motion = new ItemMotion { Tick = action.StartedTick, Position = center, Rotation = Quaternion.identity,
+                    RotationOmitted = true, AngularVelocity = Vector3.zero,
                     PositionIsSphereCenter = true, Velocity = direction * Mathf.Lerp(definition.MinThrowSpeed, definition.MaxThrowSpeed, charge) +
                         ItemReleaseVelocity.Movement(seating, motor) * definition.VelocityInheritance } };
             registry.Pebbles.Predict(fire, ObjectId);
