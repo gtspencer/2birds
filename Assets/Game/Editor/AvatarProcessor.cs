@@ -139,6 +139,8 @@ namespace TwoBirds.Editor
                 stage = "source measurements";
                 var renderers = root.GetComponentsInChildren<Renderer>(true);
                 draft.Generated = Measure(root, animator, renderers, sourceAsset, guid);
+                draft.TattooRegions = AvatarTattooRegionAuthoring.Generate(root, draft);
+                draft.TattooRegionVersion = AvatarTattooRegionAuthoring.Version;
                 if (!settings) draft.VisualHeight = draft.Generated.Height;
                 if (draft.VisualHeight <= 0f || !float.IsFinite(draft.VisualHeight)) throw new InvalidOperationException("VisualHeight must be positive and finite.");
                 stage = "shared animation preparation";
@@ -470,6 +472,7 @@ namespace TwoBirds.Editor
                 animator.runtimeAnimatorController = null; animator.applyRootMotion = false; animator.fireEvents = false;
                 animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                 root.AddComponent<LocalFirstPersonHands>();
+                settings.FirstPersonTattooRegions = AvatarTattooRegionAuthoring.Generate(root, settings);
                 AvatarContentValidation.Validate(root, settings, true);
                 root.SetActive(true);
                 EnsureFolder(PrefabFolder + "/FirstPerson");

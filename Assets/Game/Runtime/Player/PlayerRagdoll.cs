@@ -50,7 +50,7 @@ namespace TwoBirds
             var hips = avatar.Binding?.GetBone(HumanBodyBones.Hips);
             Vector3 root = hips ? hips.position : input.Facing.position;
             if (!hips && input.Seated && avatar.Resolved != null)
-                root += input.Facing.rotation * avatar.Resolved.Settings.SeatedPelvisOffset;
+                root += input.Facing.rotation * AvatarDriverPose.SeatedOffset(avatar.Resolved.Settings, avatar.Registry, input.Driver);
             return new PlayerRagdollSeed { Position = root, PosePosition = input.Facing.position,
                 Rotation = input.Facing.rotation, Velocity = velocity, Seated = input.Seated, Carried = input.Carried };
         }

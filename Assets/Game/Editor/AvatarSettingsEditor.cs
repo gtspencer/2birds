@@ -48,6 +48,11 @@ namespace TwoBirds.Editor
             }
             serializedObject.ApplyModifiedProperties();
             var settings = (AvatarSettings)target;
+            if (GUILayout.Button("Recapture library icon"))
+            {
+                var registry = AssetDatabase.LoadAssetAtPath<AvatarRegistry>(AvatarProcessor.RegistryPath);
+                if (registry && registry.TryResolve(settings.Id, out var entry)) HatSetup.CaptureAvatar(entry);
+            }
             using (new EditorGUI.DisabledScope(EditorApplication.isPlaying || !settings.Generated.Source))
             {
                 if (GUILayout.Button("Save and Process Avatar"))

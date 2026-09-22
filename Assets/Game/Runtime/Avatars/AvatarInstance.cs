@@ -19,6 +19,8 @@ namespace TwoBirds
         private uint serial, ikSerial;
         private Vector3 seatedHips;
         private float scale;
+        private HumanPoseHandler editorPoseHandler;
+        private HumanPose editorPose;
         internal AvatarBinding Binding { get; private set; }
         internal AvatarSettings Settings { get; private set; }
         internal float NameAnchorOffset { get; private set; }
@@ -66,9 +68,18 @@ namespace TwoBirds
             springsRegistered = true;
             animator.enabled = true;
             graph = new AvatarAnimationGraph(animator, clips);
+            if (host.EditorPose)
+            {
+                editorPoseHandler = new HumanPoseHandler(animator.avatar, transform);
+                editorPoseHandler.GetHumanPose(ref editorPose);
+                Array.Clear(editorPose.muscles, 0, editorPose.muscles.Length);
+                for (int i = 0; i < HumanTrait.MuscleCount; i++)
+                    if (HumanTrait.MuscleName[i] is "Left Arm Down-Up" or "Right Arm Down-Up") editorPose.muscles[i] = -0.45f;
+            }
             graph.SampleSeated();
             seatedHips = transform.InverseTransformPoint(Binding.GetBone(HumanBodyBones.Hips).position);
             ik = new AvatarHumanoidIK(host, Binding);
+            if (editorPoseHandler != null) editorPoseHandler.SetHumanPose(ref editorPose);
             Initialized = true;
             ApplyFeatures();
         }
@@ -79,13 +90,29 @@ namespace TwoBirds
             Vector3 standing = host.Input.SolePosition + host.transform.rotation *
                 (Settings.StandingOffset + (host.Input.Carried ? Settings.CarriedOffset : Vector3.zero)) -
                 transform.rotation * (Vector3.up * (Settings.Generated.SolePlane * scale));
-            Vector3 sitting = host.Input.Facing.position + host.Input.Facing.rotation * Settings.SeatedPelvisOffset -
+            Vector3 sitting = host.Input.Facing.position + host.Input.Facing.rotation *
+                AvatarDriverPose.SeatedOffset(Settings, host.Registry, host.Input.Seated && host.Input.Driver) -
                 transform.rotation * (seatedHips * scale);
             transform.position = Vector3.Lerp(standing, sitting, seatedWeight);
         }
 
         internal void Evaluate(float dt, bool warmup = false)
         {
+            if (Initialized && host.EditorPose)
+            {
+                Place(0f);
+                editorPoseHandler.SetHumanPose(ref editorPose);
+                if (host.HeadLookEnabled)
+                {
+                    var local = transform.InverseTransformDirection(host.EditorLookTarget - Head.position);
+                    float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -45f, 45f);
+                    float pitch = Mathf.Clamp(-Mathf.Atan2(local.y, new Vector2(local.x, local.z).magnitude) * Mathf.Rad2Deg, -25f, 25f);
+                    Head.rotation = transform.rotation * Quaternion.Euler(pitch, yaw, 0) * Quaternion.Inverse(transform.rotation) * Head.rotation;
+                    runtime.LookAt.LookAtInput = new LookAtInput { WorldPosition = host.EditorLookTarget };
+                }
+                runtime.Process();
+                return;
+            }
             if (physical || !Initialized || !host.AnimationEnabled && !warmup) return;
             Place(host.State.Weights[(int)AvatarPose.Seated]);
             if (resetRequested)
@@ -161,6 +188,7 @@ namespace TwoBirds
             if (released) return;
             released = true;
             graph?.Dispose(); graph = null;
+            editorPoseHandler?.Dispose(); editorPoseHandler = null;
             if (animator) animator.enabled = false;
             if (vrm) { vrm.enabled = false; vrm.DisposeRuntime(); }
             runtime = null; ik = null; springsRegistered = false;

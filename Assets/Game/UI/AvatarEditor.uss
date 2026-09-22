@@ -1,0 +1,21 @@
+.avatar-editor { position: absolute; left: 0; right: 0; top: 0; bottom: 0; flex-direction: row; background-color: rgb(20, 26, 32); color: rgb(240, 235, 223); padding: 24px; }
+.editor-controls { width: 38%; min-width: 320px; max-width: 560px; padding-right: 24px; }
+.editor-row { flex-direction: row; flex-wrap: wrap; }
+.editor-row > Button { flex-grow: 1; }
+.editor-library { flex-grow: 1; min-height: 100px; }
+.editor-equipped { max-height: 200px; min-height: 40px; }
+.library-entry { flex-direction: row; align-items: center; min-height: 72px; }
+.library-entry Image { width: 64px; height: 64px; margin-right: 12px; }
+.locked Image { -unity-background-image-tint-color: black; }
+.equipped-row { flex-direction: row; }
+.equipped-row > Button:first-child { flex-grow: 1; }
+.preview-column { flex-grow: 1; }
+.editor-preview { flex-grow: 1; overflow: hidden; }
+#preview-image { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.editor-hints { min-height: 50px; flex-direction: row; flex-wrap: wrap; }
+#tattoo-gizmo { position: absolute; width: 120px; height: 120px; }
+.rotate-handle { position: absolute; left: 0; top: 0; width: 120px; height: 120px; border-width: 3px; border-color: rgb(247, 187, 93); border-radius: 60px; -unity-text-align: upper-center; font-size: 24px; }
+.move-handle { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px; background-color: rgb(49, 146, 172); border-radius: 20px; -unity-text-align: middle-center; font-size: 28px; }
+.size-handle { position: absolute; left: 96px; top: 96px; width: 26px; height: 26px; background-color: rgb(117, 177, 106); -unity-text-align: middle-center; font-size: 24px; }
+.discard-dialog { position: absolute; left: 0; right: 0; top: 0; bottom: 0; align-items: center; justify-content: center; background-color: rgba(0, 0, 0, 0.8); }
+.avatar-editor Slider { min-height: 28px; }

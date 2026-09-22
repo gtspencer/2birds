@@ -57,15 +57,15 @@
                     "priority": 0
                 },
                 {
-                "name": "GiveUp",
-                "type": "Button",
-                "id": "59b9548a-2ae0-4541-ac3e-f19f4714ad9d",
-                "expectedControlType": "Button",
-                "processors": "",
-                "interactions": "",
-                "initialStateCheck": false
-            },
-            {
+                    "name": "GiveUp",
+                    "type": "Button",
+                    "id": "59b9548a-2ae0-4541-ac3e-f19f4714ad9d",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "Jump",
                     "type": "Button",
                     "id": "f1ba0d36-48eb-4cd5-b651-1c94a6531f70",
@@ -265,28 +265,28 @@
                 }
             ],
             "bindings": [
-            {
-                "name": "",
-                "id": "21394e6c-718e-4122-ae38-6ea2072753af",
-                "path": "<Keyboard>/space",
-                "interactions": "",
-                "processors": "",
-                "groups": "Keyboard&Mouse",
-                "action": "GiveUp",
-                "isComposite": false,
-                "isPartOfComposite": false
-            },
-            {
-                "name": "",
-                "id": "465b2b31-92cc-4ae3-b9bf-36e948195546",
-                "path": "<Gamepad>/buttonSouth",
-                "interactions": "",
-                "processors": "",
-                "groups": "Gamepad",
-                "action": "GiveUp",
-                "isComposite": false,
-                "isPartOfComposite": false
-            },
+                {
+                    "name": "",
+                    "id": "21394e6c-718e-4122-ae38-6ea2072753af",
+                    "path": "<Keyboard>/space",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "GiveUp",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "465b2b31-92cc-4ae3-b9bf-36e948195546",
+                    "path": "<Gamepad>/buttonSouth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "GiveUp",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
                 {
                     "name": "",
                     "id": "4638ee30-eeb1-4636-b84d-e903132e0471",
@@ -1579,6 +1579,180 @@
                     "action": "Scroll",
                     "isComposite": false,
                     "isPartOfComposite": false
+                }
+            ]
+        },
+        {
+            "name": "AvatarEditor",
+            "id": "2529348c-c62c-4f50-a11d-44c14046bb83",
+            "actions": [
+                {
+                    "name": "Orbit",
+                    "type": "Value",
+                    "id": "0b6c03ab-5b8d-4f1e-920e-df9b75a81be5",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Move",
+                    "type": "Value",
+                    "id": "daafe8ad-0bfd-4809-ab0d-a6576eb85c19",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Zoom",
+                    "type": "Value",
+                    "id": "a436c7eb-adbe-4f64-92af-7479d0f35264",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Rotate",
+                    "type": "Value",
+                    "id": "bc74405e-a512-4545-8aca-0ba06c162ceb",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Resize",
+                    "type": "Value",
+                    "id": "f3dfe29c-74f5-447a-ade6-b9ec1d7fda96",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "4f76bc3a-4ed8-46d8-8db4-720b9a9ae7e8",
+                    "path": "<Gamepad>/rightStick",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Orbit",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "33b0e877-dfdb-4d8e-8142-41786500d689",
+                    "path": "<Gamepad>/leftStick",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Move",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "Axis",
+                    "id": "a3ad02d9-9279-4a94-ab37-57f2ae7b86b9",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Zoom",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "ee93fb67-dc87-458d-af22-4160b298a780",
+                    "path": "<Gamepad>/leftTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Zoom",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "c7baccb6-6fbc-48e9-8b41-cc2a409777d2",
+                    "path": "<Gamepad>/rightTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Zoom",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "Axis",
+                    "id": "61874e99-5c8d-41f6-a9d1-d6984530b5e6",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Rotate",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "b9b339f4-3796-4cd4-b7a2-69af65edd1a1",
+                    "path": "<Gamepad>/leftShoulder",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Rotate",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "7bdd5096-b8e7-4b74-bf41-f24e646884cf",
+                    "path": "<Gamepad>/rightShoulder",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Rotate",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "Axis",
+                    "id": "397f4e8b-9658-4c1e-94e2-fec15ce535c1",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Resize",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "2b872b09-4ad4-4418-b7b7-04356fda9b9f",
+                    "path": "<Gamepad>/dpad/down",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Resize",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "7f9770ae-4cb1-4f9a-9669-0e443fd7d2df",
+                    "path": "<Gamepad>/dpad/up",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Resize",
+                    "isComposite": false,
+                    "isPartOfComposite": true
                 }
             ]
         }

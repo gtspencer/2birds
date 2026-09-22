@@ -72,6 +72,8 @@ namespace TwoBirds
             Click("host-back", Back);
             Click("join-back", Back);
             Click("settings", () => Show("settings"));
+            Click("avatar-editor-main", () => OpenAvatarEditor("avatar-editor-main"));
+            Click("avatar-editor-lobby", () => OpenAvatarEditor("avatar-editor-lobby"));
             Click("quit", Application.Quit);
             settings = new SettingsPanel(root, session, Back);
             settings.Changed += PresentationChanged;
@@ -196,6 +198,7 @@ namespace TwoBirds
 
         private void Pause(InputAction.CallbackContext context)
         {
+            if (session.EditorOpen) { session.AvatarEditor.Back(); return; }
             if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput) return;
             // Escape is delivered as Toolkit Cancel; Start never leaves a lobby.
             if (InputPresentation.IsControllerDevice(context.control.device) && session.Phase == SessionPhase.Idle)
@@ -207,6 +210,7 @@ namespace TwoBirds
 
         private void Back()
         {
+            if (session.EditorOpen) { session.AvatarEditor.Back(); return; }
             if (handledFrame == Time.frameCount) return;
             handledFrame = Time.frameCount;
             if (editing != null) { CloseEntry(); return; }
@@ -228,7 +232,11 @@ namespace TwoBirds
             root.schedule.Execute(() => navigation?.Repair(focus ?? Initial()));
         }
 
-        private VisualElement Scope() => editing != null ? entryPanel : session.Phase == SessionPhase.Idle ? pages[page] : session.Phase == SessionPhase.InLobby ? pages["lobby"] : card;
+        private VisualElement Scope() => session.EditorOpen ? null : editing != null ? entryPanel : session.Phase == SessionPhase.Idle ? pages[page] : session.Phase == SessionPhase.InLobby ? pages["lobby"] : card;
+        private void OpenAvatarEditor(string button)
+        {
+            session.AvatarEditor.Open(() => { if (this && root.panel != null) { Render(); root.Q<Button>(button).Focus(); } });
+        }
         private VisualElement Initial() => editing != null ? entryKeys.Q<Button>() : session.Phase == SessionPhase.InLobby ? MenuNavigation.Eligible(start) ? start : MenuNavigation.Eligible(invite) ? invite : root.Q<Button>("lobby-leave") :
             session.Phase != SessionPhase.Idle ? cancel : page switch
             {
@@ -301,6 +309,7 @@ namespace TwoBirds
 
         private void Render()
         {
+            root.style.display = session.EditorOpen ? DisplayStyle.None : DisplayStyle.Flex;
             bool idle = session.Phase == SessionPhase.Idle;
             bool inLobby = session.Phase == SessionPhase.InLobby;
             settings.SetVisible(idle && page == "settings");

@@ -10,6 +10,7 @@
                 <ui:Button name="host" text="Host" />
                 <ui:Button name="join" text="Join" />
                 <ui:Button name="settings" text="Settings" />
+                <ui:Button name="avatar-editor-main" text="Avatar Editor" />
                 <ui:Button name="quit" text="Quit" />
             </ui:VisualElement>
             <ui:VisualElement name="host-page" style="display: none;">
@@ -42,6 +43,7 @@
                 <ui:VisualElement name="roster" />
                 <ui:Button name="start-game" text="Start Game" />
                 <ui:Button name="invite" text="Invite Steam Friends" />
+                <ui:Button name="avatar-editor-lobby" text="Avatar Editor" />
                 <ui:Button name="lobby-leave" text="Leave Lobby" />
             </ui:VisualElement>
             <ui:Instance template="Settings" class="shared-settings" />

@@ -31,7 +31,7 @@ namespace TwoBirds
         private CaptureState state;
         private string group = InputBindings.KeyboardMouse, candidate;
         private string conflictNames;
-        private bool targetEnabled;
+        private bool targetEnabled, vectorBinding;
         private float deadline;
         private int releaseFrame;
 
@@ -135,6 +135,7 @@ namespace TwoBirds
             if (state != CaptureState.Idle) return;
             capturing = this;
             target = entry;
+            vectorBinding = !entry.Action.bindings[entry.Index].isPartOfComposite && entry.Action.expectedControlType == "Vector2";
             returnFocus = button;
             targetEnabled = entry.Action.enabled;
             entry.Action.Disable();
@@ -159,14 +160,18 @@ namespace TwoBirds
             cancel.Focus();
         }
 
-        private static bool ButtonsHeld()
+        private static bool ControlsHeld()
         {
             foreach (var device in InputSystem.devices)
             {
                 if (device is not Keyboard && device is not Mouse && !InputPresentation.IsControllerDevice(device)) continue;
                 foreach (var control in device.allControls)
+                {
                     if (control is ButtonControl button && button.isPressed && control.parent is not StickControl)
                         return true;
+                    if (control is StickControl stick && stick.ReadValue().sqrMagnitude > 0.01f)
+                        return true;
+                }
             }
             return false;
         }
@@ -174,7 +179,7 @@ namespace TwoBirds
         private void Tick()
         {
             if (state != CaptureState.Finishing && Time.realtimeSinceStartup >= deadline) Cancel();
-            if (Time.frameCount <= releaseFrame || ButtonsHeld()) return;
+            if (Time.frameCount <= releaseFrame || ControlsHeld()) return;
             if (state == CaptureState.Waiting) Listen();
             else if (state == CaptureState.ConflictRelease)
             {
@@ -192,7 +197,7 @@ namespace TwoBirds
             state = CaptureState.Listening;
             RefreshPrompt();
             operation = target.Action.PerformInteractiveRebinding(target.Index)
-                .WithExpectedControlType<ButtonControl>()
+                .WithExpectedControlType(vectorBinding ? "Stick" : "Button")
                 .WithControlsExcluding("<Keyboard>/escape")
                 .WithControlsExcluding("<Keyboard>/anyKey")
                 .WithControlsExcluding("<Gamepad>/start")
@@ -202,6 +207,7 @@ namespace TwoBirds
                 .WithControlsExcluding("<Mouse>/scroll")
                 .WithControlsExcluding("<Mouse>/scroll/*")
                 .WithMatchingEventsBeingSuppressed()
+                .WithActionEventNotificationsBeingSuppressed()
                 .OnApplyBinding((_, path) => candidate = path)
                 .OnComplete(Completed)
                 .OnCancel(_ => Cancel());
@@ -239,10 +245,10 @@ namespace TwoBirds
             if (state == CaptureState.Idle) return;
             prompt.text = state switch
             {
-                CaptureState.Waiting => $"Release the button, then choose a binding for {target.Name}. {CancelHint} cancels (15 seconds).",
-                CaptureState.Listening => $"Press a button for {target.Name}. {CancelHint} cancels (15 seconds).",
-                CaptureState.Finishing => "Release the button to continue.",
-                _ => $"Already assigned to {conflictNames}. Use this button for both? {CancelHint} cancels."
+                CaptureState.Waiting => $"Release buttons and center sticks, then choose a binding for {target.Name}. {CancelHint} cancels (15 seconds).",
+                CaptureState.Listening => $"{(vectorBinding ? "Move a stick" : "Press a button")} for {target.Name}. {CancelHint} cancels (15 seconds).",
+                CaptureState.Finishing => "Release buttons and center sticks to continue.",
+                _ => $"Already assigned to {conflictNames}. Use this control for both? {CancelHint} cancels."
             };
         }
 
@@ -277,7 +283,7 @@ namespace TwoBirds
             foreach (var action in enabledUi) action.Disable();
             state = CaptureState.Finishing;
             releaseFrame = Time.frameCount + 1;
-            prompt.text = "Release the button to continue.";
+            RefreshPrompt();
             accept.SetEnabled(false);
         }
 

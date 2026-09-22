@@ -35,7 +35,11 @@ namespace TwoBirds
     {
         internal PlayerHandPresentation Hands { get; private set; }
         [SerializeField] private AvatarPresentation presentation;
-        private readonly SyncVar<AvatarId> selected = new();
+        private readonly SyncVar<AvatarAppearance> selected = new();
+        private AvatarAppearance desired;
+        private AvatarAppearanceStore store;
+        private AvatarCosmeticPresentation cosmetics;
+        public AvatarAppearance Appearance => desired?.Clone();
         private PlayerMotor motor;
         private PlayerSeating seating;
         private PlayerCarry carry;
@@ -43,8 +47,6 @@ namespace TwoBirds
         private PlayerInputReader input;
         private PlayerNetworkState state;
         private PlayerHealth health;
-        private AvatarId deferredSelection;
-        private bool hasDeferredSelection;
         private Transform graphics;
         private Vector3 capsuleSole;
         private AvatarLookSample serverSample, received, pending;
@@ -64,6 +66,8 @@ namespace TwoBirds
             var capsule = GetComponent<CapsuleCollider>();
             capsuleSole = capsule.center - Vector3.up * (capsule.height * 0.5f);
             selected.OnChange += IdentityChanged;
+            presentation.DidBind += BindCosmetics;
+            presentation.WillUnbind += UnbindCosmetics;
             seating.PresentationContextChanged += ContextChanged;
             carry.PresentationContextChanged += ContextChanged;
             presentation.FallbackChanged += player.SetFallbackVisible;
@@ -72,19 +76,23 @@ namespace TwoBirds
             Hands.Initialize(this);
         }
 
-        internal void Initialize() => selected.Value = presentation.Registry.DefaultId;
+        internal void Initialize() => selected.Value = SessionController.Instance.Appearance.Resolve(
+            new AvatarAppearance { Avatar = presentation.Registry.DefaultId });
         public override void OnStartClient()
         {
             presentation.Configure(presentation.Registry, !IsOwner || health.IsDowned, state.Snapshot.SpawnSlot / 8f);
-            ResolveSelected(selected.Value);
+            BindStore();
+            if (!IsOwner) ResolveSelected(selected.Value);
             if (health.IsAlive) Hands.StartPresentation();
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
             contextDirty = IsOwner;
         }
-        public override void OnStopClient() { Hands.StopPresentation(); presentation.SetVisual(false); }
+        public override void OnStopClient() { DetachStore(); Hands.StopPresentation(); presentation.SetVisual(false); }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
             Hands.StopPresentation();
+            BindStore();
+            if (!IsOwner) ResolveSelected(selected.Value);
             hasReceived = hasPending = false;
             presentation.SetVisual(IsClientInitialized && (!IsOwner || health.IsDowned));
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
@@ -100,29 +108,58 @@ namespace TwoBirds
         }
         private bool Attached => seating.Seated || carry.IsCarried && !carry.ReleasePreview;
 
-        private void IdentityChanged(AvatarId oldValue, AvatarId value, bool asServer)
-        { if (IsClientInitialized) ResolveSelected(value); }
-        private void ResolveSelected(AvatarId id)
-        { if (presentation.RequestedId != id) presentation.RequestAvatar(id); }
+        private void IdentityChanged(AvatarAppearance oldValue, AvatarAppearance value, bool asServer)
+        { if (IsClientInitialized && !IsOwner) ResolveSelected(value); }
+        private void ResolveSelected(AvatarAppearance value)
+        {
+            if (value == null) return;
+            desired = SessionController.Instance.Appearance.Resolve(value);
+            if (presentation.RequestedId != desired.Avatar) presentation.RequestAvatar(desired.Avatar);
+            if (presentation.Binding?.Id == desired.Avatar) cosmetics?.Apply(desired);
+            Hands.AppearanceChanged();
+        }
+        private void BindCosmetics(AvatarBinding binding)
+        {
+            cosmetics?.Dispose();
+            var session = SessionController.Instance;
+            cosmetics = new AvatarCosmeticPresentation(binding, session.Hats, session.Tattoos);
+            cosmetics.Apply(desired);
+        }
+        private void UnbindCosmetics(AvatarBinding binding) { cosmetics?.Dispose(); cosmetics = null; }
+        private void BindStore()
+        {
+            if (IsOwner && store != null) return;
+            DetachStore();
+            if (!IsOwner || !IsClientInitialized) return;
+            store = SessionController.Instance.Appearance;
+            store.CommittedChanged += CommitAppearance;
+            CommitAppearance(store.Committed);
+        }
+        private void DetachStore()
+        { if (store != null) store.CommittedChanged -= CommitAppearance; store = null; }
+        private void CommitAppearance(AvatarAppearance value)
+        {
+            ResolveSelected(value);
+            if (IsOwner && IsClientInitialized) ServerAppearance(value.Clone());
+        }
 
         public void RequestAvatar(AvatarId id)
         {
             if (!IsOwner || !IsClientInitialized) return;
-            if (health.IsDowned) { deferredSelection = id; hasDeferredSelection = true; return; }
-            presentation.RequestAvatar(id);
-            ServerAvatar(id);
+            if (!presentation.Registry.TryResolve(id, out var entry)) return;
+            SessionController.Instance.Appearance.Commit(AvatarTattooPlacement.Transfer(
+                SessionController.Instance.Appearance.Committed, entry));
         }
         public void SetAvatarServer(AvatarId id)
         {
-            if (!IsServerInitialized || !presentation.Registry.TryResolve(id, out _)) return;
-            selected.Value = id;
+            if (!IsServerInitialized || !presentation.Registry.TryResolve(id, out var entry)) return;
+            selected.Value = AvatarTattooPlacement.Transfer(selected.Value ?? new AvatarAppearance(), entry);
         }
-        [ServerRpc] private void ServerAvatar(AvatarId id)
+        [ServerRpc] private void ServerAppearance(AvatarAppearance value)
         {
-            if (presentation.Registry.TryResolve(id, out _)) selected.Value = id;
-            else TargetAvatar(Owner, selected.Value);
+            var resolved = SessionController.Instance.Appearance.Resolve(value);
+            if (!resolved.Equals(selected.Value)) selected.Value = resolved.Clone();
         }
-        [TargetRpc] private void TargetAvatar(NetworkConnection connection, AvatarId id) => presentation.RequestAvatar(id);
 
         private void ContextChanged()
         {
@@ -193,7 +230,7 @@ namespace TwoBirds
             {
                 Facing = new Pose(graphics.position, graphics.rotation), SolePosition = graphics.TransformPoint(capsuleSole),
                 WorldVelocity = carry.ReleasePreview ? carry.PreviewVelocity : motor.Body.linearVelocity,
-                Grounded = motor.Grounded, Mode = motor.Mode, Seated = seating.Seated, Carried = carry.IsCarried,
+                Grounded = motor.Grounded, Mode = motor.Mode, Seated = seating.Seated, Driver = seating.IsDriver, Carried = carry.IsCarried,
                 Carrying = carry.IsCarrying, Pending = seating.AwaitingReference || seating.PlacementPending,
                 ReleasePreview = carry.ReleasePreview, LookPitch = pitch,
                 LookYaw = graphics.eulerAngles.y + (Attached ? relativeYaw : 0f),
@@ -203,6 +240,8 @@ namespace TwoBirds
 
         private void OnDestroy()
         {
+            DetachStore(); cosmetics?.Dispose();
+            if (presentation) { presentation.DidBind -= BindCosmetics; presentation.WillUnbind -= UnbindCosmetics; }
             if (health) health.LifeChanged -= LifeChanged;
             selected.OnChange -= IdentityChanged;
             if (seating) seating.PresentationContextChanged -= ContextChanged;
@@ -218,11 +257,6 @@ namespace TwoBirds
             {
                 presentation.FinishRagdoll(CurrentPlacement);
                 Hands.StartPresentation();
-                if (hasDeferredSelection)
-                {
-                    hasDeferredSelection = false;
-                    RequestAvatar(deferredSelection);
-                }
             }
             presentation.SetVisual(!IsOwner || health.IsDowned);
             ContextChanged();

@@ -43,7 +43,7 @@ namespace TwoBirds
         public void SuppressInput() => suppressedFrame = UnityEngine.Time.frameCount;
 
         private bool Available => inventory && inventory.IsOwner && input && session &&
-            session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen &&
+            session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen && !session.EditorOpen &&
             !input.InputSuppressed && !ControlsRemapPanel.SuppressMenuInput &&
             suppressedFrame != UnityEngine.Time.frameCount;
         private bool CanSelect => Available && inventory.CanAct && !input.InventoryOpen && inventory.CanEquip;

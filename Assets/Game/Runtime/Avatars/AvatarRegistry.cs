@@ -21,6 +21,7 @@ namespace TwoBirds
         public AvatarId DefaultId;
         public AvatarAnimationSet Animations;
         public FirstPersonHandsSettings FirstPerson;
+        public AvatarDriverSettings Driver;
         public List<Entry> Entries = new();
         private Dictionary<ulong, Entry> lookup;
         public event Action ContentChanged;

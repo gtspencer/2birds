@@ -61,7 +61,7 @@ namespace TwoBirds
             return true;
         }
 
-        private static bool Control(VisualElement element) => element is Button or TextField or DropdownField || element.ClassListContains("slot");
+        private static bool Control(VisualElement element) => element is Button or TextField or DropdownField or Slider || element.ClassListContains("slot");
         private List<VisualElement> Controls(VisualElement area) => area?.Query<VisualElement>().Where(e => Control(e) && Eligible(e)).ToList() ?? new();
 
         public void Repair(VisualElement preferred = null)
@@ -132,6 +132,11 @@ namespace TwoBirds
                 _ => Vector2.zero
             };
             if (direction == Vector2.zero) return;
+            if (from is Slider slider && direction.x != 0)
+            {
+                slider.value = Mathf.Clamp(slider.value + direction.x * (slider.highValue - slider.lowValue) / 100f, slider.lowValue, slider.highValue);
+                evt.StopPropagation(); return;
+            }
             VisualElement nearest = null;
             float score = float.PositiveInfinity;
             foreach (var candidate in Controls(area))

@@ -215,12 +215,15 @@ namespace TwoBirds
             Notify();
         }
 
+        internal void RequireNeutral() => Suspend();
+
         internal static bool ButtonsHeld()
         {
             foreach (var device in InputSystem.devices)
                 if (device is Keyboard or Mouse or Gamepad)
                     foreach (var control in device.allControls)
                         if (control is ButtonControl button && button.isPressed && control.parent is not StickControl) return true;
+                        else if (control is StickControl stick && stick.ReadValue().sqrMagnitude > 0.04f) return true;
             return false;
         }
 

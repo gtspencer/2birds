@@ -96,7 +96,7 @@ namespace TwoBirds
             Shoulder = shoulder; Rotation = rotation; Measurements = measurements; Scale = scale;
             ArmLength = (measurements.RightArm.x + measurements.RightArm.y) * scale;
         }
-        internal HeldItemBodyFrame(AvatarSettings settings, in AvatarPresentationInput input, Quaternion torso, float seatedWeight)
+        internal HeldItemBodyFrame(AvatarSettings settings, AvatarRegistry registry, in AvatarPresentationInput input, Quaternion torso, float seatedWeight)
         {
             float scale = settings.Scale;
             Scale = scale; Measurements = settings.Generated;
@@ -104,7 +104,8 @@ namespace TwoBirds
             ArmLength = (settings.Generated.RightArm.x + settings.Generated.RightArm.y) * scale;
             Vector3 standing = input.SolePosition + torso * (settings.StandingOffset + (input.Carried ? settings.CarriedOffset : Vector3.zero))
                 + Rotation * (settings.Generated.RightShoulder * scale);
-            Vector3 seated = input.Facing.position + input.Facing.rotation * settings.SeatedPelvisOffset
+            Vector3 seated = input.Facing.position + input.Facing.rotation *
+                AvatarDriverPose.SeatedOffset(settings, registry, input.Seated && input.Driver)
                 + Rotation * ((settings.Generated.RightShoulder - settings.Generated.Hips) * scale);
             Shoulder = Vector3.Lerp(standing, seated, seatedWeight);
         }

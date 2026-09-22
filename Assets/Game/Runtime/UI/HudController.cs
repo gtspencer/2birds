@@ -218,7 +218,7 @@ namespace TwoBirds
         private void OnHotbarClick(int slot)
         {
             if (inventory && inventory.IsOwner && inventory.CanEquip && !inventoryOpen && session &&
-                session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen && !presentation.SuppressInput)
+                session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen && !session.EditorOpen && !presentation.SuppressInput)
                 inventory.SelectSlot((sbyte)slot);
         }
 
@@ -268,7 +268,7 @@ namespace TwoBirds
         }
 
         private bool CanMove => inventoryOpen && inventory && inventory.IsOwner && inventory.CanAct && session &&
-            session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen;
+            session.Phase == SessionPhase.InGame && !session.PanelOpen && !session.ConsoleOpen && !session.EditorOpen;
 
         private void MoveFocus(NavigationMoveEvent evt, int index)
         {
@@ -465,7 +465,7 @@ namespace TwoBirds
         {
             seatFeedback.text = seating ? seating.RequestFeedback : "";
             var session = SessionController.Instance;
-            if (session == null || session.Phase != SessionPhase.InGame || session.PanelOpen ||
+            if (session == null || session.Phase != SessionPhase.InGame || session.PanelOpen || session.EditorOpen ||
                 session.LocalPlayer == null || inventory == null || !inventory.IsOwner ||
                 inputReader == null || !inputReader.GameplayActive)
             {

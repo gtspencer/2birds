@@ -7,7 +7,7 @@ namespace TwoBirds
     {
         public Vector3 WorldVelocity, SolePosition;
         public Pose Facing;
-        public bool Grounded, Seated, Carried, Carrying, Pending, ReleasePreview;
+        public bool Grounded, Seated, Driver, Carried, Carrying, Pending, ReleasePreview;
         public MovementMode Mode;
         public float LookYaw, LookPitch, WalkSpeed, SprintSpeed;
         public int GroundMask;
@@ -59,6 +59,8 @@ namespace TwoBirds
         internal readonly AvatarAnimationState State = new();
         internal AvatarPresentationInput Input;
         internal bool AnimationEnabled { get; private set; } = true;
+        internal bool EditorPose;
+        internal Vector3 EditorLookTarget;
         internal bool FootIkEnabled { get; private set; } = true;
         internal bool HeadLookEnabled { get; private set; } = true;
         internal bool SpringsEnabled { get; private set; } = true;

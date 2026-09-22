@@ -51,8 +51,8 @@ namespace TwoBirds
         public bool GiveUpHeld => SessionInputAvailable && health && health.IsDowned && !InputSuppressed && !giveUpBlocked && ButtonHeld(giveUp);
         public Vector2 CartMove => GameplayActive && !seating.TransitionPending ? movement : default;
         internal bool InputSuppressed => presentation == null || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount;
-        public bool Handbrake => GameplayActive && !jumpBlocked && !seating.TransitionPending && jump.IsPressed();
-        public bool InteractPressed => !Carried && GameplayActive && !seating.TransitionPending && !interactBlocked &&
+        public bool Handbrake => GameplayActive && !InputSuppressed && !jumpBlocked && !seating.TransitionPending && jump.IsPressed();
+        public bool InteractPressed => !Carried && GameplayActive && !InputSuppressed && !seating.TransitionPending && !interactBlocked &&
             suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame();
         public bool SecondaryInteractPressed => !Carried && GameplayActive && !InputSuppressed && !seating.TransitionPending &&
             !secondaryInteractBlocked && secondaryInteract.WasPressedThisFrame();
@@ -189,7 +189,7 @@ namespace TwoBirds
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (AutomatedInput != null) return AutomatedInput();
 #endif
-            if (!gameplay || InventoryOpen || seating.Seated || seating.TransitionPending || seating.PlacementPending) return default;
+            if (!gameplay || InputSuppressed || InventoryOpen || seating.Seated || seating.TransitionPending || seating.PlacementPending) return default;
             Vector3 direction = Quaternion.Euler(0f, Yaw, 0f) * new Vector3(movement.x, 0f, movement.y);
             var result = new MoveInput(new Vector2(direction.x, direction.z), Yaw, jumpPending,
                 sprint != null && sprint.IsPressed() && movement.sqrMagnitude > 0.0001f);

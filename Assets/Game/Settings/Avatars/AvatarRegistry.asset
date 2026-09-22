@@ -17,6 +17,7 @@ MonoBehaviour:
     low: 2402174837
   Animations: {fileID: 11400000, guid: 08ddb4170443d504ab5c1c9c14dfdad4, type: 2}
   FirstPerson: {fileID: 11400000, guid: fcb025407fec12245a55652af8608766, type: 2}
+  Driver: {fileID: 11400000, guid: 435e203e5f9aa8d45b9a56a6ef7083be, type: 2}
   Entries:
   - Id:
       high: 1149333059

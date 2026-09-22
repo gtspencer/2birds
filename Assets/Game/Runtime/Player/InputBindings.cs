@@ -53,11 +53,13 @@ namespace TwoBirds
             Add("Previous", "Previous Item");
             Add("Next", "Next Item");
             for (int i = 1; i <= PlayerInventory.HotbarSize; i++) Add($"Hotbar{i}", $"Hotbar Slot {i}");
+            foreach (string action in new[] { "Orbit", "Zoom", "Move", "Rotate", "Resize" })
+                Add("AvatarEditor/" + action, "Avatar editor: " + action);
         }
 
         private void Add(string actionName, string name)
         {
-            var action = asset.FindAction("Player/" + actionName, true);
+            var action = asset.FindAction(actionName.Contains("/") ? actionName : "Player/" + actionName, true);
             var movementParts = new HashSet<string>();
             foreach (var binding in action.bindings)
             {
@@ -84,7 +86,28 @@ namespace TwoBirds
         {
             asset.RemoveAllBindingOverrides();
             if (!PlayerPrefs.HasKey(Preference)) return;
-            try { asset.LoadBindingOverridesFromJson(PlayerPrefs.GetString(Preference)); }
+            try
+            {
+                asset.LoadBindingOverridesFromJson(PlayerPrefs.GetString(Preference));
+                bool repaired = false;
+                foreach (var action in asset)
+                {
+                    if (action.expectedControlType != "Vector2") continue;
+                    for (int i = 0; i < action.bindings.Count; i++)
+                    {
+                        var binding = action.bindings[i];
+                        if (binding.isComposite || binding.isPartOfComposite || string.IsNullOrEmpty(binding.overridePath)) continue;
+                        string layout = InputControlPath.TryGetControlLayout(binding.overridePath);
+                        if (string.IsNullOrEmpty(layout) || InputSystem.IsFirstLayoutBasedOnSecond(layout, "Vector2")) continue;
+                        action.RemoveBindingOverride(i); repaired = true;
+                    }
+                }
+                if (repaired)
+                {
+                    PlayerPrefs.SetString(Preference, asset.SaveBindingOverridesAsJson());
+                    PlayerPrefs.Save();
+                }
+            }
             catch (Exception)
             {
                 asset.RemoveAllBindingOverrides();
@@ -124,7 +147,7 @@ namespace TwoBirds
             var result = new List<string>();
             foreach (var entry in entries)
             {
-                if (entry == target || entry.Group != target.Group) continue;
+                if (entry == target || entry.Group != target.Group || entry.Action.actionMap != target.Action.actionMap) continue;
                 string other = entry.Action.bindings[entry.Index].effectivePath;
                 if (string.IsNullOrEmpty(other)) continue;
                 if (string.Equals(other, path, StringComparison.OrdinalIgnoreCase) ||

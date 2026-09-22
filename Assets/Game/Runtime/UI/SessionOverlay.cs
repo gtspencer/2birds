@@ -53,6 +53,7 @@ namespace TwoBirds
         }
         private void Pause(InputAction.CallbackContext context)
         {
+            if (session.EditorOpen) { session.AvatarEditor.Back(); return; }
             if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput || session.ConsoleOpen || handledFrame == Time.frameCount) return;
             if (context.control.device is Keyboard && (session.PanelOpen || settings.IsOpen || hud && hud.InventoryOpen)) return;
             handledFrame = Time.frameCount;
@@ -73,6 +74,7 @@ namespace TwoBirds
         }
         private bool HandleCancel()
         {
+            if (session.EditorOpen) { session.AvatarEditor.Back(); return true; }
             if (ControlsRemapPanel.SuppressMenuInput || session.InputPresentation.SuppressInput || session.ConsoleOpen || handledFrame == Time.frameCount) return false;
             if (settings.IsOpen) CloseSettings();
             else if (session.PanelOpen && session.Phase == SessionPhase.InGame) session.SetPanel(false);
@@ -118,7 +120,7 @@ namespace TwoBirds
         }
         private void Render()
         {
-            bool visible = session.PanelOpen || session.Phase != SessionPhase.InGame;
+            bool visible = !session.EditorOpen && (session.PanelOpen || session.Phase != SessionPhase.InGame);
             bool wasVisible = panel.style.display.value == DisplayStyle.Flex;
             bool wasSettings = settings.IsOpen;
             if (!session.PanelOpen || session.Phase != SessionPhase.InGame) settings.SetVisible(false);

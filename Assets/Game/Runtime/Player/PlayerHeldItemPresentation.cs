@@ -383,7 +383,7 @@ namespace TwoBirds
             Quaternion torso = bound ? avatar.transform.rotation : attached ? input.Facing.rotation :
                 Quaternion.Euler(0f, input.Facing.rotation.eulerAngles.y, 0f);
             float seated = bound ? avatar.State.Weights[(int)AvatarPose.Seated] : input.Seated ? 1f : 0f;
-            body = new HeldItemBodyFrame(settings, input, torso, seated);
+            body = new HeldItemBodyFrame(settings, avatar.Registry, input, torso, seated);
             return true;
         }
 

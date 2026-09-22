@@ -82,6 +82,8 @@ namespace TwoBirds
             if (localCamera) return;
             var cameraObject = new GameObject("Local player camera", typeof(Camera), typeof(AudioListener));
             localCamera = cameraObject.GetComponent<Camera>();
+            localCamera.cullingMask &= ~(1 << LayerMask.NameToLayer(AvatarEditorPreview.LayerName));
+            cameraObject.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>().SetRenderer(0);
             localCamera.nearClipPlane = 0.1f;
             localCamera.farClipPlane = 250f;
             localCamera.tag = "MainCamera";

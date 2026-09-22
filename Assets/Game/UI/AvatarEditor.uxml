@@ -1,0 +1,48 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="Shared.uss" />
+    <Style src="AvatarEditor.uss" />
+    <ui:VisualElement name="avatar-editor" class="avatar-editor">
+        <ui:VisualElement name="editor-controls" class="editor-controls">
+            <ui:Label text="AVATAR EDITOR" class="heading" />
+            <ui:VisualElement class="editor-row">
+                <ui:Button name="avatars-tab" text="Avatars" />
+                <ui:Button name="hats-tab" text="Hats" />
+                <ui:Button name="tattoos-tab" text="Tattoos" />
+            </ui:VisualElement>
+            <ui:ScrollView name="library" class="editor-library" />
+            <ui:Label text="Equipped tattoos" />
+            <ui:ScrollView name="equipped" class="editor-equipped" />
+            <ui:VisualElement name="tattoo-controls">
+                <ui:Button name="edit-placement" text="Edit placement" />
+                <ui:Slider name="ink-r" label="Red" low-value="0" high-value="255" />
+                <ui:Slider name="ink-g" label="Green" low-value="0" high-value="255" />
+                <ui:Slider name="ink-b" label="Blue" low-value="0" high-value="255" />
+                <ui:VisualElement name="swatches" class="editor-row" />
+            </ui:VisualElement>
+            <ui:Button name="remove-all" text="Remove All" />
+            <ui:VisualElement class="editor-row">
+                <ui:Button name="apply" text="Apply" />
+                <ui:Button name="cancel-editor" text="Cancel" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement class="preview-column">
+            <ui:VisualElement name="preview" class="editor-preview">
+                <ui:Image name="preview-image" picking-mode="Ignore" />
+                <ui:VisualElement name="tattoo-gizmo">
+                    <ui:Label name="rotate-handle" text="↻" tooltip="Rotate tattoo" class="rotate-handle" />
+                    <ui:Label name="move-handle" text="✥" tooltip="Move tattoo" class="move-handle" />
+                    <ui:Label name="size-handle" text="↗" tooltip="Resize tattoo" class="size-handle" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:Button name="reset-view" text="Reset View" />
+            <ui:VisualElement name="editor-hints" class="editor-hints" />
+        </ui:VisualElement>
+        <ui:VisualElement name="discard-dialog" class="discard-dialog" style="display: none;">
+            <ui:VisualElement class="card">
+                <ui:Label text="Discard your appearance changes?" class="heading" />
+                <ui:Button name="keep-editing" text="Keep editing" />
+                <ui:Button name="discard" text="Discard changes" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

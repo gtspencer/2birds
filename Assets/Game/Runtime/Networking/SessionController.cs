@@ -19,11 +19,22 @@ namespace TwoBirds
     {
         public const int MultiplayerCapacity = 8;
         public const string GameId = "two-birds";
-        public const string Protocol = "eight-player-birds-7";
+        public const string Protocol = "eight-player-birds-8";
         public const float DefaultMouseSensitivity = 0.12f;
         public const float DefaultControllerSensitivity = 150f;
         public static SessionController Instance { get; private set; }
         [SerializeField] private GameSettings settings;
+        [SerializeField] private AvatarRegistry avatarRegistry;
+        [SerializeField] private HatCatalog hatCatalog;
+        [SerializeField] private TattooCatalog tattooCatalog;
+        [SerializeField] private AvatarEditorController avatarEditorPrefab;
+        public AvatarRegistry Avatars => avatarRegistry;
+        public HatCatalog Hats => hatCatalog;
+        public TattooCatalog Tattoos => tattooCatalog;
+        public AvatarAppearanceStore Appearance { get; private set; }
+        public CosmeticUnlockService Unlocks { get; private set; }
+        public AvatarEditorController AvatarEditor { get; private set; }
+        public bool EditorOpen { get; private set; }
         [SerializeField] private Multipass multipass;
         [SerializeField] private GameTransport localTransport;
         [SerializeField] private GameSteamTransport steamTransport;
@@ -79,7 +90,7 @@ namespace TwoBirds
         internal void SetConsoleOpen(bool open)
         {
             ConsoleOpen = open;
-            if (localInput) localInput.SetGameplay(!open && !PanelOpen && Phase == SessionPhase.InGame);
+            RefreshGameplay();
         }
 #endif
 
@@ -90,6 +101,10 @@ namespace TwoBirds
             Bindings = new InputBindings(UnityEngine.InputSystem.InputSystem.actions);
             InputPresentation = new InputPresentation(Bindings);
             InputPresentation.Interrupted += InputInterrupted;
+            Appearance = new AvatarAppearanceStore(avatarRegistry, hatCatalog, tattooCatalog);
+            Unlocks = new CosmeticUnlockService(avatarRegistry, hatCatalog);
+            AvatarEditor = Instantiate(avatarEditorPrefab, transform);
+            AvatarEditor.Initialize(this);
             DontDestroyOnLoad(gameObject);
             Application.runInBackground = true;
             MouseSensitivity = PlayerPrefs.GetFloat("MouseSensitivity", DefaultMouseSensitivity);
@@ -371,13 +386,14 @@ namespace TwoBirds
 
         private void BeginLoading()
         {
+            AvatarEditor.ForceCommit();
             if (Phase == SessionPhase.LoadingGame) return;
             deadline = Time.unscaledTime + settings.LoadTimeout;
             SetPhase(SessionPhase.LoadingGame, "Loading game…");
             TryEnterGame();
         }
 
-        private void QueueStarted() => sceneLoading = true;
+        private void QueueStarted() { AvatarEditor.ForceCommit(); sceneLoading = true; }
         private void QueueEnded() => sceneLoading = false;
 
         public void PlayerReady(PlayerMotor player)
@@ -406,7 +422,7 @@ namespace TwoBirds
         {
             if (Phase != SessionPhase.LoadingGame || !LocalPlayer || !worldReady || !birdsReady) return;
             SetPhase(SessionPhase.InGame, "");
-            localInput.SetGameplay(!PanelOpen && !ConsoleOpen);
+            RefreshGameplay();
             Network.ClientManager.Broadcast(new SessionReady { Session = wireSession });
             UpdateLobby();
         }
@@ -447,14 +463,31 @@ namespace TwoBirds
         {
             if (PanelOpen == open) return;
             PanelOpen = open;
-            if (localInput) localInput.SetGameplay(!open && !ConsoleOpen && Phase == SessionPhase.InGame);
+            RefreshGameplay();
             Changed?.Invoke();
         }
 
         private void InputInterrupted()
         {
             if (localInput) localInput.ClearContext();
+            if (EditorOpen) return;
             if (Phase == SessionPhase.InGame) SetPanel(true);
+        }
+
+        internal void SetEditorOpen(bool open)
+        {
+            if (EditorOpen == open) return;
+            EditorOpen = open;
+            InputPresentation.RequireNeutral();
+            RefreshGameplay();
+            Changed?.Invoke();
+        }
+
+        private void RefreshGameplay()
+        {
+            bool available = Phase == SessionPhase.InGame && !PanelOpen && !ConsoleOpen && !EditorOpen;
+            if (localInput) localInput.SetGameplay(available);
+            else InputPresentation.SetGameplay(false);
         }
 
         private void Update()
@@ -476,6 +509,7 @@ namespace TwoBirds
 
         public void Leave(string message = "")
         {
+            AvatarEditor.ForceCommit();
             if (Phase is SessionPhase.Idle or SessionPhase.Stopping) return;
             int stoppingAttempt = ++attempt;
             joiningLobby = 0;
@@ -524,9 +558,10 @@ namespace TwoBirds
             Changed?.Invoke();
         }
 
-        internal void ShutdownPlatform()
+        internal void ShutdownPlatform(bool saveDraft = true)
         {
             if (quitting) return;
+            if (saveDraft && AvatarEditor) AvatarEditor.ForceCommit();
             quitting = true;
             ++attempt;
             Phase = SessionPhase.Stopping;
@@ -542,7 +577,7 @@ namespace TwoBirds
         {
             if (Instance != this) return;
             InputPresentation?.Dispose();
-            ShutdownPlatform();
+            ShutdownPlatform(false);
             Instance = null;
             if (!Network) return;
             Network.ServerManager.OnServerConnectionState -= ServerState;

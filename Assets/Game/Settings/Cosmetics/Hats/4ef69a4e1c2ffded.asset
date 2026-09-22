@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3c9c8b5623087a4fb625cbd58d924be, type: 3}
+  m_Name: 4ef69a4e1c2ffded
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.HatDefinition
+  Id:
+    high: 1324784206
+    low: 472907245
+  DisplayName: Gentleman Hat
+  Icon: {fileID: 21300000, guid: ae87019746959b2408a5821a23258173, type: 3}
+  Source: {fileID: 981517336351936576, guid: 3af505d0376683848a084ccae76d962e, type: 3}
+  Visual: {fileID: 3051442892705804068, guid: f48a3507c99b39f4fba1c46f6b1116b7, type: 3}
+  UnlockedByDefault: 1
+  Fit:
+    Position: {x: -0, y: 1, z: -0.677167}
+    Rotation: {x: 0, y: 0, z: 0}
+    Scale: {x: 1, y: 1, z: 1}
