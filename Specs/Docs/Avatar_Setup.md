@@ -44,6 +44,10 @@ The `AvatarSettings` inspector exposes authored tuning and shows generated ident
 | **Visual Height** | Desired visual height in metres. Initially measured from the source; applies uniform visual scaling. |
 | **Standing Offset** | Placement correction in metres in the visual body's facing space, after aligning its soles. |
 | **Seated Pelvis Offset** | Pelvis alignment relative to the existing seated rider anchor. |
+| **Override Driver Seated Offset** | Enable to replace the registry's driver body offset for this avatar. |
+| **Driver Seated Offset** | Additional driver-only offset in seat-relative metres, added to Seated Pelvis Offset. Positive Z moves forward; passengers do not receive it. |
+| **Override Driver Hand Offset** | Enable to replace the registry's steering hand offset for this avatar. |
+| **Driver Hand Offset** | Offset both steering palm targets in seat-relative metres. Positive Y raises them; negative Z brings them toward the driver. |
 | **Carried Offset** | Additional offset for the carried pose. |
 | **Yaw Offset** | Import-facing correction in degrees. |
 | **Playback Multiplier** | Animation speed adjustment, from 0.5 to 2. |
@@ -53,6 +57,8 @@ The `AvatarSettings` inspector exposes authored tuning and shows generated ident
 | **Pelvis Correction** | Pelvis correction strength, from 0 to 1. |
 
 Use these settings to fit the visual model. They do not resize the gameplay capsule, change camera eye height, or change movement speed. Prefer making persistent tuning changes outside Play Mode, then restart the demo to recompute its shared target and camera framing.
+
+Shared driver defaults are on `Assets/Game/Settings/Avatars/AvatarRegistry.asset`: **Driver Seated Offset** starts at `(0, 0, 0.08)` and **Driver Hand Offset** at `(0, 0.04, -0.04)`. They apply to remote avatars and local driving arms. Each avatar uses these defaults unless its corresponding override is enabled; an override replaces that default rather than adding to it. Hand offsets follow the seat's orientation, independently of camera look and steering-wheel rotation. Contact-point rotations remain authored on the wheel.
 
 ### Author spring chains in Unity
 
