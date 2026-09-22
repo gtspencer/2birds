@@ -23,6 +23,8 @@ namespace TwoBirds
         private SlingshotDefinition definition;
         private Vector3 incoming, stepStart;
         private double presentedTick;
+        private uint? boundaryTick;
+        private ItemMotion? terminalMotion;
         private float radius, nextThreat;
         private bool ended, simulating;
         internal PebbleRecord Record { get; private set; }
@@ -115,21 +117,24 @@ namespace TwoBirds
         internal void Boundary(PebbleRecord next, bool terminal)
         {
             if (simulating || ended) return;
-            if (next.Motion.Sequence > Record.Motion.Sequence)
+            if (next.Motion.Sequence > Record.Motion.Sequence) motion.Add(next.Motion);
+            if (presentedTick > next.Motion.Tick)
             {
-                motion.Add(next.Motion);
-                if (presentedTick > next.Motion.Tick) playerContact.Reposition(next.Motion.Position, next.Motion.Position);
+                playerContact.Reposition(next.Motion.Position, next.Motion.Position);
                 RigidbodyMotionState.Apply(body, next.Motion, Vector3.zero);
                 visualRoot.localPosition = Vector3.zero;
                 presentedTick = next.Motion.Tick;
                 SamplePlayer(world.LocalInventory ? world.LocalInventory.Hitbox : null);
                 motion.Count = 0; motion.Add(next.Motion);
+                motion.Departure(Vector3.zero, world.CorrectionDuration);
+                boundaryTick = null;
+                if (terminal) ended = true;
             }
+            else boundaryTick ??= next.Motion.Tick;
             var record = next;
             if (Record.Motion.Sequence > next.Motion.Sequence) record.Motion = Record.Motion;
             Record = record;
-            motion.Departure(Vector3.zero, world.CorrectionDuration);
-            if (terminal) ended = true;
+            if (terminal) terminalMotion = next.Motion;
         }
 
         internal void BeforePhysics()
@@ -282,16 +287,26 @@ namespace TwoBirds
         internal void Present(PlayerItemHitbox victim)
         {
             if (ended) return;
+            bool terminal = false;
             if (!simulating && motion.Count > 0)
             {
                 double tick = motion.Samples[motion.Count - 1].Tick +
                     (Time.unscaledTime - motion.ReceivedAt - world.InterpolationDelay) / world.TickDelta;
                 presentedTick = System.Math.Max(presentedTick, System.Math.Max(motion.Samples[0].Tick, tick));
-                var sample = motion.Sample(presentedTick, false, radius, world.EnvironmentMask, world.TickDelta, out _);
+                terminal = terminalMotion.HasValue && presentedTick >= terminalMotion.Value.Tick;
+                if (terminal) presentedTick = terminalMotion.Value.Tick;
+                if (boundaryTick.HasValue && presentedTick >= boundaryTick.Value)
+                {
+                    motion.Departure(Vector3.zero, world.CorrectionDuration);
+                    boundaryTick = null;
+                }
+                var sample = terminal ? terminalMotion.Value :
+                    motion.Sample(presentedTick, false, radius, world.EnvironmentMask, world.TickDelta, out _);
                 RigidbodyMotionState.Apply(body, sample, Vector3.zero);
             }
             motion.PresentOffset(visualRoot, world.CorrectionDuration);
             SamplePlayer(victim);
+            if (terminal) ended = true;
             if (simulating && Time.unscaledTime >= nextThreat && body.linearVelocity.sqrMagnitude > 0.01f)
             {
                 nextThreat = Time.unscaledTime + 0.2f;
@@ -325,6 +340,7 @@ namespace TwoBirds
             touching.Clear(); separated.Clear(); impacts.Clear();
             Record = default;
             incoming = stepStart = default; presentedTick = nextThreat = 0;
+            boundaryTick = null; terminalMotion = null;
             ended = simulating = false;
             visualRoot.localPosition = Vector3.zero;
             gameObject.SetActive(false);

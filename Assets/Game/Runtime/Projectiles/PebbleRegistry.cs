@@ -13,6 +13,7 @@ namespace TwoBirds
             internal PebbleRecord Record;
             internal PebbleProjectile Body;
             internal bool Pending, Retired, LocalSimulation;
+            internal PebbleEnd End;
             internal ItemMotion? EarlyMotion;
             internal readonly List<PebbleTransition> Waiting = new();
         }
@@ -191,7 +192,7 @@ namespace TwoBirds
             shot.Record = record;
             if (transition.End != PebbleEnd.None)
             {
-                if (!simulated && transition.End == PebbleEnd.Impact) Dirt(transition.Record);
+                shot.End = transition.End;
                 shot.Retired = true;
                 live.Remove(record.Motion.Id);
                 retired.Add(record.Motion.Id); retirementOrder.Enqueue(record.Motion.Id);
@@ -270,12 +271,13 @@ namespace TwoBirds
             for (int i = shots.Count - 1; i >= 0; i--)
             {
                 var shot = shots[i];
-                if (shot.Body && !shot.Retired) shot.Body.Present(victim);
-                if (shot.Retired || shot.Body && shot.Body.Ended)
+                if (shot.Body) shot.Body.Present(victim);
+                if (shot.Body && shot.Body.Ended)
                 {
-                    if (shot.Body) ReturnBody(shot);
-                    if (!shot.Pending && shot.Retired) shots.RemoveAt(i);
+                    if (!shot.LocalSimulation && shot.End == PebbleEnd.Impact) Dirt(shot.Record);
+                    ReturnBody(shot);
                 }
+                if (!shot.Pending && shot.Retired && !shot.Body) shots.RemoveAt(i);
             }
             for (int i = effects.Count - 1; i >= 0; i--)
             {
