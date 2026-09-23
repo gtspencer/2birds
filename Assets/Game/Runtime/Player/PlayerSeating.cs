@@ -204,6 +204,7 @@ namespace TwoBirds
         private void Apply(PlayerControlTransition state, bool impulse)
         {
             if (receivedState && state.ControlRevision <= current.ControlRevision) return;
+            var carryRelease = Carry ? Carry.PrepareControlRelease(state.ControlRevision) : null;
             receivedState = true;
             AwaitingReference = false;
             float worldYaw = WorldYaw;
@@ -255,6 +256,7 @@ namespace TwoBirds
             if (impulse && Health.IsAlive && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
                 Motor.SubmitWorldImpact(state.Ejection, 0.2f);
             PresentationContextChanged?.Invoke();
+            if (Carry) Carry.CompleteControlRelease(carryRelease);
         }
 
         internal void ShowFeedback(string message)

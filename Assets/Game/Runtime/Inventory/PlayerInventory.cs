@@ -47,7 +47,7 @@ namespace TwoBirds
         private uint nextOperation;
         private uint lastOperation;
         private uint serverRevision;
-        private uint receivedRevision;
+        private uint receivedRevision, carrierDeselectionRevision;
         private sbyte serverSelection = -1;
         private sbyte confirmedSelection = -1;
         private sbyte viewSelection = -1;
@@ -57,7 +57,7 @@ namespace TwoBirds
         public int Count => SlotCount;
         public bool CanAct => networkState.CanGameplayActions && (!carry || !carry.IsCarried) && (!seating || !seating.PlacementPending && !seating.AwaitingReference);
         public bool CanCraft => CanEquip && (!carry || carry.Role == CarryRole.Free) && (!seating || !seating.TransitionPending);
-        public bool CanEquip => CanAct && (!seating || seating.CanEquip);
+        public bool CanEquip => CanAct && (!carry || !carry.IsCarrying) && (!seating || seating.CanEquip);
         public sbyte SelectedSlot => !CanEquip ? (sbyte)-1 : IsServerInitialized && !IsOwner ? serverSelection : viewSelection;
         public event Action InventoryChanged;
         public event Action ControlPermissionsChanged;
@@ -347,22 +347,22 @@ namespace TwoBirds
 
         private void ReplyInventory(bool accepted, uint operation)
         {
-            if (IsOwner) AcceptInventory(serverRevision, lastOperation, serverSlots, serverSelection, accepted, operation);
-            else if (Owner.IsActive) TargetInventory(Owner, serverRevision, lastOperation, serverSlots, serverSelection, accepted, operation);
+            if (IsOwner) AcceptInventory(serverRevision, motor.ControlRevision, lastOperation, serverSlots, serverSelection, accepted, operation);
+            else if (Owner.IsActive) TargetInventory(Owner, serverRevision, motor.ControlRevision, lastOperation, serverSlots, serverSelection, accepted, operation);
         }
 
         [TargetRpc]
-        private void TargetInventory(NetworkConnection target, uint revision, uint acknowledged, ItemStack[] slots, sbyte selected, bool accepted, uint operation)
+        private void TargetInventory(NetworkConnection target, uint revision, uint controlRevision, uint acknowledged, ItemStack[] slots, sbyte selected, bool accepted, uint operation)
         {
-            if (!IsServerInitialized) AcceptInventory(revision, acknowledged, slots, selected, accepted, operation);
+            if (!IsServerInitialized) AcceptInventory(revision, controlRevision, acknowledged, slots, selected, accepted, operation);
         }
 
-        private void AcceptInventory(uint revision, uint acknowledged, ItemStack[] slots, sbyte selected, bool accepted, uint operation)
+        private void AcceptInventory(uint revision, uint controlRevision, uint acknowledged, ItemStack[] slots, sbyte selected, bool accepted, uint operation)
         {
             if (revision < receivedRevision) return;
             receivedRevision = revision;
             confirmedSlots = (ItemStack[])slots.Clone();
-            confirmedSelection = selected;
+            if (controlRevision >= carrierDeselectionRevision) confirmedSelection = selected;
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 var request = pending[i];
@@ -393,7 +393,7 @@ namespace TwoBirds
                 switch (request.Kind)
                 {
                     case InventoryOperation.Select:
-                        viewSelection = (sbyte)request.From;
+                        if (CanEquip) viewSelection = (sbyte)request.From;
                         break;
                     case InventoryOperation.Swap:
                         (viewSlots[request.From], viewSlots[request.To]) = (viewSlots[request.To], viewSlots[request.From]);
@@ -421,6 +421,18 @@ namespace TwoBirds
 
         internal void ApplyControlPermissions()
         {
+            bool publishSelection = false;
+            if (carry && carry.IsCarrying)
+            {
+                carrierDeselectionRevision = motor.ControlRevision;
+                confirmedSelection = viewSelection = -1;
+                if (IsServerInitialized && serverSelection != -1)
+                {
+                    serverSelection = -1;
+                    serverRevision++;
+                    publishSelection = true;
+                }
+            }
             Equipment.CancelUse();
             ControlPermissionsChanged?.Invoke();
             for (int i = pending.Count - 1; i >= 0; i--)
@@ -441,6 +453,7 @@ namespace TwoBirds
             if (IsServerInitialized) registry.UpdateEquipment(this, CanEquip ? EquippedId(serverSlots, serverSelection) : 0);
             RebuildView();
             registry.RefreshHolders();
+            if (publishSelection) ReplyInventory(true, 0);
         }
 
         internal void RefreshHeldPresentation()

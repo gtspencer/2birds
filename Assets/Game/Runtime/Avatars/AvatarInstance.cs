@@ -137,6 +137,11 @@ namespace TwoBirds
             }
         }
 
+        internal void CorrectHands()
+        {
+            if (!physical && Initialized && host.AnimationEnabled) ik.CorrectHands();
+        }
+
         private void OnAnimatorIK(int layerIndex)
         {
             if (!evaluating || layerIndex != 0 || ikSerial == serial) return;

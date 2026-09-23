@@ -210,7 +210,7 @@ namespace TwoBirds.Editor
                     if (!retainedMeshes.Contains(path)) AssetDatabase.DeleteAsset(path);
                 }
                 string summary = ContentSummary(prefab);
-                Debug.Log($"Avatar {sourceAsset.name}: {summary}", settings);
+                Debug.Log($"Avatar {sourceAsset.name}: {summary}\n{prefabPath}: Author and save LeftHandGrip and RightHandGrip beneath the appropriate animated bones in the generated full-body prefab. Reprocessing replaces this prefab; the grip points must be re-authored after every processing pass.", settings);
                 return entry;
             }
             catch (Exception exception)

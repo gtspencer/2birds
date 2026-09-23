@@ -14,6 +14,24 @@ namespace TwoBirds
         private PlayerMotor motor;
         private PlayerSeating seating;
         private PlayerCarry carry;
+        private PlayerInventory inventory;
+        private WorldItemRegistry items;
+        private PlayerCarry gripPartner;
+        private AvatarPresentation gripSource;
+        private AvatarBinding gripBinding;
+        private readonly TwoHandHoldPresentation carryHands = new();
+        private readonly Transform[] carryTargets = new Transform[2];
+        private HeldItemBodyFrame carryBody;
+        private Pose carryLeft, carryRight;
+        private bool outstretched, carryDisplayed, releaseCaptured;
+        private uint releaseRevision, releaseRequest;
+        private int releasedPartner = -1;
+        private double carryReleaseStart;
+        private HeldItemPoseSettings CarrySettings => items.HeldDefaults.HeavyHoldSettings;
+        private bool CarryHolding => carry.IsCarrying && gripPartner && (outstretched || gripBinding != null && gripBinding.HasCarryGrips);
+        private float HeavyFrameWeight => carryHands.Releasing ? carryHands.Frame(CarrySettings,
+            Time.unscaledTimeAsDouble - carryReleaseStart, 0f) : CarryHolding ? 1f : held.HeavyFrameWeight;
+        private HeldItemBodyFrame HeavyBody(AvatarSettings settings) => TwoHandHoldPresentation.Body(owner, settings);
         private AvatarPresentation avatar;
         private LocalFirstPersonHands active;
         private AvatarCosmeticPresentation cosmetics;
@@ -43,12 +61,14 @@ namespace TwoBirds
         {
             this.owner = owner; avatar = owner.Presentation;
             held = GetComponent<PlayerHeldItemPresentation>(); player = GetComponent<PlayerPresentation>();
+            inventory = GetComponent<PlayerInventory>();
             motor = GetComponent<PlayerMotor>(); seating = GetComponent<PlayerSeating>(); carry = GetComponent<PlayerCarry>();
         }
 
         internal void StartPresentation()
         {
             if (running || !isActiveAndEnabled || !owner || !owner.IsClientInitialized) return;
+            items = WorldItemRegistry.Instance;
             running = true;
             LocalCameraChanged(player.ViewCamera);
             PlayerPresentation.LocalCameraChanged += LocalCameraChanged;
@@ -57,9 +77,16 @@ namespace TwoBirds
             avatar.HandsEvaluated += CommitRemote;
             seating.PresentationContextChanged += ContextChanged;
             carry.PresentationContextChanged += ContextChanged;
+            carry.PreparingRelease += CaptureCarryRelease;
+            carry.ReleaseStarted += StartCarryRelease;
+            carry.ReleaseRejected += RejectCarryRelease;
+            inventory.InventoryChanged += CarrySelectionChanged;
+            items.PresentationChanged += CarryItemChanged;
             motor.Simulated += Simulated;
             for (int i = 0; i < 2; i++)
             {
+                carryTargets[i] = new GameObject(i == 0 ? "LeftCarryPalm" : "RightCarryPalm").transform;
+                carryTargets[i].SetParent(transform, false);
                 freeTargets[i] = new GameObject(i == 0 ? "LeftFreePalm" : "RightFreePalm").transform;
                 freeTargets[i].SetParent(transform, false);
                 contactTargets[i] = new GameObject(i == 0 ? "LeftContactPalm" : "RightContactPalm").transform;
@@ -84,6 +111,187 @@ namespace TwoBirds
             }
             CacheContacts();
             movement = owner.CurrentPlacement;
+            RefreshCarryContext();
+        }
+
+        private void RefreshCarryContext()
+        {
+            if (releaseCaptured) return;
+            if (seating.Seated || seating.TransitionPending || seating.AwaitingReference || seating.PlacementPending || carry.IsCarried)
+            { ClearCarry(); return; }
+            if (carry.IsCarrying && carry.Partner)
+            {
+                if (carryHands.Releasing && gripPartner == carry.Partner && motor.ControlRevision + 1 == releaseRevision) return;
+                if (carryHands.Releasing || gripPartner != carry.Partner || outstretched != carry.Partner.IsOwner)
+                {
+                    ClearCarry();
+                    BindCarryPartner(carry.Partner);
+                }
+            }
+            else if (!carryHands.Releasing) ClearCarry();
+            else if (motor.ControlRevision != releaseRevision) ClearCarry();
+        }
+
+        private void BindCarryPartner(PlayerCarry partner)
+        {
+            DetachGripSource();
+            gripPartner = partner;
+            outstretched = partner && partner.IsOwner;
+            if (!partner || outstretched) return;
+            gripSource = partner.GetComponent<PlayerAvatarPresentation>().Presentation;
+            gripSource.WillUnbind += GripWillUnbind;
+            gripSource.DidBind += GripDidBind;
+            GripDidBind(gripSource.Binding);
+        }
+
+        private void GripWillUnbind(AvatarBinding binding)
+        {
+            gripBinding = null;
+            avatar.HandDependency = null;
+            if (!carryHands.Releasing)
+            {
+                carryDisplayed = false;
+                carryHands.Reset();
+                TwoHandHoldPresentation.Clear(avatar.HandTargets, AvatarHandSource.Carry);
+            }
+        }
+
+        private void GripDidBind(AvatarBinding binding)
+        {
+            if (carryHands.Releasing) return;
+            gripBinding = binding;
+            avatar.HandDependency = binding != null && binding.HasCarryGrips ? gripSource : null;
+        }
+
+        private void DetachGripSource()
+        {
+            if (gripSource)
+            {
+                gripSource.WillUnbind -= GripWillUnbind;
+                gripSource.DidBind -= GripDidBind;
+            }
+            gripSource = null; gripBinding = null;
+            avatar.HandDependency = null;
+        }
+
+        private void ClearCarry()
+        {
+            carryHands.Reset();
+            DetachGripSource();
+            gripPartner = null;
+            carryDisplayed = outstretched = releaseCaptured = false;
+            releaseRequest = releaseRevision = 0; releasedPartner = -1;
+            TwoHandHoldPresentation.Clear(avatar.HandTargets, AvatarHandSource.Carry);
+        }
+
+        private void CarryItemChanged(uint id, int previousHolder, int holder)
+        {
+            if (previousHolder == inventory.ObjectId || holder == inventory.ObjectId) CarrySelectionChanged();
+        }
+
+        internal void ItemSelected()
+        {
+            if (carryHands.Releasing && !releaseCaptured && !carry.IsCarrying) ClearCarry();
+        }
+
+        private void CarrySelectionChanged()
+        {
+            if (!carryHands.Releasing || releaseCaptured || carry.IsCarrying) return;
+            bool selected = owner.IsOwner ? inventory.SelectedSlot >= 0 : items.EquippedPresentation(inventory.ObjectId);
+            if (selected) ClearCarry();
+        }
+
+        private void CaptureCarryRelease(CarryPresentationRelease release)
+        {
+            if (release.Release.Intent != ItemReleaseIntent.Throw) { ClearCarry(); return; }
+            if (carryHands.Releasing && release.Revision == releaseRevision && release.Partner && release.Partner.ObjectId == releasedPartner)
+            { releaseCaptured = true; return; }
+            if (!carryDisplayed || !release.Partner || gripPartner != release.Partner) return;
+            releaseCaptured = true;
+            releaseRevision = release.Revision; releaseRequest = release.Request; releasedPartner = release.Partner.ObjectId;
+            carryReleaseStart = Time.unscaledTimeAsDouble;
+            carryHands.BeginRelease(carryLeft, carryRight, carryBody);
+        }
+
+        private void StartCarryRelease(CarryPresentationRelease release)
+        {
+            releaseCaptured = false;
+            if (release.Release.Intent != ItemReleaseIntent.Throw) { ClearCarry(); return; }
+            if (carryHands.Releasing && outstretched) DetachGripSource();
+        }
+
+        private void RejectCarryRelease(uint request)
+        {
+            if (carryHands.Releasing && releaseRequest != request) return;
+            ClearCarry();
+            RefreshCarryContext();
+        }
+
+        private void PrepareCarry(AvatarBinding binding, in HeldItemBodyFrame body)
+        {
+            if (!carryHands.Releasing && !CarryHolding)
+            {
+                carryDisplayed = false;
+                TwoHandHoldPresentation.Clear(avatar.HandTargets, AvatarHandSource.Carry);
+                return;
+            }
+            bool staged = binding != null && (owner.IsOwner ? active && binding != active.Binding :
+                avatar.Binding != null && binding != avatar.Binding);
+            if (staged && carryHands.Releasing)
+            {
+                TwoHandHoldPresentation.Submit(avatar.HandTargets, AvatarHandSource.Carry, carryTargets[0], carryTargets[1],
+                    HeavyItemPoseCalculation.ToWorld(HeavyItemPoseCalculation.ToLocal(carryHands.Left, carryBody), body),
+                    HeavyItemPoseCalculation.ToWorld(HeavyItemPoseCalculation.ToLocal(carryHands.Right, carryBody), body),
+                    carryHands.LeftWeight, carryHands.RightWeight, TwoHandHoldPresentation.Reach(CarrySettings), avatar.Registry.Animations.OpenFingers);
+                return;
+            }
+            Pose left = default, right = default;
+            bool available = gripBinding != null && gripBinding.HasCarryGrips && gripPartner &&
+                (!carryHands.Releasing || gripPartner.Role == CarryRole.Free ||
+                    gripPartner.IsCarried && gripPartner.Partner == carry && motor.ControlRevision + 1 == releaseRevision);
+            if (available)
+            {
+                left = new Pose(gripBinding.LeftCarryGrip.position, gripBinding.LeftCarryGrip.rotation);
+                right = new Pose(gripBinding.RightCarryGrip.position, gripBinding.RightCarryGrip.rotation);
+            }
+            else if (outstretched)
+            {
+                left = OutstretchedPalm(body, false); right = OutstretchedPalm(body, true);
+            }
+            if (carryHands.Releasing)
+            {
+                Pose destinationLeft = owner.IsOwner && freeTargets[0] ? new Pose(freeTargets[0].position, freeTargets[0].rotation) : carryHands.Left;
+                Pose destinationRight = owner.IsOwner && freeTargets[1] ? new Pose(freeTargets[1].position, freeTargets[1].rotation) : carryHands.Right;
+                carryHands.Sample(left, right, available && !outstretched, !available || outstretched, body,
+                    CarrySettings, items.EnvironmentMask, Time.unscaledTimeAsDouble - carryReleaseStart, destinationLeft, destinationRight);
+                if (!carryHands.Following && (gripSource || gripBinding != null)) DetachGripSource();
+                if (carryHands.Stage == TwoHandHoldPresentation.RecoveryStage.Finished) { ClearCarry(); return; }
+            }
+            else carryHands.Hold(left, right);
+            TwoHandHoldPresentation.Submit(avatar.HandTargets, AvatarHandSource.Carry, carryTargets[0], carryTargets[1],
+                carryHands.Left, carryHands.Right, carryHands.LeftWeight, carryHands.RightWeight,
+                TwoHandHoldPresentation.Reach(CarrySettings), carryHands.Releasing ? avatar.Registry.Animations.OpenFingers : avatar.Registry.Animations.GripFingers);
+            if (binding == null || binding == avatar.Binding || owner.IsOwner && (!active || binding == active.Binding))
+            {
+                carryBody = body; carryLeft = carryHands.Left; carryRight = carryHands.Right;
+                carryDisplayed = true;
+            }
+        }
+
+        private Pose OutstretchedPalm(in HeldItemBodyFrame body, bool right)
+        {
+            var data = body.Measurements;
+            Quaternion palm = body.Rotation * Quaternion.Euler(0f, 0f, right ? 90f : -90f);
+            Quaternion wrist = palm * Quaternion.Inverse(right ? data.RightWristToPalmRotation : data.LeftWristToPalmRotation);
+            Vector3 position = (right ? body.Shoulder : body.LeftShoulder) + body.Rotation * Vector3.forward *
+                ((right ? body.ArmLength : body.LeftArmLength) * TwoHandHoldPresentation.Reach(CarrySettings));
+            return new Pose(position + wrist * ((right ? data.RightWristToPalmPosition : data.LeftWristToPalmPosition) * body.Scale), palm);
+        }
+
+        private void CommitCarry(AvatarBinding binding)
+        {
+            if (!carryDisplayed || binding == null) return;
+            carryLeft = binding.Palm(false); carryRight = binding.Palm(true);
         }
 
         private void BindContact(AvatarHandContact contact)
@@ -149,11 +357,17 @@ namespace TwoBirds
             var body = new HeldItemBodyFrame(binding.GetBone(HumanBodyBones.RightUpperArm).position,
                 binding.Animator.transform.rotation, binding.Measurements, binding.Scale,
                 leftShoulder: binding.GetBone(HumanBodyBones.LeftUpperArm).position);
-            if (held.HeavyFrameWeight > 0f) body = body.WithReference(held.HeavyBody(binding.Settings));
+            if (HeavyFrameWeight > 0f) body = body.WithReference(HeavyBody(binding.Settings));
             if (avatar.Binding != null && binding != avatar.Binding) held.PrepareCandidate(binding, body);
             else held.PrepareHands(binding, body);
+            PrepareCarry(binding, body);
         }
-        private void CommitRemote(AvatarBinding binding) { if (!owner.IsOwner) held.CommitHands(binding); }
+        private void CommitRemote(AvatarBinding binding)
+        {
+            if (owner.IsOwner) return;
+            held.CommitHands(binding);
+            CommitCarry(binding);
+        }
 
         internal bool TryBody(out HeldItemBodyFrame body)
         {
@@ -165,18 +379,18 @@ namespace TwoBirds
             Vector3 shoulder = aim.position + aim.rotation * (avatar.Registry.FirstPerson.ShoulderOffset +
                 settings.FirstPersonPlacementOffset + Vector3.right * ((data.RightShoulder.x - data.LeftShoulder.x) * settings.Scale * 0.5f));
             body = new HeldItemBodyFrame(shoulder, aim.rotation, data, settings.Scale);
-            float heavy = held.HeavyFrameWeight;
+            float heavy = HeavyFrameWeight;
             if (heavy > 0f)
             {
-                var frame = held.HeavyBody(settings).WithMeasurements(data, settings.Scale);
+                var frame = HeavyBody(settings).WithMeasurements(data, settings.Scale);
                 body = new HeldItemBodyFrame(Vector3.Lerp(body.Shoulder, frame.Shoulder, heavy),
                     Quaternion.Slerp(body.Rotation, frame.Rotation, heavy), data, settings.Scale);
             }
             return true;
         }
 
-        private HeldItemBodyFrame BodyFor(LocalFirstPersonHands rig) => held.HeavyFrameWeight >= 1f
-            ? rig.BodyFrame.WithReference(held.HeavyBody(rig.Binding.Settings)) : rig.BodyFrame;
+        private HeldItemBodyFrame BodyFor(LocalFirstPersonHands rig) => HeavyFrameWeight >= 1f
+            ? rig.BodyFrame.WithReference(HeavyBody(rig.Binding.Settings)) : rig.BodyFrame;
 
         private void LateUpdate()
         {
@@ -209,6 +423,7 @@ namespace TwoBirds
                         Place(candidate, 0f);
                         FreeHands(candidate, 0f); Contacts(0f, candidate.Binding.Settings);
                         held.PrepareHands(candidate.Binding, BodyFor(candidate));
+                        PrepareCarry(candidate.Binding, BodyFor(candidate));
                         candidate.Evaluate(0f, avatar.Registry.Animations);
                         var nextCosmetics = new AvatarCosmeticPresentation(candidate.Binding,
                             SessionController.Instance.Hats, SessionController.Instance.Tattoos, true);
@@ -229,12 +444,14 @@ namespace TwoBirds
             Contacts(dt, active ? active.Binding.Settings : avatar.Resolved?.Settings);
             if (active) { Place(active, dt); FreeHands(active, dt); }
             held.PrepareHands(active ? active.Binding : null, TryBody(out var body) ? body : null);
+            if (TryBody(out var carryFrame)) PrepareCarry(active ? active.Binding : null, carryFrame);
             if (active) active.Evaluate(dt, avatar.Registry.Animations);
             if (!held.CommitHands(active ? active.Binding : null) && held.CorrectCommittedPose())
             {
                 if (active) active.Evaluate(0f, avatar.Registry.Animations);
                 held.CommitHands(active ? active.Binding : null);
             }
+            CommitCarry(active ? active.Binding : null);
         }
 
         private void Place(LocalFirstPersonHands rig, float dt)
@@ -251,10 +468,10 @@ namespace TwoBirds
             Vector3 cameraPosition = camera.position + camera.rotation * tuning.ShoulderOffset;
             Pose frame = new(Vector3.Lerp(cameraPosition, contactFrame.position + contactFrame.rotation * bodyOffset, placementWeight),
                 Quaternion.Slerp(camera.rotation, contactFrame.rotation, placementWeight));
-            float heavy = held.HeavyFrameWeight;
+            float heavy = HeavyFrameWeight;
             if (heavy > 0f)
             {
-                var body = held.HeavyBody(rig.Binding.Settings);
+                var body = HeavyBody(rig.Binding.Settings);
                 frame.position = Vector3.Lerp(frame.position, body.Center, heavy);
                 frame.rotation = Quaternion.Slerp(frame.rotation, body.Rotation, heavy);
             }
@@ -310,6 +527,13 @@ namespace TwoBirds
             cosmetics?.Dispose(); cosmetics = null;
             avatar.IdentityResolved -= IdentityResolved; avatar.PreparingHands -= PrepareRemote; avatar.HandsEvaluated -= CommitRemote;
             seating.PresentationContextChanged -= ContextChanged; carry.PresentationContextChanged -= ContextChanged; motor.Simulated -= Simulated;
+            carry.PreparingRelease -= CaptureCarryRelease;
+            carry.ReleaseStarted -= StartCarryRelease;
+            carry.ReleaseRejected -= RejectCarryRelease;
+            inventory.InventoryChanged -= CarrySelectionChanged;
+            if (items) items.PresentationChanged -= CarryItemChanged;
+            ClearCarry();
+            foreach (var target in carryTargets) if (target) Destroy(target.gameObject);
             foreach (var hand in new[] { AvatarIKGoal.LeftHand, AvatarIKGoal.RightHand })
             { avatar.HandTargets.Clear(hand, AvatarHandSource.Contact); avatar.HandTargets.Clear(hand, AvatarHandSource.Free); }
             foreach (var target in freeTargets) if (target) Destroy(target.gameObject);

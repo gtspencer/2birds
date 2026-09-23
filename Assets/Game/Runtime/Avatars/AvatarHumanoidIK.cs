@@ -43,6 +43,8 @@ namespace TwoBirds
             Reset();
         }
 
+        internal void CorrectHands() => hands.CorrectCarry(host.HandTargets);
+
         internal void Reset()
         {
             left.Correction = right.Correction = left.Weight = right.Weight = pelvis = groundedWeight = 0f;

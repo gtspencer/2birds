@@ -13,6 +13,7 @@ namespace TwoBirds
             IkMarker = new("Avatar.IK"), VrmMarker = new("Avatar.Vrm"), SpringsMarker = new("Avatar.Springs"), CommitMarker = new("Avatar.Commit");
         private static readonly Dictionary<Scene, AvatarPresentationSystem> systems = new();
         private readonly List<AvatarPresentation> hosts = new(8);
+        private readonly List<AvatarPresentation> evaluationOrder = new(8);
         private Transform staging;
 
         internal static AvatarPresentationSystem ForScene(Scene scene)
@@ -65,22 +66,39 @@ namespace TwoBirds
                                 catch (Exception exception) { host.PreparationFailed(exception); }
                         }
                         host.PrepareTargets();
-                        using (EvaluateMarker.Auto()) host.Evaluate(dt);
                     }
                     catch (Exception exception) { host.PresentationFailed(exception); }
                 }
+            }
+            evaluationOrder.Clear();
+            for (int pass = 0; pass < 2; pass++)
+                foreach (var pair in systems)
+                    for (int i = 0; i < pair.Value.hosts.Count; i++)
+                    {
+                        var host = pair.Value.hosts[i];
+                        if (host && !host.Failed && (host.HandDependency ? 1 : 0) == pass) evaluationOrder.Add(host);
+                    }
+            foreach (var host in evaluationOrder)
+            {
+                try { using (EvaluateMarker.Auto()) host.Evaluate(dt); }
+                catch (Exception exception) { host.PresentationFailed(exception); }
             }
             using (SpringsMarker.Auto())
             {
                 AvatarSpringBatch.Process(dt);
             }
-            foreach (var pair in systems)
-                for (int i = 0; i < pair.Value.hosts.Count; i++)
-                {
-                    var host = pair.Value.hosts[i];
-                    if (!host || host.Failed) continue;
-                    host.Commit();
-                }
+            foreach (var host in evaluationOrder)
+            {
+                if (!host || host.Failed) continue;
+                try { host.Commit(); }
+                catch (Exception exception) { host.PresentationFailed(exception); }
+            }
+            foreach (var host in evaluationOrder)
+            {
+                if (!host || host.Failed || !host.HandDependency) continue;
+                try { host.CorrectHands(); }
+                catch (Exception exception) { host.PresentationFailed(exception); }
+            }
         }
 
         private void OnDisable() => AvatarSpringBatch.Flush();

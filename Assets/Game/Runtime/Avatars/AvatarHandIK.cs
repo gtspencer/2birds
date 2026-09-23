@@ -10,7 +10,9 @@ namespace TwoBirds
             internal Vector3 PalmOffset, GoalOffset;
             internal Quaternion PalmRotation, BoneToGoal;
             internal float Length, Weight;
-            internal bool Seeded;
+            internal bool Seeded, HadCarryTarget;
+            internal Vector3 TargetWrist;
+            internal Quaternion TargetRotation;
         }
         private readonly Animator animator;
         private readonly Hand left, right;
@@ -43,6 +45,39 @@ namespace TwoBirds
             Apply(right, AvatarIKGoal.RightHand, AvatarIKHint.RightElbow, targets.Resolve(AvatarIKGoal.RightHand), dt, 1f);
         }
 
+        internal void CorrectCarry(AvatarHandTargets targets)
+        {
+            Correct(left, targets.Resolve(AvatarIKGoal.LeftHand));
+            Correct(right, targets.Resolve(AvatarIKGoal.RightHand));
+        }
+
+        private static void Correct(Hand hand, AvatarHandTargets.Target target)
+        {
+            if (!hand.HadCarryTarget || !target.Transform || target.Source != AvatarHandSource.Carry) return;
+            Quaternion wrist = target.Transform.rotation * Quaternion.Inverse(hand.PalmRotation);
+            Vector3 root = hand.Shoulder.position;
+            Vector3 delta = target.Transform.position - wrist * hand.PalmOffset - root;
+            Vector3 desired = root + Vector3.ClampMagnitude(delta, hand.Length * Mathf.Min(target.MaximumReach, 0.98f));
+            Vector3 end = hand.Wrist.position + (desired - hand.TargetWrist) * target.Position;
+            Quaternion rotation = Quaternion.Slerp(Quaternion.identity, wrist * Quaternion.Inverse(hand.TargetRotation), target.Rotation) * hand.Wrist.rotation;
+            hand.TargetWrist = desired; hand.TargetRotation = wrist;
+            if ((end - hand.Wrist.position).sqrMagnitude > 0.00000001f)
+            {
+                float upper = Vector3.Distance(root, hand.Elbow.position);
+                float lower = Vector3.Distance(hand.Elbow.position, hand.Wrist.position);
+                Vector3 direction = (end - root).normalized;
+                float distance = Mathf.Clamp(Vector3.Distance(root, end), Mathf.Abs(upper - lower) + 0.0001f, upper + lower - 0.0001f);
+                Vector3 bend = Vector3.ProjectOnPlane(hand.Elbow.position - root, direction).normalized;
+                if (bend.sqrMagnitude < 0.001f) bend = Vector3.ProjectOnPlane(hand.Shoulder.forward, direction).normalized;
+                float along = (upper * upper - lower * lower + distance * distance) / (2f * distance);
+                Vector3 elbow = root + direction * along + bend * Mathf.Sqrt(Mathf.Max(0f, upper * upper - along * along));
+                hand.Shoulder.rotation = Quaternion.FromToRotation(hand.Elbow.position - root, elbow - root) * hand.Shoulder.rotation;
+                hand.Elbow.rotation = Quaternion.FromToRotation(hand.Wrist.position - hand.Elbow.position,
+                    root + direction * distance - hand.Elbow.position) * hand.Elbow.rotation;
+            }
+            hand.Wrist.rotation = rotation;
+        }
+
         private void Calibrate(Hand hand, AvatarIKGoal goal)
         {
             Quaternion inverse = Quaternion.Inverse(hand.Wrist.rotation);
@@ -53,6 +88,7 @@ namespace TwoBirds
         private void Apply(Hand hand, AvatarIKGoal goal, AvatarIKHint hint, AvatarHandTargets.Target target, float dt, float side)
         {
             float weight = 0f;
+            hand.HadCarryTarget = target.Transform && target.Source == AvatarHandSource.Carry;
             if (target.Transform)
             {
                 Quaternion wrist = target.Transform.rotation * Quaternion.Inverse(hand.PalmRotation);
@@ -62,7 +98,9 @@ namespace TwoBirds
                     Mathf.InverseLerp(reach - 0.08f, reach, delta.magnitude / hand.Length)) : 1f;
                 hand.Weight = target.Contact && hand.Seeded ? Mathf.Lerp(hand.Weight, weight, AvatarPresentation.Smooth(dt, 0.08f)) : weight;
                 hand.Seeded = true;
-                animator.SetIKPosition(goal, hand.Shoulder.position + Vector3.ClampMagnitude(delta, hand.Length * reach) + wrist * hand.GoalOffset);
+                hand.TargetWrist = hand.Shoulder.position + Vector3.ClampMagnitude(delta, hand.Length * reach);
+                hand.TargetRotation = wrist;
+                animator.SetIKPosition(goal, hand.TargetWrist + wrist * hand.GoalOffset);
                 animator.SetIKRotation(goal, wrist * hand.BoneToGoal);
                 animator.SetIKHintPosition(hint, hand.Shoulder.position + animator.transform.rotation *
                     (new Vector3(side * 0.35f, -0.45f, -0.1f) * hand.Length));

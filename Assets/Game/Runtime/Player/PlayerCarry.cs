@@ -14,6 +14,7 @@ namespace TwoBirds
         public Vector3 Position, Velocity;
         public float Yaw, Recovery;
         public bool PlacementPending;
+        public ItemReleaseIntent Intent;
     }
 
     public struct CarryTransition
@@ -25,10 +26,20 @@ namespace TwoBirds
         public float Immunity;
     }
 
+    internal readonly struct CarryPresentationRelease
+    {
+        internal readonly PlayerCarry Partner;
+        internal readonly uint Revision, Request;
+        internal readonly PlayerRelease Release;
+        internal CarryPresentationRelease(PlayerCarry partner, uint revision, uint request, PlayerRelease release)
+        { Partner = partner; Revision = revision; Request = request; Release = release; }
+    }
+
     [DefaultExecutionOrder(25)]
     public sealed class PlayerCarry : NetworkBehaviour, IInteractable
     {
         internal static readonly Dictionary<int, PlayerCarry> Players = new();
+        private static readonly Dictionary<int, CarryTransition> presentationReleases = new();
         public static PlayerCarry Local { get; private set; }
         [SerializeField] private GameSettings settings;
         private PlayerMotor motor;
@@ -50,6 +61,8 @@ namespace TwoBirds
         public bool IsCharging => charging;
         internal bool ReleasePreview => preview;
         public event System.Action PresentationContextChanged;
+        internal event System.Action<CarryPresentationRelease> PreparingRelease, ReleaseStarted;
+        internal event System.Action<uint> ReleaseRejected;
         internal Vector3 PreviewVelocity => Time.unscaledTime - previewStart < 0.25f
             ? previewRelease.Velocity + Physics.gravity * (Time.unscaledTime - previewStart) : Vector3.zero;
 
@@ -162,7 +175,7 @@ namespace TwoBirds
                 motor.Body.linearVelocity * settings.PlayerThrowVelocityInheritance;
             float recovery = Mathf.Clamp(speed / Mathf.Max(0.01f, Physics.gravity.magnitude),
                 settings.PlayerThrowRecoveryMin, settings.PlayerThrowRecoveryMax);
-            RequestRelease(motor.Body.position, input.Yaw, velocity, recovery, false);
+            RequestRelease(motor.Body.position, input.Yaw, velocity, recovery, false, ItemReleaseIntent.Throw);
         }
 
         public void CancelUse() => charging = false;
@@ -181,19 +194,22 @@ namespace TwoBirds
             if (IsOwner || IsServerInitialized) RequestRelease(origin, yaw, Vector3.zero, 0.2f, true);
         }
 
-        private void RequestRelease(Vector3 origin, float yaw, Vector3 velocity, float recovery, bool forced)
+        private void RequestRelease(Vector3 origin, float yaw, Vector3 velocity, float recovery, bool forced, ItemReleaseIntent intent = ItemReleaseIntent.Drop)
         {
             if (!IsCarrying || !Partner || RequestPending || SessionController.Instance.Phase == SessionPhase.Stopping) return;
             bool clear = Partner.seating.TryCarryPlacement(origin, yaw, capsule, forced, out var position);
             if (!clear && !forced) { seating.ShowFeedback("No clear space to release player."); return; }
             var release = new PlayerRelease { Position = position, Yaw = yaw, Velocity = velocity,
-                Recovery = recovery, PlacementPending = !clear };
+                Recovery = recovery, PlacementPending = !clear, Intent = intent };
             uint request = ++nextRequest;
             if (IsServerInitialized)
                 AcceptRelease(request, Partner.ObjectId, motor.ControlRevision, Partner.motor.ControlRevision, release);
             else
             {
                 pendingRequest = request;
+                var notification = new CarryPresentationRelease(Partner, motor.ControlRevision + 1, request, release);
+                PreparingRelease?.Invoke(notification);
+                ReleaseStarted?.Invoke(notification);
                 Partner.previewRelease = release;
                 Partner.previewStart = Time.unscaledTime;
                 Partner.SetPreview(!release.PlacementPending);
@@ -290,8 +306,27 @@ namespace TwoBirds
                 carried.Position = source.motor.Body.position + source.motor.Body.rotation * source.settings.CarryOffset;
                 carried.Rotation = source.motor.Body.rotation;
             }
+            if (!pickup && (!presentationReleases.TryGetValue(transition.Carrier, out var queued) ||
+                queued.CarrierRevision < transition.CarrierRevision) &&
+                (!source || transition.CarrierRevision > source.motor.ControlRevision))
+                presentationReleases[transition.Carrier] = transition;
             PlayerSeating.Receive(carrier, false);
             PlayerSeating.Receive(carried, false);
+        }
+
+        internal CarryPresentationRelease? PrepareControlRelease(uint revision)
+        {
+            if (!presentationReleases.TryGetValue(ObjectId, out var transition) || transition.CarrierRevision > revision) return null;
+            presentationReleases.Remove(ObjectId);
+            if (transition.CarrierRevision != revision || !IsCarrying || !Partner || Partner.ObjectId != transition.Carried) return null;
+            var release = new CarryPresentationRelease(Partner, revision, pendingRequest, transition.Release);
+            PreparingRelease?.Invoke(release);
+            return release;
+        }
+
+        internal void CompleteControlRelease(CarryPresentationRelease? release)
+        {
+            if (release.HasValue) ReleaseStarted?.Invoke(release.Value);
         }
 
         private void Complete(uint request, CarryRequestResult result)
@@ -312,7 +347,10 @@ namespace TwoBirds
                 Partner.UpdateAttachment();
             }
             if (result != CarryRequestResult.Completed)
+            {
+                ReleaseRejected?.Invoke(request);
                 seating.ShowFeedback(result == CarryRequestResult.Unavailable ? "Player is no longer available." : "Carry changed before release.");
+            }
         }
 
         private void LateUpdate()
@@ -431,6 +469,8 @@ namespace TwoBirds
             if (Partner) Partner.SetPreview(false);
             if (IsOwner) Local = this;
             else if (Local == this) Local = null;
+            PresentationContextChanged?.Invoke();
+            if (Partner) Partner.PresentationContextChanged?.Invoke();
         }
 
         public override void OnStopServer()
@@ -447,7 +487,9 @@ namespace TwoBirds
                 Partner.CancelUse();
                 Partner.pendingRequest = 0;
                 Partner.Partner = null;
+                Partner.PresentationContextChanged?.Invoke();
             }
+            presentationReleases.Remove(ObjectId);
             Players.Remove(ObjectId);
             if (Local == this) Local = null;
             Partner = null;

@@ -22,11 +22,25 @@ namespace TwoBirds
         public ulong Generation { get; }
         public AvatarSettings.GeneratedSkeleton Measurements { get; }
         public float Scale => Settings.Scale;
+        public Transform LeftCarryGrip { get; }
+        public Transform RightCarryGrip { get; }
+        public bool HasCarryGrips => LeftCarryGrip && RightCarryGrip && LeftCarryGrip != RightCarryGrip;
         private readonly Transform[] bones;
         internal AvatarBinding(AvatarId id, AvatarSettings settings, Animator animator, Transform[] bones, ulong generation, bool firstPerson = false)
         {
             Id = id; Settings = settings; Animator = animator; this.bones = bones; Generation = generation;
             Measurements = firstPerson ? settings.FirstPersonGenerated : settings.Generated;
+            if (firstPerson) return;
+            var skeleton = GetBone(HumanBodyBones.Hips);
+            if (!skeleton) return;
+            Transform left = null, right = null;
+            int leftCount = 0, rightCount = 0;
+            foreach (var child in skeleton.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name == "LeftHandGrip") { left = child; leftCount++; }
+                if (child.name == "RightHandGrip") { right = child; rightCount++; }
+            }
+            if (leftCount == 1 && rightCount == 1) { LeftCarryGrip = left; RightCarryGrip = right; }
         }
         public Transform GetBone(HumanBodyBones bone) => bones[(int)bone];
         internal Pose Palm(bool right)
@@ -53,6 +67,7 @@ namespace TwoBirds
         internal event Action<AvatarBinding> HandsEvaluated;
         internal bool EvaluatesTargets => !Physical && system && !Failed && Binding != null;
         internal void PrepareTargets() { if (!Physical) BeforeEvaluation?.Invoke(); }
+        internal AvatarPresentation HandDependency { get; set; }
         internal bool Physical { get; private set; }
         private bool lifeLocked, hasDeferredIdentity;
         private AvatarId deferredIdentity;
@@ -271,6 +286,22 @@ namespace TwoBirds
                 candidate.Evaluate(0f, true);
             }
             catch (Exception exception) { PreparationFailed(exception); }
+        }
+
+        internal void CorrectHands()
+        {
+            if (Physical || !HandDependency) return;
+            if (active)
+            {
+                PreparingHands?.Invoke(active.Binding, 0f);
+                active.CorrectHands();
+                HandsEvaluated?.Invoke(active.Binding);
+            }
+            if (candidate && candidate.Initialized)
+            {
+                PreparingHands?.Invoke(candidate.Binding, 0f);
+                candidate.CorrectHands();
+            }
         }
 
         internal void Commit()
