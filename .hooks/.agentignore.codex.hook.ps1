@@ -47,7 +47,6 @@ while (-not (Test-Path -LiteralPath (Join-Path $projectRoot '.git'))) {
 }
 
 $agentignore = Join-Path $projectRoot '.agentignore'
-$agentignoreForGit = $agentignore.Replace('\', '/')
 if (-not (Test-Path -LiteralPath $agentignore -PathType Leaf)) {
     Block-Codex "Required policy file '$agentignore' is missing."
 }
@@ -266,11 +265,20 @@ if ($probes.Count -eq 0) { exit 0 }
 try {
     $ErrorActionPreference = 'Continue'
     $OutputEncoding = New-Object System.Text.UTF8Encoding $false
-    $ignored = @(
-        $probes |
-            & git "--git-dir=$ignoreGitDir" "--work-tree=$ignoreWorkTree" -c "core.excludesFile=$agentignoreForGit" -c core.ignoreCase=true -c core.quotePath=false check-ignore --no-index --stdin 2>$null
-    )
+
+    # Git keeps the CR from CRLF pattern files, so on Windows a blank line would
+    # become a pattern matching every "dir/" probe. Match against an LF copy.
+    $normalizedIgnore = Join-Path $ignoreCache "agentignore-$PID"
+    $patternText = [System.IO.File]::ReadAllText($agentignore) -replace "`r`n", "`n"
+    [System.IO.File]::WriteAllText($normalizedIgnore, $patternText, $OutputEncoding)
+
+    # NUL-separate probes: Windows PowerShell pipes CRLF to native stdin, and
+    # git would otherwise read the CR as part of each path.
+    $matcherOutput = (($probes -join "`0") + "`0") |
+        & git "--git-dir=$ignoreGitDir" "--work-tree=$ignoreWorkTree" -c "core.excludesFile=$($normalizedIgnore.Replace('\', '/'))" -c core.ignoreCase=true -c core.quotePath=false check-ignore --no-index --stdin -z 2>$null
     $exitCode = $LASTEXITCODE
+    Remove-Item -LiteralPath $normalizedIgnore -Force -ErrorAction SilentlyContinue
+    $ignored = @((@($matcherOutput) -join '') -split "`0" | Where-Object { $_ })
     $ErrorActionPreference = 'Stop'
 } catch {
     Block-Codex ("The .agentignore guard failed while matching paths: " + $_.Exception.Message)
