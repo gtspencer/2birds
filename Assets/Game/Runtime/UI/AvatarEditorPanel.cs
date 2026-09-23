@@ -9,7 +9,7 @@ namespace TwoBirds
     public sealed class AvatarEditorPanel : MonoBehaviour
     {
         private AvatarEditorController editor;
-        private VisualElement root, controls, viewport, library, equipped, gizmo, dialog, hints;
+        private VisualElement root, controls, viewport, library, tattooSection, equipped, gizmo, dialog, hints;
         private Slider red, green, blue;
         private MenuNavigation navigation;
         private string tab = "avatars";
@@ -25,14 +25,15 @@ namespace TwoBirds
             root = GetComponent<UIDocument>().rootVisualElement.Q("avatar-editor");
             controls = root.Q("editor-controls"); viewport = root.Q("preview");
             library = root.Q<ScrollView>("library").contentContainer; equipped = root.Q<ScrollView>("equipped").contentContainer;
+            tattooSection = root.Q("tattoo-section");
             gizmo = root.Q("tattoo-gizmo"); dialog = root.Q("discard-dialog"); hints = root.Q("editor-hints");
             root.Q<Image>("preview-image").image = editor.Preview.Texture;
             root.Q<Image>("preview-image").scaleMode = ScaleMode.StretchToFill;
             red = root.Q<Slider>("ink-r"); green = root.Q<Slider>("ink-g"); blue = root.Q<Slider>("ink-b");
             red.RegisterValueChangedCallback(ColorChanged); green.RegisterValueChangedCallback(ColorChanged); blue.RegisterValueChangedCallback(ColorChanged);
-            Click("avatars-tab", () => { tab = "avatars"; Refresh(); });
-            Click("hats-tab", () => { tab = "hats"; Refresh(); });
-            Click("tattoos-tab", () => { tab = "tattoos"; Refresh(); });
+            Click("avatars-tab", () => SelectTab("avatars"));
+            Click("hats-tab", () => SelectTab("hats"));
+            Click("tattoos-tab", () => SelectTab("tattoos"));
             Click("edit-placement", () => editor.SetPlacement(true));
             Click("remove-all", editor.RemoveAll); Click("apply", editor.Apply); Click("cancel-editor", editor.Cancel);
             Click("reset-view", () => { editor.Preview.ResetView(); UpdateGizmos(); });
@@ -66,6 +67,16 @@ namespace TwoBirds
         }
         private bool Blocked => !editor.IsOpen || editor.Confirming || editor.Session.InputPresentation.SuppressInput;
         private void Click(string name, Action action) => root.Q<Button>(name).clicked += action;
+        private void SelectTab(string value)
+        {
+            tab = value;
+            if (tab != "tattoos" && editor.Placement)
+            {
+                ReleaseGesture();
+                editor.SetPlacement(false);
+            }
+            else Refresh();
+        }
         internal void SetVisible(bool visible)
         { root.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None; if (visible) root.schedule.Execute(() => navigation?.Repair()); }
         private void Refresh()
@@ -73,6 +84,7 @@ namespace TwoBirds
             if (!editor.IsOpen) return;
             string focus = (root.panel?.focusController.focusedElement as VisualElement)?.name;
             refreshing = true;
+            tattooSection.style.display = tab == "tattoos" ? DisplayStyle.Flex : DisplayStyle.None;
             library.Clear(); equipped.Clear();
             var session = editor.Session;
             if (tab == "avatars")
@@ -116,7 +128,7 @@ namespace TwoBirds
             dialog.style.display = editor.Confirming ? DisplayStyle.Flex : DisplayStyle.None;
             RefreshColor(); refreshing = false; UpdateGizmos(); Hints();
             VisualElement preferred = editor.Confirming ? root.Q("keep-editing") : string.IsNullOrEmpty(focus) ? null : root.Q(focus);
-            if (preferred == null && editor.Selection >= 0) preferred = root.Q("tattoo-" + editor.Selection);
+            if (preferred == null && tab == "tattoos" && editor.Selection >= 0) preferred = root.Q("tattoo-" + editor.Selection);
             navigation?.Repair(preferred);
         }
         private Button Entry(Sprite icon, string title, bool available, string name, Action action)

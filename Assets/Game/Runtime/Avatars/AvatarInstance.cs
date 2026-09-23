@@ -68,7 +68,7 @@ namespace TwoBirds
             springsRegistered = true;
             animator.enabled = true;
             graph = new AvatarAnimationGraph(animator, clips);
-            if (host.EditorPose)
+            if (host.EditorPreview)
             {
                 editorPoseHandler = new HumanPoseHandler(animator.avatar, transform);
                 editorPoseHandler.GetHumanPose(ref editorPose);
@@ -98,18 +98,10 @@ namespace TwoBirds
 
         internal void Evaluate(float dt, bool warmup = false)
         {
-            if (Initialized && host.EditorPose)
+            if (Initialized && host.EditorPreview && !host.AnimationEnabled)
             {
                 Place(0f);
                 editorPoseHandler.SetHumanPose(ref editorPose);
-                if (host.HeadLookEnabled)
-                {
-                    var local = transform.InverseTransformDirection(host.EditorLookTarget - Head.position);
-                    float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -45f, 45f);
-                    float pitch = Mathf.Clamp(-Mathf.Atan2(local.y, new Vector2(local.x, local.z).magnitude) * Mathf.Rad2Deg, -25f, 25f);
-                    Head.rotation = transform.rotation * Quaternion.Euler(pitch, yaw, 0) * Quaternion.Inverse(transform.rotation) * Head.rotation;
-                    runtime.LookAt.LookAtInput = new LookAtInput { WorldPosition = host.EditorLookTarget };
-                }
                 runtime.Process();
                 return;
             }
@@ -130,11 +122,21 @@ namespace TwoBirds
             ik.DeltaTime = dt;
             try { graph.Evaluate(host.State); }
             finally { evaluating = false; }
+            if (host.EditorPreview && host.HeadLookEnabled) ApplyEditorHeadLook();
             using (AvatarPresentationSystem.VrmMarker.Auto())
             {
-                if (host.HeadLookEnabled) runtime.LookAt.LookAtInput = new LookAtInput { WorldPosition = ik.LookTarget };
+                if (host.HeadLookEnabled) runtime.LookAt.LookAtInput = new LookAtInput
+                    { WorldPosition = host.EditorPreview ? host.EditorLookTarget : ik.LookTarget };
                 runtime.Process();
             }
+        }
+
+        private void ApplyEditorHeadLook()
+        {
+            var local = transform.InverseTransformDirection(host.EditorLookTarget - Head.position);
+            float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -45f, 45f);
+            float pitch = Mathf.Clamp(-Mathf.Atan2(local.y, new Vector2(local.x, local.z).magnitude) * Mathf.Rad2Deg, -25f, 25f);
+            Head.rotation = transform.rotation * Quaternion.Euler(pitch, yaw, 0) * Quaternion.Inverse(transform.rotation) * Head.rotation;
         }
 
         internal void CorrectHands()

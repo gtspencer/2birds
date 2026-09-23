@@ -87,7 +87,12 @@ namespace TwoBirds
         {
             if (Switching || draft.Tattoos.Length >= AvatarAppearance.MaximumTattoos || !session.Tattoos.TryResolve(id, out _)) return;
             var value = new TattooAppearance { Design = id, Size = 0.3f, R = 24, G = 24, B = 24 };
-            if (!preview.CentralTattoo(value, out value)) return;
+            preview.SetPlacement(true, Selection);
+            if (!preview.CentralTattoo(value, out value))
+            {
+                preview.SetPlacement(Placement, Selection);
+                return;
+            }
             var list = new List<TattooAppearance>(draft.Tattoos) { value };
             draft.Tattoos = list.ToArray(); Selection = list.Count - 1; SetPlacement(true); Edit();
         }
@@ -115,7 +120,7 @@ namespace TwoBirds
         {
             Placement = value && Selection >= 0 && !Switching;
             if (Placement && !Confirming) navigate.Disable(); else if (navigateEnabled) navigate.Enable();
-            preview.SetPlacement(Placement); Notify();
+            preview.SetPlacement(Placement, Selection); Notify();
         }
         public void Back()
         {

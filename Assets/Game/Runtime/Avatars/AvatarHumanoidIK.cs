@@ -144,7 +144,7 @@ namespace TwoBirds
 
         private void ApplyHead()
         {
-            if (!host.HeadLookEnabled) { animator.SetLookAtWeight(0f); return; }
+            if (host.EditorPreview || !host.HeadLookEnabled) { animator.SetLookAtWeight(0f); return; }
             Vector3 local = Quaternion.Inverse(host.transform.rotation) *
                 (Quaternion.Euler(host.Input.LookPitch, host.Input.LookYaw, 0f) * Vector3.forward);
             float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -70f, 70f);

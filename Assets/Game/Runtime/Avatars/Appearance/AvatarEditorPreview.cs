@@ -13,6 +13,7 @@ namespace TwoBirds
         private SessionController session;
         private AvatarCosmeticPresentation cosmetics;
         private AvatarAppearance requested;
+        private AvatarInstance instance;
         private AvatarTattooSurface surface;
         private RenderTexture texture;
         private Vector3 target;
@@ -25,9 +26,9 @@ namespace TwoBirds
         internal void Initialize(SessionController value)
         {
             session = value;
-            presentation.EditorPose = true;
+            presentation.EditorPreview = true;
             presentation.Configure(session.Avatars, false);
-            presentation.SetFeatures(false, false, true, false);
+            presentation.SetFeatures(true, false, true, false);
             presentation.DidBind += Bound; presentation.WillUnbind += Unbound;
             previewCamera.GetUniversalAdditionalCameraData().SetRenderer(0);
             previewCamera.cullingMask = 1 << LayerMask.NameToLayer(LayerName);
@@ -57,25 +58,36 @@ namespace TwoBirds
         }
         private void Bound(AvatarBinding binding)
         {
+            instance = binding.Animator.GetComponent<AvatarInstance>();
             AvatarCosmeticPresentation.SetLayer(binding.Animator.gameObject, LayerMask.NameToLayer(LayerName));
             foreach (var collider in binding.Animator.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
             cosmetics = new AvatarCosmeticPresentation(binding, session.Hats, session.Tattoos);
             cosmetics.Apply(requested);
-            surface = new AvatarTattooSurface(binding);
+            if (placement) PreparePlacement();
             ResetView(); Accepted?.Invoke(binding.Id);
         }
-        private void Unbound(AvatarBinding binding) { cosmetics?.Dispose(); cosmetics = null; surface = null; }
+        private void Unbound(AvatarBinding binding) { cosmetics?.Dispose(); cosmetics = null; instance = null; surface = null; }
         public void SetAppearance(AvatarAppearance value) { requested = value.Clone(); cosmetics?.Apply(value); }
-        public void SetPlacement(bool value)
+        public void SetPlacement(bool value, int tattooIndex = -1)
         {
             if (placement == value) return;
-            placement = value; presentation.SetFeatures(false, false, !value, false);
-            if (value && Binding != null)
+            bool preserveFraming = TattooPoint(tattooIndex, out var previousPoint);
+            placement = value;
+            if (!value) surface = null;
+            presentation.SetFeatures(!value, false, !value, false);
+            if (value) PreparePlacement();
+            else if (instance) instance.Evaluate(0f);
+            if (preserveFraming && TattooPoint(tattooIndex, out var point))
             {
-                var instance = Binding.Animator.GetComponent<AvatarInstance>();
-                instance.Evaluate(0);
-                surface = new AvatarTattooSurface(Binding);
+                target += point - previousPoint;
+                UpdateCamera();
             }
+        }
+        private void PreparePlacement()
+        {
+            if (!instance) return;
+            instance.Evaluate(0f);
+            surface = new AvatarTattooSurface(instance.Binding);
         }
         public void Look(Vector2 uv)
         {
@@ -108,12 +120,12 @@ namespace TwoBirds
         public bool Place(Vector2 uv, TattooAppearance value, out TattooAppearance result)
         {
             result = value;
-            return surface != null && surface.Cast(previewCamera.ViewportPointToRay(uv), value, out result);
+            return placement && surface != null && surface.Cast(previewCamera.ViewportPointToRay(uv), value, out result);
         }
         public bool CentralTattoo(TattooAppearance value, out TattooAppearance result)
         {
             result = value;
-            if (Binding == null) return false;
+            if (!placement || surface == null || Binding == null) return false;
             foreach (var bone in new[] { HumanBodyBones.Chest, HumanBodyBones.Spine, HumanBodyBones.Hips })
             {
                 var region = Array.Find(Binding.Settings.TattooRegions, r => r.Key == AvatarTattooPlacement.Key(bone));

@@ -10,14 +10,16 @@
                 <ui:Button name="tattoos-tab" text="Tattoos" />
             </ui:VisualElement>
             <ui:ScrollView name="library" class="editor-library" />
-            <ui:Label text="Equipped tattoos" />
-            <ui:ScrollView name="equipped" class="editor-equipped" />
-            <ui:VisualElement name="tattoo-controls">
-                <ui:Button name="edit-placement" text="Edit placement" />
-                <ui:Slider name="ink-r" label="Red" low-value="0" high-value="255" />
-                <ui:Slider name="ink-g" label="Green" low-value="0" high-value="255" />
-                <ui:Slider name="ink-b" label="Blue" low-value="0" high-value="255" />
-                <ui:VisualElement name="swatches" class="editor-row" />
+            <ui:VisualElement name="tattoo-section">
+                <ui:Label text="Equipped tattoos" />
+                <ui:ScrollView name="equipped" class="editor-equipped" />
+                <ui:VisualElement name="tattoo-controls">
+                    <ui:Button name="edit-placement" text="Edit placement" />
+                    <ui:Slider name="ink-r" label="Red" low-value="0" high-value="255" />
+                    <ui:Slider name="ink-g" label="Green" low-value="0" high-value="255" />
+                    <ui:Slider name="ink-b" label="Blue" low-value="0" high-value="255" />
+                    <ui:VisualElement name="swatches" class="editor-row" />
+                </ui:VisualElement>
             </ui:VisualElement>
             <ui:Button name="remove-all" text="Remove All" />
             <ui:VisualElement class="editor-row">

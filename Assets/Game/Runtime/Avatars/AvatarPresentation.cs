@@ -74,7 +74,7 @@ namespace TwoBirds
         internal readonly AvatarAnimationState State = new();
         internal AvatarPresentationInput Input;
         internal bool AnimationEnabled { get; private set; } = true;
-        internal bool EditorPose;
+        internal bool EditorPreview;
         internal Vector3 EditorLookTarget;
         internal bool FootIkEnabled { get; private set; } = true;
         internal bool HeadLookEnabled { get; private set; } = true;
