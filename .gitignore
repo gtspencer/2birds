@@ -106,3 +106,7 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ss]ceneDependencyCache*
 
 .DS_Store
+
+# Raw profiler captures and memory snapshots
+/ProfilerCaptures/*
+!/ProfilerCaptures/.tools/
