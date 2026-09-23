@@ -4,8 +4,9 @@
 # Guardrail / repository metadata
 .agentignore
 .hooks/
-.codex/hooks.json
-.codex/config.toml
+.codex/
+.claude/
+
 .git/
 
 # Unity generated directories

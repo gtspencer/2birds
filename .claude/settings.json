@@ -2,11 +2,12 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Read|Edit|Write|Glob|Grep",
+        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Glob|Grep|Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -File .hooks/.agentignore.hook.ps1"
+            "command": "if command -v pwsh >/dev/null 2>&1; then P=pwsh; elif command -v powershell >/dev/null 2>&1; then P=powershell; else echo 'BLOCKED: PowerShell not found; hook cannot run.' >&2; exit 2; fi; \"$P\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.hooks/.agentignore.claude.hook.ps1\"",
+            "timeout": 10
           }
         ]
       },
@@ -15,7 +16,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -File .hooks/block-git-writes.ps1"
+            "command": "if command -v pwsh >/dev/null 2>&1; then P=pwsh; elif command -v powershell >/dev/null 2>&1; then P=powershell; else echo 'BLOCKED: PowerShell not found; hook cannot run.' >&2; exit 2; fi; \"$P\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.hooks/block-git-writes.claude.ps1\"",
+            "timeout": 10
           }
         ]
       }

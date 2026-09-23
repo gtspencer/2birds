@@ -7,7 +7,7 @@ trap {
     exit 2
 }
 
-function Block-Codex {
+function Block-Tool {
     param([string]$Reason)
     [Console]::Error.WriteLine("BLOCKED: $Reason")
     exit 2
@@ -26,15 +26,15 @@ try {
     $stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding $false))
     $raw = $stdin.ReadToEnd()
     if ([string]::IsNullOrWhiteSpace($raw)) {
-        Block-Codex 'The Git policy hook received no hook input.'
+        Block-Tool 'The Git policy hook received no hook input.'
     }
     $data = $raw | ConvertFrom-Json -ErrorAction Stop
 } catch {
-    Block-Codex ("The Git policy hook could not parse hook input: " + $_.Exception.Message)
+    Block-Tool ("The Git policy hook could not parse hook input: " + $_.Exception.Message)
 }
 
 $toolName = [string](Get-PropertyValue $data 'tool_name')
-if ($toolName -ne 'Bash') {
+if ($toolName -ne 'Bash' -and $toolName -ne 'PowerShell') {
     exit 0
 }
 
@@ -320,7 +320,7 @@ foreach ($match in $gitMatches) {
 
     if (-not (Test-ReadOnlyGitInvocation $invocation.Subcommand $invocation.Args)) {
         $display = if ([string]::IsNullOrWhiteSpace($invocation.Subcommand)) { 'git' } else { 'git ' + $invocation.Subcommand }
-        Block-Codex "$display is blocked. Only explicitly read-only Git operations are allowed."
+        Block-Tool "$display is blocked. Only explicitly read-only Git operations are allowed."
     }
 }
 

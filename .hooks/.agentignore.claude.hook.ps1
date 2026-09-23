@@ -7,7 +7,7 @@ trap {
     exit 2
 }
 
-function Block-Codex {
+function Block-Tool {
     param([string]$Reason)
     [Console]::Error.WriteLine("BLOCKED: $Reason")
     exit 2
@@ -26,11 +26,11 @@ try {
     $stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding $false))
     $raw = $stdin.ReadToEnd()
     if ([string]::IsNullOrWhiteSpace($raw)) {
-        Block-Codex 'The .agentignore guard received no hook input.'
+        Block-Tool 'The .agentignore guard received no hook input.'
     }
     $data = $raw | ConvertFrom-Json -ErrorAction Stop
 } catch {
-    Block-Codex ("The .agentignore guard could not parse hook input: " + $_.Exception.Message)
+    Block-Tool ("The .agentignore guard could not parse hook input: " + $_.Exception.Message)
 }
 
 $sessionCwd = [string](Get-PropertyValue $data 'cwd')
@@ -38,18 +38,19 @@ if ([string]::IsNullOrWhiteSpace($sessionCwd)) {
     $sessionCwd = (Get-Location).Path
 }
 
-$projectRoot = [System.IO.Path]::GetFullPath($sessionCwd)
+$projectRoot = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $sessionCwd }
+$projectRoot = [System.IO.Path]::GetFullPath($projectRoot)
 while (-not (Test-Path -LiteralPath (Join-Path $projectRoot '.git'))) {
     $projectRoot = [System.IO.Path]::GetDirectoryName($projectRoot)
     if ([string]::IsNullOrEmpty($projectRoot)) {
-        Block-Codex 'The .agentignore guard could not determine the Git repository root.'
+        Block-Tool 'The .agentignore guard could not determine the Git repository root.'
     }
 }
 
 $agentignore = Join-Path $projectRoot '.agentignore'
 $agentignoreForGit = $agentignore.Replace('\', '/')
 if (-not (Test-Path -LiteralPath $agentignore -PathType Leaf)) {
-    Block-Codex "Required policy file '$agentignore' is missing."
+    Block-Tool "Required policy file '$agentignore' is missing."
 }
 
 $rootComparable = $projectRoot.TrimEnd([char[]]@('\', '/'))
@@ -132,9 +133,9 @@ function Test-AlwaysBlockedPath {
     if ($normalized -eq '.agentignore') { return $true }
     if ($normalized -eq '.git' -or $normalized.StartsWith('.git/')) { return $true }
     if ($normalized -eq '.hooks' -or $normalized.StartsWith('.hooks/')) { return $true }
-    if ($normalized -eq '.codex') { return $true }
-    if ($normalized -eq '.codex/hooks.json') { return $true }
-    if ($normalized -eq '.codex/config.toml') { return $true }
+    if ($normalized -eq '.claude') { return $true }
+    if ($normalized -eq '.claude/settings.json') { return $true }
+    if ($normalized -eq '.claude/settings.local.json') { return $true }
 
     return $false
 }
@@ -142,7 +143,7 @@ function Test-AlwaysBlockedPath {
 # Use an empty temporary Git worktree so git check-ignore applies only the
 # patterns from .agentignore, not the repository's .gitignore files.
 try {
-    $ignoreCache = Join-Path ([System.IO.Path]::GetTempPath()) 'codex-agentignore-check'
+    $ignoreCache = Join-Path ([System.IO.Path]::GetTempPath()) 'claude-agentignore-check'
     $ignoreGitDir = Join-Path $ignoreCache 'git'
     $ignoreWorkTree = Join-Path $ignoreCache 'worktree'
 
@@ -155,11 +156,11 @@ try {
         & git -c init.defaultBranch=main init --bare --quiet $ignoreGitDir 2>$null
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) {
-            Block-Codex 'The .agentignore guard could not initialize its temporary Git matcher.'
+            Block-Tool 'The .agentignore guard could not initialize its temporary Git matcher.'
         }
     }
 } catch {
-    Block-Codex ("The .agentignore guard could not initialize its matcher: " + $_.Exception.Message)
+    Block-Tool ("The .agentignore guard could not initialize its matcher: " + $_.Exception.Message)
 }
 
 $candidates = New-Object 'System.Collections.Generic.List[string]'
@@ -208,19 +209,27 @@ function Add-StructuredPathCandidates {
 
 $toolName = [string](Get-PropertyValue $data 'tool_name')
 $toolInput = Get-PropertyValue $data 'tool_input'
-Add-StructuredPathCandidates $toolInput ''
+
+if ($toolName -eq 'Grep' -or $toolName -eq 'Glob') {
+    # Grep's pattern is a regex, not a path; Glob/Grep patterns are relative to path.
+    $searchRoot = [string](Get-PropertyValue $toolInput 'path')
+    $relative = if ($toolName -eq 'Grep') { [string](Get-PropertyValue $toolInput 'glob') } else { [string](Get-PropertyValue $toolInput 'pattern') }
+    Add-Candidate $searchRoot
+    if (-not [string]::IsNullOrWhiteSpace($relative)) {
+        if ([string]::IsNullOrWhiteSpace($searchRoot)) {
+            Add-Candidate $relative
+        } else {
+            Add-Candidate ([System.IO.Path]::Combine($searchRoot, $relative))
+        }
+    }
+} else {
+    Add-StructuredPathCandidates $toolInput ''
+}
 
 $command = [string](Get-PropertyValue $toolInput 'command')
 
 if (-not [string]::IsNullOrWhiteSpace($command)) {
-    if ($toolName -eq 'apply_patch') {
-        foreach ($match in [regex]::Matches($command, '(?m)^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*(.+?)\s*$')) {
-            Add-Candidate $match.Groups[1].Value
-        }
-        foreach ($match in [regex]::Matches($command, '(?m)^\*\*\*\s+Move\s+to:\s*(.+?)\s*$')) {
-            Add-Candidate $match.Groups[1].Value
-        }
-    } elseif ($toolName -eq 'Bash') {
+    if ($toolName -eq 'Bash' -or $toolName -eq 'PowerShell') {
         foreach ($match in [regex]::Matches($command, '"([^"]+)"|''([^'']+)''|(\S+)')) {
             if ($match.Groups[1].Success) {
                 $token = $match.Groups[1].Value
@@ -248,7 +257,7 @@ foreach ($candidate in $candidates) {
     if ($null -eq $repoPath) { continue }
 
     if (Test-AlwaysBlockedPath $repoPath) {
-        Block-Codex "Path '$candidate' is blocked by .agentignore policy."
+        Block-Tool "Path '$candidate' is blocked by .agentignore policy."
     }
     if ([string]::IsNullOrWhiteSpace($repoPath)) { continue }
 
@@ -273,14 +282,14 @@ try {
     $exitCode = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
 } catch {
-    Block-Codex ("The .agentignore guard failed while matching paths: " + $_.Exception.Message)
+    Block-Tool ("The .agentignore guard failed while matching paths: " + $_.Exception.Message)
 }
 
 if ($exitCode -eq 1) { exit 0 }
 if ($exitCode -ne 0 -or $ignored.Count -eq 0) {
-    Block-Codex 'The .agentignore matcher failed.'
+    Block-Tool 'The .agentignore matcher failed.'
 }
 
 $hit = [string]$ignored[0]
 $candidate = if ($probeToCandidate.ContainsKey($hit)) { $probeToCandidate[$hit] } else { $hit }
-Block-Codex "Path '$candidate' is blocked by .agentignore policy."
+Block-Tool "Path '$candidate' is blocked by .agentignore policy."

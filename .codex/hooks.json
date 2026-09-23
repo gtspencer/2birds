@@ -1,3 +1,31 @@
 {
-  "description": "Block .agentignore paths and mutating Git operations."
+  "description": "Block .agentignore paths and mutating Git operations.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v pwsh >/dev/null 2>&1 || { echo 'BLOCKED: pwsh is not installed; hook cannot run.' >&2; exit 2; }; pwsh -NoProfile -NonInteractive -File .hooks/.agentignore.codex.hook.ps1",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .hooks\\.agentignore.codex.hook.ps1",
+            "timeout": 10,
+            "statusMessage": "Checking .agentignore"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v pwsh >/dev/null 2>&1 || { echo 'BLOCKED: pwsh is not installed; hook cannot run.' >&2; exit 2; }; pwsh -NoProfile -NonInteractive -File .hooks/block-git-writes.codex.hook.ps1",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .hooks\\block-git-writes.codex.hook.ps1",
+            "timeout": 10,
+            "statusMessage": "Checking Git command"
+          }
+        ]
+      }
+    ]
+  }
 }
