@@ -63,7 +63,7 @@ namespace TwoBirds
             for (int i = 0; i < blocks.Length; i++) blocks[i] = new MaterialPropertyBlock();
             previousPosition = transform.position;
 
-            defaultMaterial = headlightMesh.material;
+            defaultMaterial = headlightMesh.sharedMaterial;
             SetLights(false);
         }
 
@@ -84,7 +84,7 @@ namespace TwoBirds
             foreach (var light in headlights)
                 if (light) light.SetActive(on);
             
-            headlightMesh.material = on ? litMaterial : defaultMaterial;
+            headlightMesh.sharedMaterial = on ? litMaterial : defaultMaterial;
         }
 
         internal void PlayHorn()

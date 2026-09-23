@@ -41,7 +41,7 @@ namespace TwoBirds
         private void ExcludeWorldCameras()
         {
             int mask = ~(1 << LayerMask.NameToLayer(LayerName));
-            foreach (var camera in FindObjectsByType<Camera>(FindObjectsSortMode.None))
+            foreach (var camera in FindObjectsByType<Camera>())
                 if (camera != previewCamera) camera.cullingMask &= mask;
         }
         public void Show(AvatarAppearance value)

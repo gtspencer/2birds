@@ -6,6 +6,9 @@ namespace TwoBirds
 {
     public sealed class AvatarCosmeticPresentation : IDisposable
     {
+        private static readonly int Artwork = Shader.PropertyToID("_Artwork");
+        private static readonly int Ink = Shader.PropertyToID("_Ink");
+        private static readonly int DrawOrder = Shader.PropertyToID("_DrawOrder");
         private readonly AvatarBinding binding;
         private readonly HatCatalog hats;
         private readonly TattooCatalog tattoos;
@@ -61,9 +64,9 @@ namespace TwoBirds
             {
                 var node = new GameObject("Tattoo"); node.SetActive(false); node.layer = binding.Animator.gameObject.layer;
                 materials[index] = new Material(tattoos.DecalMaterial);
-                materials[index].SetTexture("_Artwork", definition.Artwork);
-                materials[index].SetColor("_Ink", value.Ink);
-                materials[index].SetFloat("_DrawOrder", index);
+                materials[index].SetTexture(Artwork, definition.Artwork);
+                materials[index].SetColor(Ink, value.Ink);
+                materials[index].SetFloat(DrawOrder, index);
                 projector = node.AddComponent<DecalProjector>(); projectors[index] = projector;
                 projector.material = materials[index];
                 projector.scaleMode = DecalScaleMode.InheritFromHierarchy;
@@ -80,7 +83,7 @@ namespace TwoBirds
             float aspect = Mathf.Sqrt(definition.AspectRatio);
             projector.size = new Vector3(size * aspect, size / aspect, Mathf.Max(0.003f, region.Dimensions.magnitude * 0.025f));
             projector.pivot = Vector3.zero;
-            materials[index].SetColor("_Ink", value.Ink);
+            materials[index].SetColor(Ink, value.Ink);
             projector.gameObject.SetActive(true);
         }
         internal static void SetLayer(GameObject root, int layer)

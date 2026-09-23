@@ -16,7 +16,7 @@ namespace TwoBirds
         public static void Retain()
         {
             if (users++ != 0) return;
-            service = Object.FindFirstObjectByType<FastSpringBoneService>();
+            service = Object.FindAnyObjectByType<FastSpringBoneService>();
             ownsService = !service;
             service = FastSpringBoneService.Instance;
             previousPolicy = service.UpdateType;

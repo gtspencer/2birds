@@ -9,6 +9,12 @@ namespace TwoBirds.Editor
     public sealed class HatSetup : EditorWindow
     {
         public const string CatalogPath = "Assets/Game/Settings/Cosmetics/HatCatalog.asset";
+        private static readonly int BaseMap = Shader.PropertyToID("_BaseMap");
+        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorProperty = Shader.PropertyToID("_Color");
+        private static readonly int Glossiness = Shader.PropertyToID("_Glossiness");
+        private static readonly int Smoothness = Shader.PropertyToID("_Smoothness");
+        private static readonly int MainTex = Shader.PropertyToID("_MainTex");
         private GameObject source;
         private HatDefinition definition;
         private string displayName = "";
@@ -98,12 +104,12 @@ namespace TwoBirds.Editor
                         if (!material) { material = new Material(Shader.Find("Universal Render Pipeline/Lit")); AssetDatabase.CreateAsset(material, path); }
                         material.CopyPropertiesFromMaterial(original);
                         material.shader = Shader.Find("Universal Render Pipeline/Lit");
-                        var texture = original.HasProperty("_BaseMap") ? original.GetTexture("_BaseMap") : original.mainTexture;
-                        var color = original.HasProperty("_BaseColor") ? original.GetColor("_BaseColor") : original.HasProperty("_Color") ? original.color : Color.white;
-                        material.SetTexture("_BaseMap", texture); material.SetColor("_BaseColor", color);
-                        if (original.HasProperty("_Glossiness")) material.SetFloat("_Smoothness", original.GetFloat("_Glossiness"));
-                        if (original.HasProperty("_MainTex"))
-                        { material.SetTextureScale("_BaseMap", original.GetTextureScale("_MainTex")); material.SetTextureOffset("_BaseMap", original.GetTextureOffset("_MainTex")); }
+                        var texture = original.HasProperty(BaseMap) ? original.GetTexture(BaseMap) : original.mainTexture;
+                        var color = original.HasProperty(BaseColor) ? original.GetColor(BaseColor) : original.HasProperty(ColorProperty) ? original.color : Color.white;
+                        material.SetTexture(BaseMap, texture); material.SetColor(BaseColor, color);
+                        if (original.HasProperty(Glossiness)) material.SetFloat(Smoothness, original.GetFloat(Glossiness));
+                        if (original.HasProperty(MainTex))
+                        { material.SetTextureScale(BaseMap, original.GetTextureScale(MainTex)); material.SetTextureOffset(BaseMap, original.GetTextureOffset(MainTex)); }
                         EditorUtility.SetDirty(material); materials[i] = material;
                     }
                     renderer.sharedMaterials = materials;

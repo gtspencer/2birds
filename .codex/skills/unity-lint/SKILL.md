@@ -50,7 +50,7 @@ The sln is `2birds.sln`
 
 ### Unity Editor
 
-The Unity version is 6000.5.7f1
+The Unity version is 6000.6.2f1
 
 
 ## 3. Run JetBrains InspectCode
@@ -61,7 +61,7 @@ Run solution-wide analysis and emit SARIF:
 
 ```text
 jb inspectcode "<SOLUTION>" \
-  --output="<PROJECT_ROOT>/.lint/inspectcode_<datestampt>.sarif" \
+  --output="<PROJECT_ROOT>/.lint/<datestamp>/inspectcode_<datestampt>.sarif" \
   --swea \
   --severity=SUGGESTION
 ```
@@ -84,51 +84,12 @@ Do not suppress a finding just because it is inconvenient. Existing project anal
 
 Unity Project Auditor command-line execution requires an Editor method.
 
-Look for an existing project-specific Project Auditor CLI entry point first. Reuse it if it performs a normal audit and saves the report.
-
-If no suitable bridge exists, create this reusable tooling file:
-
+The existing project-specific Project Auditor CLI entry point lives at:
 ```text
 Assets/Editor/AgentTools/ProjectAuditorCli.cs
 ```
 
-with:
-
-```csharp
-#if UNITY_EDITOR
-using System.IO;
-using Unity.ProjectAuditor.Editor;
-using UnityEngine;
-
-namespace AgentTools
-{
-    public static class ProjectAuditorCli
-    {
-        public static void Run()
-        {
-            var outputDirectory = Path.GetFullPath(
-                Path.Combine(Application.dataPath, "..", "Temp", "AgentLint"));
-
-            Directory.CreateDirectory(outputDirectory);
-
-            var outputPath = Path.Combine(
-                outputDirectory, "project-auditor.projectauditor");
-
-            var auditor = new ProjectAuditor();
-            var report = auditor.Audit();
-
-            report.Save(outputPath);
-
-            Debug.Log(
-                $"Project Auditor completed with {report.NumTotalIssues} total report items. " +
-                $"Saved to: {outputPath}");
-        }
-    }
-}
-#endif
-```
-
-This bridge is project tooling, not gameplay code. Create it only if needed (but don't delete it when done).
+This bridge is project tooling, not gameplay code.
 
 ## 5. Run Unity Project Auditor
 
@@ -142,7 +103,7 @@ Run the matching Unity Editor in batch mode:
   -quit \
   -projectPath "<PROJECT_ROOT>" \
   -executeMethod AgentTools.ProjectAuditorCli.Run \
-  -logFile "<PROJECT_ROOT>/.lint/project-auditor-<datestamp>.log"
+  -logFile "<PROJECT_ROOT>/.lint/<datestamp>/project-auditor-<datestamp>.log"
 ```
 
 Do not use `-ignorecompilererrors`.
@@ -165,7 +126,7 @@ Do not claim Project Auditor passed if it did not run.
 Inspect:
 
 ```text
-.lint/project-auditor-<datestamp>.log
+.lint/<datestamp>/project-auditor-<datestamp>.log
 ```
 
 Distinguish between:
@@ -185,9 +146,9 @@ Report the actual failure rather than treating missing output as zero issues.
 Read:
 
 ```text
-.lint/inspectcode.sarif
-.lint/project-auditor.projectauditor
-.lint/project-auditor.log
+.lint/<datestamp>/inspectcode.sarif
+.lint/<datestamp>/project-auditor.projectauditor
+.lint/<datestamp>/project-auditor.log
 ```
 
 Project Auditor report files are JSON-backed reports and should be inspected directly.
@@ -231,7 +192,7 @@ Remember that Project Auditor can report false positives or conservative warning
 Create:
 
 ```text
-.lint/Unity_Lint_Report_<datestamp>.md
+.lint/<datestamp>/Unity_Lint_Report_<datestamp>.md
 ```
 
 Use this structure:
@@ -347,6 +308,6 @@ Report:
 - counts of the highest-priority findings,
 - the 3–5 most important issues,
 - whether any analyzer was blocked/failed,
-- path to `/.lint/Unity_Lint_Report_<datestamp>).md`.
+- path to `/.lint/<datestamp>/Unity_Lint_Report_<datestamp>).md`.
 
 Do not paste the raw SARIF or entire Project Auditor report into chat.

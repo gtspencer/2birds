@@ -23,7 +23,7 @@ namespace TwoBirds
         private bool bouncyProtected;
         public PlayerMotor Motor { get; private set; }
         public uint Lifetime => lifetime.Value != 0 ? lifetime.Value : receivedLifetime;
-        public uint Reset { get; private set; }
+        public new uint Reset { get; private set; }
         public PotionDefinition Buff => current.Definition == 0 || !registry ? null : registry.GetDefinition(current.Definition) as PotionDefinition;
         public float Remaining => registry ? Mathf.Max(0f, ((long)current.Expiry - registry.ServerTick) * (float)registry.TickDelta) : 0f;
         public event System.Action BuffChanged;
