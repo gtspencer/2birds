@@ -11,4 +11,4 @@ This skill takes the current conversation context and codebase understanding and
 
 2. Don't reference the brainstorm file, or any initial markdown document(s).  Ensure the spec is a standalone description of the decisions made.
 
-3. Write the spec using the template below to a markdown file with the format `<Feature_Name>_Spec.md` at the root of the project.
+3. Write the spec to a markdown file with the format `<Feature_Name>_Spec.md` at the root of the project.

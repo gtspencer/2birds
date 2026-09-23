@@ -189,7 +189,9 @@ namespace TwoBirds
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (AutomatedInput != null) return AutomatedInput();
 #endif
-            if (!gameplay || InputSuppressed || InventoryOpen || seating.Seated || seating.TransitionPending || seating.PlacementPending) return default;
+            if (seating.Seated || seating.PlacementPending) return default;
+            if (!gameplay || InputSuppressed || InventoryOpen || seating.TransitionPending)
+                return new MoveInput(Vector2.zero, Yaw, false);
             Vector3 direction = Quaternion.Euler(0f, Yaw, 0f) * new Vector3(movement.x, 0f, movement.y);
             var result = new MoveInput(new Vector2(direction.x, direction.z), Yaw, jumpPending,
                 sprint != null && sprint.IsPressed() && movement.sqrMagnitude > 0.0001f);
