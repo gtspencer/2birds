@@ -79,7 +79,7 @@ namespace TwoBirds
         private int attempt, selectedIndex = -1;
         private uint wireSession;
         private ulong pendingInvite, joiningLobby;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         internal Dictionary<int, (long sent, long received)> PayloadTraffic =>
             UsingLocal ? localTransport.Traffic : steamTransport.Traffic;
         internal Transport DiagnosticTransport => selectedTransport;
@@ -130,7 +130,7 @@ namespace TwoBirds
             Network.SceneManager.OnQueueEnd += QueueEnded;
             SetFrameCap(PlayerPrefs.GetInt("RenderingFrameCap", 60));
             SetDisplayMode(PlayerPrefs.GetInt("DisplayMode", (int)FullScreenMode.ExclusiveFullScreen), false);
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (!Application.isBatchMode) {
                 gameObject.AddComponent<DevConsole>();
             }

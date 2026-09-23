@@ -1,4 +1,4 @@
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
 using System.Diagnostics;
 using UnityEngine;
 using System;
@@ -165,21 +165,21 @@ namespace TwoBirds
             run?.Close();
         }
 
-        [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
         public static void Log(string eventName, object data, AILogContext context = default,
             AILogLevel level = AILogLevel.Info, int eventVersion = 1)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             var run = writer;
             if (run == null || !run.Usable) return;
             run.Record(eventName, data, Context(context), level, eventVersion, Time.frameCount);
 #endif
         }
 
-        [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
         public static void Screenshot()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (!Enabled) return;
             if (Capture != null) Capture.Screenshot();
             else
@@ -191,18 +191,18 @@ namespace TwoBirds
 #endif
         }
 
-        [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
         internal static void Burst(string reason)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (Enabled) Capture?.Burst(reason);
 #endif
         }
 
-        [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+        [Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
         internal static void Focus(WorldItem item)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (Enabled) Capture?.Focus(item);
 #endif
         }

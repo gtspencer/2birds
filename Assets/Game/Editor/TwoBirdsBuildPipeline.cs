@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -18,7 +19,8 @@ namespace TwoBirds.Editor
         [MenuItem("Two Birds/Build/Local Networking", priority = 0)]
         private static void BuildLocalNetworking()
         {
-            Build("Build/LocalNetworking", new[] { "TWO_BIRDS_LOCAL_NETWORKING" }, postBuild: outputDir =>
+            Build("Build/LocalNetworking", ManagedCodeVariant.Checked, BuildOptions.Development,
+                new[] { "TWO_BIRDS_LOCAL_NETWORKING" }, postBuild: outputDir =>
             {
                 string exe = Path.GetFileName(ExeName);
                 File.WriteAllText(Path.Combine(outputDir, "LocalNetwork.bat"),
@@ -30,18 +32,7 @@ namespace TwoBirds.Editor
         [MenuItem("Two Birds/Build/Development", priority = 1)]
         private static void BuildDevelopment()
         {
-            string steamAppId = Path.Combine(Directory.GetCurrentDirectory(), "steam_appid.txt");
-            if (!File.Exists(steamAppId))
-            {
-                Debug.LogError("[Build] steam_appid.txt not found at repository root.");
-                return;
-            }
-
-            Build("Build/Development", null, postBuild: outputDir =>
-            {
-                File.Copy(steamAppId, Path.Combine(outputDir, "steam_appid.txt"), true);
-                Debug.Log("[Build] Copied steam_appid.txt");
-            });
+            BuildWithSteamAppId("Build/Development", ManagedCodeVariant.Checked, BuildOptions.Development);
         }
 
         [MenuItem("Two Birds/Build/Development - Steam", priority = 2)]
@@ -55,13 +46,36 @@ namespace TwoBirds.Editor
                 return;
             }
 
-            bool built = Build("Build/Development-Steam", null);
+            bool built = Build("Build/Development-Steam", ManagedCodeVariant.Checked, BuildOptions.Development, null);
             if (!built) return;
 
             UploadToSteam(vdfPath);
         }
 
-        private static bool Build(string outputRelPath, string[] extraDefines, Action<string> postBuild = null)
+        [MenuItem("Two Birds/Build/Release", priority = 3)]
+        private static void BuildRelease()
+        {
+            BuildWithSteamAppId("Build/Release", ManagedCodeVariant.Release, BuildOptions.None);
+        }
+
+        private static void BuildWithSteamAppId(string outputRelPath, ManagedCodeVariant variant, BuildOptions buildOptions)
+        {
+            string steamAppId = Path.Combine(Directory.GetCurrentDirectory(), "steam_appid.txt");
+            if (!File.Exists(steamAppId))
+            {
+                Debug.LogError("[Build] steam_appid.txt not found at repository root.");
+                return;
+            }
+
+            Build(outputRelPath, variant, buildOptions, null, postBuild: outputDir =>
+            {
+                File.Copy(steamAppId, Path.Combine(outputDir, "steam_appid.txt"), true);
+                Debug.Log("[Build] Copied steam_appid.txt");
+            });
+        }
+
+        private static bool Build(string outputRelPath, ManagedCodeVariant variant, BuildOptions buildOptions,
+            string[] extraDefines, Action<string> postBuild = null)
         {
             var scenes = EditorBuildSettings.scenes
                 .Where(s => s.enabled)
@@ -84,14 +98,25 @@ namespace TwoBirds.Editor
                 scenes = scenes,
                 locationPathName = locationPathName,
                 target = BuildTarget.StandaloneWindows64,
-                options = BuildOptions.Development,
+                options = buildOptions,
             };
 
             if (extraDefines != null && extraDefines.Length > 0)
                 options.extraScriptingDefines = extraDefines;
 
-            Debug.Log($"[Build] Starting build: {outputRelPath}");
-            BuildReport report = BuildPipeline.BuildPlayer(options);
+            Debug.Log($"[Build] Starting build: {outputRelPath} (managed variant: {variant}, development: {(buildOptions & BuildOptions.Development) != 0})");
+            var target = NamedBuildTarget.Standalone;
+            var previousVariant = PlayerSettings.GetManagedCodeVariant(target);
+            BuildReport report;
+            try
+            {
+                PlayerSettings.SetManagedCodeVariant(target, variant);
+                report = BuildPipeline.BuildPlayer(options);
+            }
+            finally
+            {
+                PlayerSettings.SetManagedCodeVariant(target, previousVariant);
+            }
 
             if (report.summary.result != BuildResult.Succeeded)
             {

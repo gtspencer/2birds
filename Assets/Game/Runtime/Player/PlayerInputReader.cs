@@ -29,7 +29,7 @@ namespace TwoBirds
         private bool inventoryOpen;
         private bool useBlocked;
         private bool jumpBlocked, dropBlocked, lightsBlocked, hornBlocked;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         internal System.Func<MoveInput> AutomatedInput;
 #endif
         public float Yaw { get; private set; }
@@ -186,7 +186,7 @@ namespace TwoBirds
         public MoveInput Consume()
         {
             if (Carried || health && health.IsDowned) return default;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (AutomatedInput != null) return AutomatedInput();
 #endif
             if (seating.Seated || seating.PlacementPending) return default;

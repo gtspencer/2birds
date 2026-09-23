@@ -6,7 +6,7 @@ namespace TwoBirds
 {
     public sealed class GameSteamTransport : FishySteamworks.FishySteamworks
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         public readonly Dictionary<int, (long sent, long received)> Traffic = new();
         private void Count(int peer, int sent, int received)
         {

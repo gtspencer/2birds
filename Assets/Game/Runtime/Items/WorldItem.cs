@@ -815,7 +815,7 @@ namespace TwoBirds
                 RemovalPending = true;
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         internal object AISnapshot() => new
         {
             subject = "item:" + Record.Motion.Id, epoch = registry.AIEpoch, revision = Record.Motion.Revision,

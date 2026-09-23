@@ -136,7 +136,7 @@ namespace TwoBirds
         internal event System.Action<Vector3> PresentationCorrected;
         private PlayerPresentation presentation;
         private Vector3 graphicsBeforeReconcile;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         private readonly Queue<string> impactTrace = new();
         private uint traceTicksRemaining;
         private float nextTraceDump;
@@ -425,7 +425,7 @@ namespace TwoBirds
             if (Suspended) return;
             Simulated?.Invoke(TimeManager.LocalTick, Body.position);
             TraceImpactState("physics-state");
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (traceTicksRemaining > 0) traceTicksRemaining--;
 #endif
             CreateReconcile();
@@ -626,7 +626,7 @@ namespace TwoBirds
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         internal object AISnapshot() => new
         {
             subject = "player:" + ObjectId, generation = impactGeneration,
@@ -639,19 +639,19 @@ namespace TwoBirds
         };
 #endif
 
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        [System.Diagnostics.Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
         internal void TraceImpact(string detail)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             traceTicksRemaining = TimeManager.TickRate;
             TraceImpactState(detail);
 #endif
         }
 
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        [System.Diagnostics.Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
         private void TraceImpactState(string detail)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (traceTicksRemaining == 0) return;
             string entry = $"time={Time.unscaledTime:F6} owner={OwnerId} local={IsOwner} server={IsServerInitialized} tick={TimeManager.LocalTick} movement={movementTick} replay={PredictionManager.IsReconciling} generation={impactGeneration} sequence={lastImpactSequence} request={lastOwnerRequestId} body={Body.position:F6} velocity={Body.linearVelocity:F6} graphics={presentation.Graphics.position:F6} {detail}";
             if (impactTrace.Count == 256) impactTrace.Dequeue();
@@ -662,17 +662,17 @@ namespace TwoBirds
 #endif
         }
 
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        [System.Diagnostics.Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
         internal void DumpImpactTrace()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (Time.unscaledTime < nextTraceDump) return;
             nextTraceDump = Time.unscaledTime + 1f;
             Debug.LogWarning(string.Join("\n", impactTrace), this);
 #endif
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         [ContextMenu("Dump Impact Trace")]
         private void DumpImpactTraceFromInspector() => Debug.Log(string.Join("\n", impactTrace), this);
 #endif

@@ -8,7 +8,7 @@ namespace TwoBirds
     // Keeps development payload accounting outside imported transport code. -1 denotes the client socket.
     public sealed class GameTransport : Tugboat
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         public readonly Dictionary<int, (long sent, long received)> Traffic = new();
         private void Count(int peer, int sent, int received)
         {

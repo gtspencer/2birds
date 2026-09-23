@@ -10,13 +10,13 @@ public static class Log
     private static void ResetMarkers() => _markerCount = 0;
     
     
-    [HideInCallstack, Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+    [HideInCallstack, Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
     public static void Info(object message, Object context = null)
     {
         UnityEngine.Debug.Log(message, context);
     }
 
-    [HideInCallstack, Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+    [HideInCallstack, Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
     public static void Warning(object message, Object context = null)
     {
         UnityEngine.Debug.LogWarning(message, context);
@@ -34,7 +34,7 @@ public static class Log
         UnityEngine.Debug.LogException(exception, context);
     }
 
-    [HideInCallstack, Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+    [HideInCallstack, Conditional("UNITY_INCLUDE_INSTRUMENTATION")]
     public static void Marker()
     {
         UnityEngine.Debug.Log($"MARKER ({++_markerCount})");
