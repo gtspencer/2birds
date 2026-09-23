@@ -32,7 +32,7 @@ imports and variables *your* change orphaned; mention pre-existing dead code rat
 deleting it.
 
 ### Stack
-Unity 6000.5.7f1
+Unity 6000.6.2f1
 Unity CLI 1.0.0-beta.9 (lives at `C:\Users\spenc\AppData\Local\Unity\bin\unity.exe`)
 FishNet 4.7.3 for networking
 Unity UI Toolkit for UI
