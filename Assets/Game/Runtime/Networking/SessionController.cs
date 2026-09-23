@@ -29,6 +29,33 @@ namespace TwoBirds
         [SerializeField] private TattooCatalog tattooCatalog;
         [SerializeField] private AvatarEditorController avatarEditorPrefab;
         public AvatarRegistry Avatars => avatarRegistry;
+        public AvatarRegistry PresentationRegistryOverride { get; set; }
+        public AvatarRegistry PresentationRegistry => PresentationRegistryOverride ? PresentationRegistryOverride : avatarRegistry;
+        public string GameplayScene { get; private set; } = "Game";
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private bool startingAuthoring;
+        public void StartGripAuthoring()
+        {
+            if (Phase != SessionPhase.Idle || !Network || startingAuthoring) return;
+            GripAuthoringSession.Begin(this);
+            GameplayScene = GripAuthoringSession.SceneName;
+            startingAuthoring = true;
+            StartCoroutine(StartAuthoringSession());
+        }
+        private IEnumerator StartAuthoringSession()
+        {
+            var existing = SceneManager.GetSceneByName(GripAuthoringSession.SceneName);
+            if (existing.IsValid() && existing.isLoaded)
+            {
+                var entry = SceneManager.CreateScene("GripAuthoringEntry");
+                SceneManager.SetActiveScene(entry);
+                yield return SceneManager.UnloadSceneAsync(existing);
+            }
+            try { StartSession(SessionMode.Solo); }
+            finally { startingAuthoring = false; }
+            if (Phase == SessionPhase.Idle) { GripAuthoringSession.End(); GameplayScene = "Game"; }
+        }
+#endif
         public HatCatalog Hats => hatCatalog;
         public TattooCatalog Tattoos => tattooCatalog;
         public AvatarAppearanceStore Appearance { get; private set; }
@@ -239,6 +266,9 @@ namespace TwoBirds
         public void StartSession(SessionMode mode, string address = "127.0.0.1", string portText = "7770")
         {
             if (Phase != SessionPhase.Idle) return;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!startingAuthoring) GameplayScene = "Game";
+#endif
             bool local = LocalNetworking || mode == SessionMode.Solo;
             ushort port = 0;
             if (local && !EndpointUtility.TryPort(portText, out port))
@@ -376,7 +406,7 @@ namespace TwoBirds
             Network.ServerManager.Broadcast(new SessionStarting { Session = wireSession });
             BeginLoading();
             UpdateLobby();
-            Network.SceneManager.LoadGlobalScenes(new SceneLoadData("Game") { ReplaceScenes = ReplaceOption.All });
+            Network.SceneManager.LoadGlobalScenes(new SceneLoadData(GameplayScene) { ReplaceScenes = ReplaceOption.All });
         }
 
         private void ReceiveStarting(SessionStarting message, Channel channel)
@@ -544,6 +574,11 @@ namespace TwoBirds
             clientAttempts.Clear();
             Roster = Array.Empty<LobbyMember>();
             wireSession = 0;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            GripAuthoringSession.End();
+#endif
+            GameplayScene = "Game";
+            PresentationRegistryOverride = null;
             yield return SceneManager.LoadSceneAsync("MainMenu", LoadSceneMode.Single);
             if (attempt != stoppingAttempt) yield break;
             PanelOpen = false;

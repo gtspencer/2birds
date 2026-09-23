@@ -15,12 +15,38 @@ namespace TwoBirds.Editor
             serializedObject.Update();
             bool slingshot = System.Array.TrueForAll(targets, value => value is SlingshotDefinition);
             bool heavy = System.Array.TrueForAll(targets, value => ((ItemDefinition)value).HoldMode == ItemHoldMode.Heavy);
-            if (heavy) EditorGUILayout.HelpBox("Heavy positions place the collider reference center relative to the shoulder midpoint, in average arm lengths. Euler offsets rotate the object relative to the body before its prefab rotation. Both views use this frame. Author palm contacts with LeftHandGrip and RightHandGrip on the prefab.", MessageType.Info);
+            if (heavy) EditorGUILayout.HelpBox("Heavy positions place the collider reference center relative to the shoulder midpoint, in average arm lengths. Euler offsets rotate the object relative to the body before its prefab rotation. Both views use this frame. Author both palm contacts in item-root space.", MessageType.Info);
             var overrideSettings = serializedObject.FindProperty("OverrideHoldSettings");
             var property = serializedObject.GetIterator();
             for (bool enter = true; property.NextVisible(enter); enter = false)
             {
-                if (heavy && property.name is "GripPosition" or "GripEuler") continue;
+                if (!heavy && property.name == "LeftPalmContact") continue;
+                if (property.name is "OverrideHoldSettings" or "OverrideFirstPersonPose" or "OverrideRemoteChargePose" or "OverrideFirstPersonChargePose")
+                {
+                    EditorGUI.showMixedValue = property.hasMultipleDifferentValues;
+                    EditorGUI.BeginChangeCheck();
+                    bool enabled = EditorGUILayout.Toggle(property.displayName, property.boolValue);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        serializedObject.ApplyModifiedProperties();
+                        Undo.RecordObjects(targets, "Change grip override");
+                        foreach (ItemDefinition item in targets)
+                        {
+                            registry.HeldItemDefaults.SetOverride(item, property.name, enabled);
+                            EditorUtility.SetDirty(item);
+                        }
+                        serializedObject.Update();
+                    }
+                    EditorGUI.showMixedValue = false;
+                    continue;
+                }
+                if (property.name is "RemoteChargePose" or "FirstPersonChargePose")
+                {
+                    if (serializedObject.FindProperty("Override" + property.name).boolValue)
+                        EditorGUILayout.PropertyField(property, true);
+                    else DrawInherited(property.name, slingshot, heavy);
+                    continue;
+                }
                 if (property.name == "CollisionDamage")
                 {
                     var damageOverride = serializedObject.FindProperty("OverrideCollisionDamage");
@@ -33,8 +59,7 @@ namespace TwoBirds.Editor
                     var localOverride = serializedObject.FindProperty("OverrideFirstPersonPose");
                     if (localOverride.boolValue || localOverride.hasMultipleDifferentValues)
                         DrawPose(property, "First Person Spatial Pose", slingshot, heavy);
-                    else using (new EditorGUI.DisabledScope(true))
-                        EditorGUILayout.ObjectField("First Person Defaults", registry ? registry.HeldItemDefaults : null, typeof(HeldItemSettings), false);
+                    else DrawInherited(property.name, slingshot, heavy);
                     continue;
                 }
                 if (property.name == "HandPose")
@@ -42,10 +67,7 @@ namespace TwoBirds.Editor
                     if (overrideSettings.hasMultipleDifferentValues) continue;
                     if (overrideSettings.boolValue)
                         DrawPose(property, "Hold Settings", slingshot, heavy);
-                    else
-                        using (new EditorGUI.DisabledScope(true))
-                            EditorGUILayout.ObjectField("System Defaults", registry ? registry.HeldItemDefaults : null,
-                                typeof(HeldItemSettings), false);
+                    else DrawInherited(property.name, slingshot, heavy);
                     continue;
                 }
                 using (new EditorGUI.DisabledScope(property.name == "m_Script"))
@@ -55,6 +77,37 @@ namespace TwoBirds.Editor
                     serializedObject.FindProperty("HandPose").isExpanded = true;
             }
             serializedObject.ApplyModifiedProperties();
+        }
+
+        private void DrawInherited(string field, bool slingshot, bool heavy)
+        {
+            if (!registry || !registry.HeldItemDefaults) return;
+            foreach (ItemDefinition item in targets)
+            {
+                var defaults = registry.HeldItemDefaults;
+                var display = Instantiate(item);
+                display.hideFlags = HideFlags.HideAndDontSave;
+                display.HandPose = defaults.ResolveHold(item);
+                display.FirstPersonPose = defaults.ResolveSpatial(item, true);
+                if (display is SlingshotDefinition sling && item is SlingshotDefinition source)
+                {
+                    sling.RemoteChargePose = defaults.ResolveCharge(source, false);
+                    sling.FirstPersonChargePose = defaults.ResolveCharge(source, true);
+                }
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    string group = field == "HandPose" ? heavy ? "HeavyHoldSettings" : "HoldSettings" :
+                        field == "FirstPersonPose" ? heavy ? "resolved heavy hold" : field : "SlingshotChargePose";
+                    bool itemSource = field == "FirstPersonPose" && item.HoldMode == ItemHoldMode.Heavy && item.OverrideHoldSettings;
+                    EditorGUILayout.ObjectField($"{item.name}: {(itemSource ? "HandPose spatial fields" : group)} (inherited)",
+                        itemSource ? (UnityEngine.Object)item : defaults, typeof(ScriptableObject), false);
+                    using var values = new SerializedObject(display);
+                    var property = values.FindProperty(field);
+                    property.isExpanded = true;
+                    DrawPose(property, field, slingshot, heavy);
+                }
+                DestroyImmediate(display);
+            }
         }
 
         private static void DrawPose(SerializedProperty property, string label, bool slingshot, bool heavy)

@@ -1,0 +1,2 @@
+# Paths agents may read but not write. Same syntax as .gitignore / .agentignore.
+# Enforced by .hooks/.agentreadonly.*.hook.ps1; re-read on every tool call.

@@ -40,3 +40,7 @@ MonoBehaviour:
     MaximumFollowDuration: 0.2
     EndPosePauseDuration: 0
     ReturnBlendDuration: 0.2
+  SlingshotChargePose:
+    ChargedPositionOffset: {x: 0, y: 0, z: 0}
+    ChargedPalmEuler: {x: 0, y: 0, z: 90}
+    PullingHandDrawOffset: {x: 0, y: 0, z: 0}

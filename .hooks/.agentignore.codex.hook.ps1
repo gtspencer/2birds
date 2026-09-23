@@ -121,23 +121,6 @@ function Convert-ToRepoPath {
     return $fullComparable.Substring($rootPrefix.Length).Replace('\', '/')
 }
 
-function Test-AlwaysBlockedPath {
-    param([string]$RepoPath)
-
-    if ($null -eq $RepoPath) { return $false }
-
-    $normalized = $RepoPath.Replace('\', '/').TrimStart([char[]]@('/')).ToLowerInvariant()
-
-    if ($normalized -eq '.agentignore') { return $true }
-    if ($normalized -eq '.git' -or $normalized.StartsWith('.git/')) { return $true }
-    if ($normalized -eq '.hooks' -or $normalized.StartsWith('.hooks/')) { return $true }
-    if ($normalized -eq '.codex') { return $true }
-    if ($normalized -eq '.codex/hooks.json') { return $true }
-    if ($normalized -eq '.codex/config.toml') { return $true }
-
-    return $false
-}
-
 # Use an empty temporary Git worktree so git check-ignore applies only the
 # patterns from .agentignore, not the repository's .gitignore files.
 try {
@@ -246,9 +229,6 @@ foreach ($candidate in $candidates) {
     $repoPath = Convert-ToRepoPath $candidate
     if ($null -eq $repoPath) { continue }
 
-    if (Test-AlwaysBlockedPath $repoPath) {
-        Block-Codex "Path '$candidate' is blocked by .agentignore policy."
-    }
     if ([string]::IsNullOrWhiteSpace($repoPath)) { continue }
 
     # Directory-only patterns such as "Specs/" do not match the bare

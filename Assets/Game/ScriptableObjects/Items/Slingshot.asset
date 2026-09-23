@@ -21,8 +21,12 @@ MonoBehaviour:
   MinThrowSpeed: 8
   MaxThrowSpeed: 28
   ThrowChargeTime: 1
-  GripPosition: {x: 0.025, y: 0.02, z: 0}
-  GripEuler: {x: 0, y: 0, z: -90}
+  RightPalmContact:
+    Position: {x: 0.02, y: -0.025, z: 0}
+    Euler: {x: 0, y: 0, z: 90}
+  LeftPalmContact:
+    Position: {x: 0, y: 0, z: 0}
+    Euler: {x: 0, y: 0, z: 0}
   OverrideHoldSettings: 1
   OverrideFirstPersonPose: 1
   FirstPersonPose:
@@ -60,6 +64,11 @@ MonoBehaviour:
   MaxSpeed: 50
   OverrideSleepThreshold: 0
   SleepThreshold: 0.005
+  PullingPalmContact:
+    Position: {x: 0, y: 0, z: 0}
+    Euler: {x: 0, y: 0, z: -90}
+  OverrideFirstPersonChargePose: 1
+  OverrideRemoteChargePose: 0
   FirstPersonChargePose:
     ChargedPositionOffset: {x: 0.13, y: -0.15, z: 0.3}
     ChargedPalmEuler: {x: 0, y: 0, z: 90}

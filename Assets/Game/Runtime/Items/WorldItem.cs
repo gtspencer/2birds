@@ -55,8 +55,6 @@ namespace TwoBirds
         internal float DropDiameter { get; private set; }
         internal float ReleaseRadius { get; private set; }
         internal ItemReleaseSphere ReleaseSphere { get; private set; }
-        internal HeavyItemGrips HeavyGrips { get; private set; }
-        private Transform leftHandGrip, rightHandGrip;
         private bool geometryCached;
         internal bool ReleaseAvailable => isActiveAndEnabled && Record.State == WorldItemState.World && !optimisticPickup && !RemovalPending;
         internal int PresentedHolder { get; private set; } = -1;
@@ -128,8 +126,6 @@ namespace TwoBirds
             Vector3 scale = Definition ? Definition.WorldPrefab.transform.localScale : transform.localScale;
             ReleaseRadius = ItemReleaseClearance.EnvelopeRadius(transform, scale, colliders);
             ReleaseSphere = ItemReleaseClearance.Sphere(transform, scale, colliders, ReleaseRadius);
-            leftHandGrip = transform.Find("LeftHandGrip"); rightHandGrip = transform.Find("RightHandGrip");
-            HeavyGrips = new HeavyItemGrips(transform, leftHandGrip, rightHandGrip, scale);
             DropDiameter = Mathf.Max(DropDiameter, 2f * ReleaseRadius);
         }
 
@@ -401,8 +397,9 @@ namespace TwoBirds
             var grip = equipment.HeldPresentation.Grip(Definition);
             Vector3 scale = parent.lossyScale;
             transform.localScale = new Vector3(defaultScale.x / scale.x, defaultScale.y / scale.y, defaultScale.z / scale.z);
-            transform.position = grip.Heavy ? parent.position : parent.position + parent.rotation * grip.GripPosition;
-            transform.localRotation = grip.Heavy ? Quaternion.identity : grip.GripRotation;
+            var root = grip.Heavy ? new Pose(parent.position, parent.rotation) :
+                HeldItemPoseCalculation.ItemFromPalm(new Pose(parent.position, parent.rotation), grip.RightContact, grip.PrefabScale);
+            transform.SetPositionAndRotation(root.position, root.rotation);
             ClearVisualOffset();
         }
 

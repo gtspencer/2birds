@@ -9,7 +9,8 @@ namespace TwoBirds
         public AnimationClip RelaxedFingers, GripFingers, OpenFingers;
         public const float MinimumPlayback = 0.65f, MaximumPlayback = 1.8f;
         public event Action ContentChanged;
-        private void OnValidate() => ContentChanged?.Invoke();
+        public void NotifyContentChanged() => ContentChanged?.Invoke();
+        private void OnValidate() => NotifyContentChanged();
         public AnimationClip Idle, Jump, Fall, Seated;
         public LocomotionClip WalkForward, WalkBackward, WalkLeft, WalkRight;
         public LocomotionClip RunForward, RunBackward, RunLeft, RunRight;

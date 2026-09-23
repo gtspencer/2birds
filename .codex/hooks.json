@@ -1,5 +1,5 @@
 {
-  "description": "Block .agentignore paths and mutating Git operations.",
+  "description": "Block .agentignore paths, writes to .agentreadonly paths, and mutating Git operations.",
   "hooks": {
     "PreToolUse": [
       {
@@ -11,6 +11,18 @@
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.hooks\\.agentignore.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
             "timeout": 10,
             "statusMessage": "Checking .agentignore"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v pwsh >/dev/null 2>&1 || { echo 'BLOCKED: pwsh is not installed; hook cannot run.' >&2; exit 2; }; pwsh -NoProfile -NonInteractive -File \"$(git rev-parse --show-toplevel)/.hooks/.agentreadonly.codex.hook.ps1\" || exit 2",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.hooks\\.agentreadonly.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
+            "timeout": 10,
+            "statusMessage": "Checking .agentreadonly"
           }
         ]
       },

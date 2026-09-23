@@ -61,6 +61,31 @@ namespace TwoBirds
         public PlayerInventory LocalInventory { get; private set; }
         internal event System.Action<uint, int, int> PresentationChanged;
 
+        public ItemRegistry Catalog => itemRegistry;
+        public void BindCatalog(ItemRegistry catalog)
+        {
+            if (worldReady) throw new System.InvalidOperationException("Bind item content before BeginWorld.");
+            itemRegistry = catalog;
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        internal WorldItem SupplyAuthoringItem(byte definition, Vector3 position)
+        {
+            if (!worldReady || !IsHost || !GetDefinition(definition)) return null;
+            var record = new ItemRecord
+            {
+                DefinitionId = definition, State = WorldItemState.World, Holder = -1, Releaser = -1, Simulator = -1,
+                Motion = new ItemMotion { Id = runtimeIds.Allocate(), Revision = 1, Tick = ServerTick,
+                    Position = position, Rotation = GetDefinition(definition).WorldPrefab.transform.localRotation }
+            };
+            var item = Rent(definition);
+            records.Add(record.Motion.Id, record); items.Add(record.Motion.Id, item);
+            item.gameObject.SetActive(true); item.Initialize(this, GetDefinition(definition), record, false);
+            Publish(record); NotifyPresentation(record.Motion.Id, -1);
+            return item;
+        }
+#endif
+
         internal HeldItemSettings HeldDefaults => itemRegistry.HeldItemDefaults;
 
         internal HeldItemPoseData GetHeldPose(ItemDefinition definition, bool firstPerson = false, uint worldId = 0) =>

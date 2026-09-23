@@ -21,8 +21,12 @@ MonoBehaviour:
   MinThrowSpeed: 3
   MaxThrowSpeed: 14
   ThrowChargeTime: 1
-  GripPosition: {x: -0.00031618774, y: 0.085833125, z: 0.0027094856}
-  GripEuler: {x: -0, y: -0, z: -0}
+  RightPalmContact:
+    Position: {x: 0.00126475096, y: -0.3433325, z: -0.0108379424}
+    Euler: {x: 0, y: 0, z: 0}
+  LeftPalmContact:
+    Position: {x: 0, y: 0, z: 0}
+    Euler: {x: 0, y: 0, z: 0}
   OverrideHoldSettings: 0
   OverrideFirstPersonPose: 0
   FirstPersonPose:

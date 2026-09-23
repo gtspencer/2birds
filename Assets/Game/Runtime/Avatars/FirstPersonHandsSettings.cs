@@ -6,6 +6,10 @@ namespace TwoBirds
     [CreateAssetMenu(menuName = "Two Birds/First Person Hands Settings")]
     public sealed class FirstPersonHandsSettings : ScriptableObject
     {
+        public event Action ContentChanged;
+        public void NotifyContentChanged() => ContentChanged?.Invoke();
+        private void OnValidate() => NotifyContentChanged();
+
         [Serializable]
         public sealed class Hand
         {

@@ -13,6 +13,7 @@ or a narrative of what changed and why.
 - Prefer event driven changes, opposed to update loop driven changes.  Avoid no-op calls in the update loop as much as possible.
 - If you introduce code that crosses new boundaries, pull the logic out into a shared class.
 - Do not read any files in `/Specs` unless explicitly asked to.
+- If writing dev tooling, use `#if UNITY_INCLUDE_INSTRUMENTATION` instead of `#if UNITY_EDITOR || DEVELOPMENT_BUILD`
 
 ### Networking prioritization
 Prioritize simulation, visualization, and consistency across clients.  Trust clients and what they report (don't worry about game security/cheating).  Propose and implement solutions that prioritize responsiveness on each client, even if it means the gameplay is not server authoritative.  Keep network messages as small as possible, while maintaining consistency across clients.

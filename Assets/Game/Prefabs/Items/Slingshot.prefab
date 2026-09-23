@@ -269,8 +269,6 @@ MonoBehaviour:
   RestCenter: {fileID: 229263678384894496}
   DrawCenter: {fileID: 7854803319316199282}
   LoadedPebble: {fileID: 1081824257311736539}
-  PullingPalmEuler: {x: 0, y: 0, z: -90}
-  PullingPalmOffset: {x: 0, y: 0, z: 0}
   LeftBand: {fileID: 9063376176180719717}
   RightBand: {fileID: 2426227347751345301}
 --- !u!114 &3718524586835710957

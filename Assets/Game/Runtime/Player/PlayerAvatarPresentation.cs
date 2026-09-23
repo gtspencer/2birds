@@ -76,11 +76,14 @@ namespace TwoBirds
             Hands.Initialize(this);
         }
 
-        internal void Initialize() => selected.Value = SessionController.Instance.Appearance.Resolve(
-            new AvatarAppearance { Avatar = presentation.Registry.DefaultId });
+        internal void Initialize()
+        {
+            presentation.Configure(SessionController.Instance.PresentationRegistry, false);
+            selected.Value = SessionController.Instance.Appearance.Resolve(new AvatarAppearance { Avatar = presentation.Registry.DefaultId });
+        }
         public override void OnStartClient()
         {
-            presentation.Configure(presentation.Registry, !IsOwner || health.IsDowned, state.Snapshot.SpawnSlot / 8f);
+            presentation.Configure(SessionController.Instance.PresentationRegistry, !IsOwner || health.IsDowned, state.Snapshot.SpawnSlot / 8f);
             BindStore();
             if (!IsOwner) ResolveSelected(selected.Value);
             if (health.IsAlive) Hands.StartPresentation();
@@ -150,6 +153,13 @@ namespace TwoBirds
             SessionController.Instance.Appearance.Commit(AvatarTattooPlacement.Transfer(
                 SessionController.Instance.Appearance.Committed, entry));
         }
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        public void RequestAuthoringAvatar(AvatarId id)
+        {
+            if (!IsOwner || !IsClientInitialized || !presentation.Registry.TryResolve(id, out var entry)) return;
+            CommitAppearance(AvatarTattooPlacement.Transfer(desired ?? new AvatarAppearance(), entry));
+        }
+#endif
         public void SetAvatarServer(AvatarId id)
         {
             if (!IsServerInitialized || !presentation.Registry.TryResolve(id, out var entry)) return;

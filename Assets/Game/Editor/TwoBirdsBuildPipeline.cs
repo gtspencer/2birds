@@ -111,7 +111,7 @@ namespace TwoBirds.Editor
             try
             {
                 PlayerSettings.SetManagedCodeVariant(target, variant);
-                report = BuildPipeline.BuildPlayer(options);
+                report = BuildPipeline.BuildPlayer(GripAuthoringBuildPolicy.Apply(options));
             }
             finally
             {

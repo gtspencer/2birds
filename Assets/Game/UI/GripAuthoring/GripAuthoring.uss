@@ -1,0 +1,18 @@
+.grip-authoring { flex-grow: 1; background-color: rgb(25, 29, 35); color: rgb(228, 233, 240); padding: 10px; }
+.title { font-size: 20px; -unity-font-style: bold; margin-bottom: 6px; }
+.comparison { flex-direction: row; flex-grow: 1; min-height: 230px; }
+.preview-pane { flex-grow: 1; flex-basis: 0; margin: 3px; background-color: rgb(12, 15, 20); }
+.image-host { flex-grow: 1; min-height: 150px; }
+.preview-image { width: 100%; height: 100%; position: absolute; }
+.controls { flex-grow: 1; flex-basis: 45%; min-height: 140px; }
+.toolbar { flex-direction: row; flex-wrap: wrap; margin-top: 5px; margin-bottom: 5px; }
+.toolbar > * { margin-right: 6px; }
+.readout { white-space: normal; font-size: 11px; margin: 4px; }
+.section-label { -unity-font-style: bold; margin-top: 12px; margin-bottom: 6px; white-space: normal; }
+.vector-row { flex-direction: row; align-items: center; }
+.vector-row > Label { min-width: 180px; }
+.vector-row > FloatField { flex-grow: 1; flex-basis: 0; }
+.vector-row .unity-base-field__label { min-width: 16px; }
+.unity-base-field__label { min-width: 180px; }
+.unity-base-field { margin: 3px; }
+Button { min-height: 24px; }

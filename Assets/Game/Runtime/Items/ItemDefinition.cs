@@ -47,8 +47,8 @@ namespace TwoBirds
 
         [Header("Held Item Grip")]
         public ItemHoldMode HoldMode;
-        [Tooltip("Item origin in metres along the palm axes: right, out of palm, toward fingers.")] public Vector3 GripPosition;
-        [Tooltip("Item rotation in degrees relative to the palm. Recompute the held offset after changing this.")] public Vector3 GripEuler;
+        [Tooltip("Palm contact in item-root metres before prefab scale, with Euler degrees.")]
+        public ItemPalmContact RightPalmContact, LeftPalmContact;
 
         [Header("Held Hand Pose")]
         public bool OverrideHoldSettings;
@@ -98,7 +98,9 @@ namespace TwoBirds
 
         public event System.Action ContentChanged;
 
-        protected virtual void OnValidate()
+        protected virtual void OnValidate() => NotifyContentChanged();
+
+        public virtual void NotifyContentChanged()
         {
             MinThrowSpeed = Mathf.Max(0f, MinThrowSpeed);
             MaxThrowSpeed = Mathf.Max(MinThrowSpeed, MaxThrowSpeed);

@@ -60,22 +60,37 @@ namespace TwoBirds
         internal readonly Pose Item;
         internal readonly Pose LeftPalm;
         internal readonly bool Heavy;
+        internal readonly Pose RequestedRight, RequestedLeft;
+        internal readonly bool ReachLimited, Unreachable;
 
         internal HeldItemPose(Vector3 follow, Quaternion wrist, AvatarSettings avatar, in HeldItemPoseData item)
-            : this(follow, wrist, avatar.Generated, avatar.Scale, item) { }
-        internal HeldItemPose(Vector3 follow, Quaternion wrist, AvatarSettings.GeneratedSkeleton data, float scale, in HeldItemPoseData item)
+            : this(follow, wrist, AvatarPalmCalibration.Measurements(avatar), avatar.Scale, item) { }
+        internal HeldItemPose(Vector3 follow, Quaternion wrist, AvatarSettings.GeneratedSkeleton data, float scale, in HeldItemPoseData item, Pose? requested = null, bool limited = false)
         {
+            ReachLimited = limited; Unreachable = false; RequestedLeft = default;
+            RequestedRight = requested ?? new Pose(follow, wrist * data.RightWristToPalmRotation);
             LeftPalm = default; Heavy = false;
             FollowPosition = follow;
             WristRotation = wrist;
             WristPosition = follow - wrist * (data.RightWristToPalmPosition * scale);
             FollowRotation = wrist * data.RightWristToPalmRotation;
-            Item = new Pose(follow + FollowRotation * item.GripPosition, FollowRotation * item.GripRotation);
+            Item = HeldItemPoseCalculation.ItemFromPalm(new Pose(follow, FollowRotation), item.RightContact, item.PrefabScale);
         }
 
-        internal HeldItemPose(Pose root, Pose left, Pose right, in HeldItemBodyFrame body, bool heavy = true)
+        internal HeldItemPose(in HeldItemPose evaluated, in HeldItemPose requested)
+        {
+            FollowPosition = evaluated.FollowPosition; WristPosition = evaluated.WristPosition;
+            WristRotation = evaluated.WristRotation; FollowRotation = evaluated.FollowRotation;
+            Item = evaluated.Item; LeftPalm = evaluated.LeftPalm; Heavy = evaluated.Heavy;
+            RequestedRight = requested.RequestedRight; RequestedLeft = requested.RequestedLeft;
+            ReachLimited = requested.ReachLimited; Unreachable = requested.Unreachable;
+        }
+
+        internal HeldItemPose(Pose root, Pose left, Pose right, in HeldItemBodyFrame body, bool heavy = true, Pose? requestedRight = null, Pose? requestedLeft = null, bool unreachable = false)
         {
             Item = root; LeftPalm = left; Heavy = heavy;
+            RequestedRight = requestedRight ?? right; RequestedLeft = requestedLeft ?? left;
+            ReachLimited = false; Unreachable = unreachable;
             FollowPosition = right.position; FollowRotation = right.rotation;
             WristRotation = right.rotation * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation);
             WristPosition = right.position - WristRotation * (body.Measurements.RightWristToPalmPosition * body.Scale);
@@ -87,32 +102,32 @@ namespace TwoBirds
         internal readonly HeldItemPoseSettings Settings;
         internal readonly HeldItemSpatialSettings Spatial;
         internal readonly SlingshotChargePoseSettings SlingshotCharge;
-        internal readonly Vector3 GripPosition;
-        internal readonly Quaternion GripRotation, HoldRotation, ChargedRotation;
+        internal readonly ItemPalmContact RightContact, LeftContact, PullingContact;
+        internal readonly Vector3 PrefabScale;
+        internal readonly Quaternion HoldRotation, ChargedRotation;
         internal readonly ItemHoldMode HoldMode;
         internal readonly Quaternion PrefabRotation;
-        internal readonly HeavyItemGrips Grips;
         internal readonly ItemReleaseSphere Sphere;
+        internal readonly float ReleaseRadius;
         internal bool Heavy => HoldMode == ItemHoldMode.Heavy;
         private readonly bool firstPerson;
         internal HeldItemPoseData(ItemDefinition definition, HeldItemSettings defaults, bool firstPerson = false, WorldItem worldItem = null)
         {
             this.firstPerson = firstPerson;
             HoldMode = definition.HoldMode;
-            bool heavy = definition.HoldMode == ItemHoldMode.Heavy;
             PrefabRotation = definition.WorldPrefab.transform.localRotation;
             var geometry = worldItem ? worldItem : definition.WorldPrefab.GetComponent<WorldItem>();
             if (geometry) geometry.CacheReleaseGeometry();
-            Grips = geometry ? geometry.HeavyGrips : default;
             Sphere = geometry ? geometry.ReleaseSphere : default;
-            Settings = definition.OverrideHoldSettings ? definition.HandPose : heavy ? defaults.HeavyHoldSettings : defaults.HoldSettings;
-            Spatial = firstPerson && (!heavy || definition.OverrideFirstPersonPose) ? definition.OverrideFirstPersonPose ? definition.FirstPersonPose : defaults.FirstPersonPose :
-                HeldItemSpatialSettings.From(Settings);
-            GripPosition = definition.GripPosition;
-            GripRotation = Quaternion.Euler(definition.GripEuler);
+            ReleaseRadius = geometry ? geometry.ReleaseRadius : 0f;
+            Settings = defaults.ResolveHold(definition);
+            Spatial = defaults.ResolveSpatial(definition, firstPerson);
+            RightContact = definition.RightPalmContact;
+            LeftContact = definition.LeftPalmContact;
+            PullingContact = definition is SlingshotDefinition pulling ? pulling.PullingPalmContact : default;
+            PrefabScale = definition.WorldPrefab.transform.localScale;
             HoldRotation = Quaternion.Euler(Spatial.HoldWristEuler);
-            SlingshotCharge = definition is SlingshotDefinition slingshot
-                ? firstPerson ? slingshot.FirstPersonChargePose : slingshot.RemoteChargePose : default;
+            SlingshotCharge = definition is SlingshotDefinition slingshot ? defaults.ResolveCharge(slingshot, firstPerson) : default;
             ChargedRotation = Quaternion.Euler(definition is SlingshotDefinition ? SlingshotCharge.ChargedPalmEuler : Spatial.ChargedWristEuler);
         }
         internal float Reach => Mathf.Clamp(Settings.FollowReachFraction, 0.01f, 0.85f);
@@ -142,7 +157,7 @@ namespace TwoBirds
         internal HeldItemBodyFrame(AvatarSettings settings, AvatarRegistry registry, in AvatarPresentationInput input, Quaternion torso, float seatedWeight, bool heavy = false)
         {
             float scale = settings.Scale;
-            Scale = scale; Measurements = settings.Generated;
+            Scale = scale; Measurements = AvatarPalmCalibration.Measurements(settings);
             Rotation = torso * Quaternion.Euler(0f, settings.YawOffset, 0f);
             ArmLength = (settings.Generated.RightArm.x + settings.Generated.RightArm.y) * scale;
             Vector3 standing = input.SolePosition + torso * (settings.StandingOffset + (input.Carried ? settings.CarriedOffset : Vector3.zero))
@@ -169,26 +184,11 @@ namespace TwoBirds
             new(Shoulder, Rotation, Measurements, Scale, reference.poseCenter, reference.poseArmLength, LeftShoulder);
     }
 
-    internal readonly struct HeavyItemGrips
-    {
-        internal readonly Pose Left, Right;
-        internal readonly bool Valid;
-        internal HeavyItemGrips(Transform root, Transform left, Transform right, Vector3 scale)
-        {
-            Valid = left && right;
-            Left = Read(root, left, scale); Right = Read(root, right, scale);
-        }
-        private static Pose Read(Transform root, Transform grip, Vector3 scale) => grip
-            ? new Pose(Vector3.Scale(root.InverseTransformPoint(grip.position), scale), Quaternion.Inverse(root.rotation) * grip.rotation)
-            : new Pose(Vector3.zero, Quaternion.identity);
-    }
-
     internal static class HeavyItemPoseCalculation
     {
         internal static HeldItemPose FromItem(Pose root, in HeldItemBodyFrame body, in HeldItemPoseData data) =>
-            new(root, Palm(root, data.Grips.Left), Palm(root, data.Grips.Right), body);
-
-        private static Pose Palm(Pose root, Pose grip) => new(root.position + root.rotation * grip.position, root.rotation * grip.rotation);
+            new(root, HeldItemPoseCalculation.PalmFromItem(root, data.LeftContact, data.PrefabScale),
+                HeldItemPoseCalculation.PalmFromItem(root, data.RightContact, data.PrefabScale), body);
 
         internal static ItemReleaseReach Reach(Pose root, in HeldItemBodyFrame body, in HeldItemPoseData data)
         {
@@ -196,7 +196,7 @@ namespace TwoBirds
             Quaternion leftWrist = pose.LeftPalm.rotation * Quaternion.Inverse(body.Measurements.LeftWristToPalmRotation);
             Vector3 left = pose.LeftPalm.position - leftWrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
             return new ItemReleaseReach(body.Shoulder + root.position - pose.WristPosition, body.ArmLength * data.Reach,
-                body.LeftShoulder + root.position - left, body.LeftArmLength * data.Reach, data.Grips.Valid);
+                body.LeftShoulder + root.position - left, body.LeftArmLength * data.Reach, true);
         }
 
         internal static bool InReach(in HeldItemPose pose, in HeldItemBodyFrame body, float reach)
@@ -215,8 +215,12 @@ namespace TwoBirds
             Quaternion orientation = body.Rotation * rotation * data.PrefabRotation;
             Pose root = new(body.CenterToWorld(center) - orientation * data.Sphere.Center, orientation);
             var reach = Reach(root, body, data);
-            if (reach.TryProject(root.position, out var position)) root.position = position;
-            return FromItem(root, body, data);
+            var requested = FromItem(root, body, data);
+            bool reachable = reach.TryProject(root.position, out var position);
+            if (reachable) root.position = position;
+            var resolved = FromItem(root, body, data);
+            return new HeldItemPose(root, resolved.LeftPalm, new Pose(resolved.FollowPosition, resolved.FollowRotation), body,
+                requestedRight: requested.RequestedRight, requestedLeft: requested.LeftPalm, unreachable: !reachable);
         }
 
         internal static Pose ToLocal(Pose pose, in HeldItemBodyFrame body) =>
@@ -227,12 +231,21 @@ namespace TwoBirds
 
     internal static class HeldItemPoseCalculation
     {
+        internal static Pose PalmFromItem(Pose root, ItemPalmContact contact, Vector3 scale) =>
+            new(root.position + root.rotation * Vector3.Scale(scale, contact.Position), root.rotation * contact.Rotation);
+
+        internal static Pose ItemFromPalm(Pose palm, ItemPalmContact contact, Vector3 scale)
+        {
+            Quaternion rotation = palm.rotation * Quaternion.Inverse(contact.Rotation);
+            return new Pose(palm.position - rotation * Vector3.Scale(scale, contact.Position), rotation);
+        }
+
         internal static HeldItemPose FromItem(Pose pose, in HeldItemBodyFrame body, in HeldItemPoseData item)
         {
             if (item.Heavy) return HeavyItemPoseCalculation.FromItem(pose, body, item);
-            Quaternion palm = pose.rotation * Quaternion.Inverse(item.GripRotation);
-            return new HeldItemPose(pose.position - palm * item.GripPosition,
-                palm * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, item);
+            var palm = PalmFromItem(pose, item.RightContact, item.PrefabScale);
+            return new HeldItemPose(palm.position,
+                palm.rotation * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, item);
         }
 
         internal static HeldItemPose Resolve(Vector3 follow, Quaternion wrist, in HeldItemBodyFrame body,
@@ -250,7 +263,9 @@ namespace TwoBirds
                 delta *= (softStart + softRange * (1f - Mathf.Exp(-(distance - softStart) / softRange))) / distance;
             }
             else delta = Vector3.ClampMagnitude(delta, reach);
-            return new HeldItemPose(body.Shoulder + delta + offset, wrist, body.Measurements, body.Scale, item);
+            return new HeldItemPose(body.Shoulder + delta + offset, wrist, body.Measurements, body.Scale, item,
+                new Pose(follow, wrist * body.Measurements.RightWristToPalmRotation),
+                beyondReach || (body.Shoulder + delta + offset - follow).sqrMagnitude > 0.000001f);
         }
 
         internal static HeldItemPose Hold(in HeldItemBodyFrame body, AvatarSettings avatar, in HeldItemPoseData item) =>
@@ -272,7 +287,7 @@ namespace TwoBirds
             if (firstPerson)
             {
                 Vector3 right = camera.rotation * Vector3.right;
-                frame.rotation = body.Rotation * item.ChargedRotation * item.GripRotation;
+                frame.rotation = body.Rotation * item.ChargedRotation * Quaternion.Inverse(item.RightContact.Rotation);
                 frame.position = holdFork - right * Vector3.Dot(holdFork - camera.position, right) - frame.rotation * forkOffset;
             }
             else
@@ -283,13 +298,13 @@ namespace TwoBirds
                 float height = Vector3.Dot(holdFork - center, body.Rotation * Vector3.up);
                 Vector3 origin = center + aim * (Vector3.up * height);
                 Vector3 forward = aim * Vector3.forward;
-                frame.rotation = aim * item.ChargedRotation * item.GripRotation;
+                frame.rotation = aim * item.ChargedRotation * Quaternion.Inverse(item.RightContact.Rotation);
                 frame.position = origin - frame.rotation * forkOffset;
                 var holding = FromItem(frame, body, item);
-                Quaternion palm = frame.rotation * Quaternion.Euler(slingshot.PullingPalmEuler);
+                Quaternion palm = frame.rotation * item.PullingContact.Rotation;
                 Quaternion wrist = palm * Quaternion.Inverse(body.Measurements.LeftWristToPalmRotation);
                 Vector3 pulling = frame.position + frame.rotation * slingshot.Pouch(amount, item.SlingshotCharge.PullingHandDrawOffset) +
-                    palm * slingshot.PullingPalmOffset - wrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
+                    frame.rotation * Vector3.Scale(item.PrefabScale, item.PullingContact.Position) - wrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
                 float leftReach = (body.Measurements.LeftArm.x + body.Measurements.LeftArm.y) * body.Scale * 0.85f;
                 ReachInterval(holding.WristPosition - body.Shoulder, forward, body.ArmLength * 0.98f,
                     out float holdingNear, out float holdingFar);

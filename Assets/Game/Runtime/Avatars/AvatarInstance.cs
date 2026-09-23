@@ -60,6 +60,14 @@ namespace TwoBirds
             Binding = new AvatarBinding(entry.Id, Settings, animator, bones, generation);
         }
 
+        internal void RefreshMeasurements()
+        {
+            if (!Initialized) return;
+            Binding.RefreshMeasurements(); scale = Settings.Scale; transform.localScale = Vector3.one * scale;
+            NameAnchorOffset = (Settings.Generated.Height - Settings.Generated.Head.y) * scale + Settings.NamePanelOffset;
+            ik = new AvatarHumanoidIK(host, Binding);
+        }
+
         internal void Initialize(AvatarAnimationSet clips)
         {
             Place(0f);

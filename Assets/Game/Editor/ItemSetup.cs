@@ -105,7 +105,7 @@ namespace TwoBirds.Editor
                 var root = InstantiateSource(source);
                 root.name = safeName;
                 PrepareVisualRoot(root);
-                definition.GripEuler = root.transform.localEulerAngles;
+                definition.RightPalmContact.Euler = Quaternion.Inverse(root.transform.localRotation).eulerAngles;
                 GenerateHeldOffset(root, definition);
                 AddComponents(root, definition, addThrowable);
                 root.hideFlags = HideFlags.None;
@@ -244,7 +244,7 @@ namespace TwoBirds.Editor
         public static bool GenerateHeldOffset(GameObject root, ItemDefinition definition)
         {
             if (definition.HoldMode == ItemHoldMode.Heavy) return false;
-            Matrix4x4 toPalm = Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(definition.GripEuler),
+            Matrix4x4 toPalm = Matrix4x4.TRS(Vector3.zero, Quaternion.Inverse(definition.RightPalmContact.Rotation),
                 root.transform.localScale) * root.transform.worldToLocalMatrix;
             Bounds bounds = default;
             bool found = false;
@@ -269,7 +269,9 @@ namespace TwoBirds.Editor
                 Debug.LogWarning($"No mesh bounds for '{root.name}'; held offset was kept.", definition);
                 return false;
             }
-            definition.GripPosition = -bounds.center + Vector3.up * (bounds.extents.y + 0.006f);
+            Vector3 offset = definition.RightPalmContact.Rotation * (bounds.center - Vector3.up * (bounds.extents.y + 0.006f));
+            Vector3 scale = root.transform.localScale;
+            definition.RightPalmContact.Position = new Vector3(offset.x / scale.x, offset.y / scale.y, offset.z / scale.z);
             EditorUtility.SetDirty(definition);
             return true;
         }

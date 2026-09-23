@@ -55,6 +55,7 @@ namespace TwoBirds
         private float phase, falling, descent, landing, landingAge;
         private bool running, seeded, placed;
         private int advancedFrame = -1;
+        internal event Action<AvatarBinding> LocalBound;
         internal AvatarBinding LocalBinding => active ? active.Binding : null;
 
         internal void Initialize(PlayerAvatarPresentation owner)
@@ -73,6 +74,7 @@ namespace TwoBirds
             LocalCameraChanged(player.ViewCamera);
             PlayerPresentation.LocalCameraChanged += LocalCameraChanged;
             avatar.IdentityResolved += IdentityResolved;
+            avatar.Registry.FirstPerson.ContentChanged += FirstPersonChanged;
             avatar.PreparingHands += PrepareRemote;
             avatar.HandsEvaluated += CommitRemote;
             seating.PresentationContextChanged += ContextChanged;
@@ -96,7 +98,13 @@ namespace TwoBirds
             ContextChanged();
         }
 
-        private void IdentityResolved(AvatarRegistry.Entry entry) { pending = entry; CacheContacts(); }
+        private void IdentityResolved(AvatarRegistry.Entry entry)
+        {
+            pending = entry; CacheContacts();
+            if (active && entry != null && active.Binding.Id == entry.Id) active.RefreshMeasurements();
+            held.State?.InvalidateBinding();
+        }
+        private void FirstPersonChanged() { pending = avatar.Resolved; seeded = false; held.State?.RefreshContent(); }
         private void LocalCameraChanged(Camera camera) => viewCamera = owner.IsOwner && camera ? camera.transform : null;
         private void ContextChanged()
         {
@@ -374,7 +382,7 @@ namespace TwoBirds
             if (active) { body = BodyFor(active); return true; }
             var settings = avatar.Resolved?.Settings;
             if (!settings) { body = default; return false; }
-            var data = settings.FirstPersonGenerated.FormatVersion == AvatarSettings.CurrentFormatVersion ? settings.FirstPersonGenerated : settings.Generated;
+            var data = AvatarPalmCalibration.Measurements(settings, settings.FirstPersonGenerated.FormatVersion == AvatarSettings.CurrentFormatVersion);
             Pose aim = CameraPose;
             Vector3 shoulder = aim.position + aim.rotation * (avatar.Registry.FirstPerson.ShoulderOffset +
                 settings.FirstPersonPlacementOffset + Vector3.right * ((data.RightShoulder.x - data.LeftShoulder.x) * settings.Scale * 0.5f));
@@ -433,6 +441,7 @@ namespace TwoBirds
                         held.CommitHands(active.Binding);
                         if (previous) { previous.SetVisible(false); Destroy(previous.gameObject); }
                         active.SetVisible(true);
+                        LocalBound?.Invoke(active.Binding);
                     }
                     catch (Exception exception)
                     {
@@ -525,6 +534,7 @@ namespace TwoBirds
             running = false;
             PlayerPresentation.LocalCameraChanged -= LocalCameraChanged;
             cosmetics?.Dispose(); cosmetics = null;
+            avatar.Registry.FirstPerson.ContentChanged -= FirstPersonChanged;
             avatar.IdentityResolved -= IdentityResolved; avatar.PreparingHands -= PrepareRemote; avatar.HandsEvaluated -= CommitRemote;
             seating.PresentationContextChanged -= ContextChanged; carry.PresentationContextChanged -= ContextChanged; motor.Simulated -= Simulated;
             carry.PreparingRelease -= CaptureCarryRelease;

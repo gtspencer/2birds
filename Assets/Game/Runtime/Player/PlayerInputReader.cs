@@ -32,6 +32,17 @@ namespace TwoBirds
 #if UNITY_INCLUDE_INSTRUMENTATION
         internal System.Func<MoveInput> AutomatedInput;
 #endif
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        internal bool AuthoringFocus { get; set; }
+        internal bool AuthoringCharge { get; private set; }
+        internal void BeginAuthoringUse() { AuthoringCharge = true; equipment.BeginUse(); }
+        internal void EndAuthoringUse(bool cancel = false)
+        {
+            if (!AuthoringCharge) return;
+            AuthoringCharge = false;
+            if (cancel) equipment.CancelUse(); else equipment.EndUse();
+        }
+#endif
         public float Yaw { get; private set; }
         public float Pitch { get; private set; }
         public bool InventoryOpen
@@ -50,7 +61,11 @@ namespace TwoBirds
         public bool InteractHeld => GameplayActive && !InputSuppressed && !interactBlocked && ButtonHeld(interact);
         public bool GiveUpHeld => SessionInputAvailable && health && health.IsDowned && !InputSuppressed && !giveUpBlocked && ButtonHeld(giveUp);
         public Vector2 CartMove => GameplayActive && !seating.TransitionPending ? movement : default;
-        internal bool InputSuppressed => presentation == null || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount;
+        internal bool InputSuppressed =>
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            AuthoringFocus ||
+#endif
+            presentation == null || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount;
         public bool Handbrake => GameplayActive && !InputSuppressed && !jumpBlocked && !seating.TransitionPending && jump.IsPressed();
         public bool InteractPressed => !Carried && GameplayActive && !InputSuppressed && !seating.TransitionPending && !interactBlocked &&
             suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame();
@@ -120,8 +135,11 @@ namespace TwoBirds
             if (lightsBlocked && !ButtonHeld(lights)) lightsBlocked = false;
             if (hornBlocked && !ButtonHeld(horn)) hornBlocked = false;
             if (giveUpBlocked && !ButtonHeld(giveUp)) giveUpBlocked = false;
-            if (!SessionInputAvailable || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount)
+            if (!SessionInputAvailable || InputSuppressed)
             {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (AuthoringCharge && SessionInputAvailable) return;
+#endif
                 if (equipment.IsCharging || carry && carry.IsCharging) CancelUse();
                 return;
             }
@@ -179,6 +197,9 @@ namespace TwoBirds
 
         private void CancelUse()
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            AuthoringCharge = false;
+#endif
             useBlocked = UseButtonHeld();
             equipment?.CancelUse();
         }

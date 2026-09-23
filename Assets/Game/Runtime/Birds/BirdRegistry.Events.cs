@@ -69,7 +69,7 @@ namespace TwoBirds
         internal bool IsRock(ItemDefinition definition)
         {
             if (!settings) return false;
-            foreach (var rock in settings.Rocks) if (rock == definition) return true;
+            foreach (var rock in settings.Rocks) if (rock && definition && rock.ItemId == definition.ItemId) return true;
             return false;
         }
 

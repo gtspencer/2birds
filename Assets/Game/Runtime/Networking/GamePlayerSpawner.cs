@@ -57,7 +57,7 @@ namespace TwoBirds
         private void SpawnPlayer(NetworkConnection connection)
         {
             if (!IsServerInitialized || !connection.IsActive || !connection.IsAuthenticated ||
-                gameObject.scene.name != "Game" || sessionId != SessionController.Instance.SessionId ||
+                gameObject.scene.name != SessionController.Instance.GameplayScene || sessionId != SessionController.Instance.SessionId ||
                 SessionController.Instance.Phase == SessionPhase.Stopping || players.ContainsKey(connection.ClientId)) return;
             for (int slot = 0; slot < SessionController.Instance.Capacity; slot++)
             {

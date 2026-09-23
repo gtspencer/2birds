@@ -51,6 +51,12 @@ namespace TwoBirds
             ik = new AvatarHandIK(Binding);
         }
 
+        internal void RefreshMeasurements()
+        {
+            Binding.RefreshMeasurements(); transform.localScale = Vector3.one * Binding.Scale;
+            ik = new AvatarHandIK(Binding);
+        }
+
         internal void Place(Pose frame, Vector3 offset, float heavyWeight = 0f)
         {
             transform.SetPositionAndRotation(frame.position + frame.rotation *

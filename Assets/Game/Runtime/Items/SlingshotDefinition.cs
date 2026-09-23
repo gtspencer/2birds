@@ -20,6 +20,8 @@ namespace TwoBirds
     {
         public override bool CanBeIngredient => false;
         [Header("Slingshot Charge Poses")]
+        public ItemPalmContact PullingPalmContact;
+        public bool OverrideFirstPersonChargePose, OverrideRemoteChargePose;
         public SlingshotChargePoseSettings FirstPersonChargePose = SlingshotChargePoseSettings.Default;
         public SlingshotChargePoseSettings RemoteChargePose = SlingshotChargePoseSettings.Default;
 
@@ -30,11 +32,11 @@ namespace TwoBirds
         public PebbleProjectile PebblePrefab;
         public ParticleSystem DirtPrefab;
 
-        protected override void OnValidate()
+        public override void NotifyContentChanged()
         {
             Stackable = false;
             MaxStack = 1;
-            base.OnValidate();
+            base.NotifyContentChanged();
         }
     }
 }

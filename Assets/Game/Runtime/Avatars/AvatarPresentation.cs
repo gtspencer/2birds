@@ -20,16 +20,17 @@ namespace TwoBirds
         public AvatarSettings Settings { get; }
         public Animator Animator { get; }
         public ulong Generation { get; }
-        public AvatarSettings.GeneratedSkeleton Measurements { get; }
+        public AvatarSettings.GeneratedSkeleton Measurements { get; private set; }
         public float Scale => Settings.Scale;
         public Transform LeftCarryGrip { get; }
         public Transform RightCarryGrip { get; }
         public bool HasCarryGrips => LeftCarryGrip && RightCarryGrip && LeftCarryGrip != RightCarryGrip;
         private readonly Transform[] bones;
+        private readonly bool firstPerson;
         internal AvatarBinding(AvatarId id, AvatarSettings settings, Animator animator, Transform[] bones, ulong generation, bool firstPerson = false)
         {
-            Id = id; Settings = settings; Animator = animator; this.bones = bones; Generation = generation;
-            Measurements = firstPerson ? settings.FirstPersonGenerated : settings.Generated;
+            Id = id; Settings = settings; Animator = animator; this.bones = bones; Generation = generation; this.firstPerson = firstPerson;
+            Measurements = AvatarPalmCalibration.Measurements(settings, firstPerson);
             if (firstPerson) return;
             var skeleton = GetBone(HumanBodyBones.Hips);
             if (!skeleton) return;
@@ -42,6 +43,7 @@ namespace TwoBirds
             }
             if (leftCount == 1 && rightCount == 1) { LeftCarryGrip = left; RightCarryGrip = right; }
         }
+        internal void RefreshMeasurements() => Measurements = AvatarPalmCalibration.Measurements(Settings, firstPerson);
         public Transform GetBone(HumanBodyBones bone) => bones[(int)bone];
         internal Pose Palm(bool right)
         {
@@ -172,7 +174,12 @@ namespace TwoBirds
             NeedsPreparation = visual && isActiveAndEnabled;
         }
 
-        private void Rebind() { if (RequestedId.IsValid) RequestAvatar(RequestedId); }
+        private void Rebind()
+        {
+            if (active) active.RefreshMeasurements();
+            if (candidate && candidate.Initialized) candidate.RefreshMeasurements();
+            if (RequestedId.IsValid) RequestAvatar(RequestedId);
+        }
         private void RefreshAnimations()
         {
             if (subscribedAnimations) subscribedAnimations.ContentChanged -= Rebind;

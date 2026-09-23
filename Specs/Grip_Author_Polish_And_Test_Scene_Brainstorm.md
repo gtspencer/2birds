@@ -1,0 +1,7 @@
+Explore my hand grip system.  It consists of custom authored grip points on certain objects, custom per item offsets, custom hand grip poses, etc.
+
+Currently, this is very difficult to author and tweak in editor.  I want 2 things explored: simplifying and condensing this approach that can achieve identical results, and a dedicated scene that I can run, toggle between items and avatars, and tweak the holds by modifying values directly in a custom editor window while the scene is running, and have those values saved after play mode ends.
+
+Also, some authored hand positions are different in build vs in editor.  I think this is due to the screen size and resolution.  ideally, our solution is screen size agnostic, and a bit more robust to be avatar agnostic, as currently different avatars appear to hold things differently.
+
+Explore these systems to help define what is the best approach to fix this.  Ideally we come out with 2 things: a more robust hand IK authoring system, and a test scene that auto loads avatars, lets the designer switch between avatars, auto loads items, lets the user equip/dequip them, and for us to tweak values in both first person and third person (for remote player viewing)

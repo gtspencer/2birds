@@ -1,0 +1,37 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="GripAuthoring.uss" />
+    <ui:VisualElement class="grip-authoring">
+        <ui:Label text="Grip Authoring" class="title" />
+        <ui:Label name="conditions" />
+        <ui:VisualElement name="comparison" class="comparison">
+            <ui:VisualElement name="first-pane" class="preview-pane">
+                <ui:Button name="expand-first" text="First Person · expand" />
+                <ui:VisualElement name="first-image" class="image-host" />
+                <ui:Label name="first-readout" class="readout" />
+            </ui:VisualElement>
+            <ui:VisualElement name="observer-pane" class="preview-pane">
+                <ui:Button name="expand-observer" text="Observer · expand" />
+                <ui:VisualElement name="observer-image" class="image-host" />
+                <ui:Label name="observer-readout" class="readout" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:ScrollView name="controls" class="controls">
+            <ui:VisualElement name="selectors" class="toolbar" />
+            <ui:VisualElement name="actions" class="toolbar" />
+            <ui:VisualElement name="camera-controls" class="toolbar" />
+            <ui:VisualElement class="toolbar">
+                <ui:Button name="item-context" text="Item" />
+                <ui:Button name="avatar-context" text="Avatar Calibration" />
+                <ui:Button name="shared-context" text="Shared Defaults" />
+            </ui:VisualElement>
+            <ui:VisualElement name="authoring-fields" />
+        </ui:ScrollView>
+        <ui:Label name="draft-status" class="readout" />
+        <ui:VisualElement class="toolbar">
+            <ui:Button name="save" text="Save selected context" />
+            <ui:Button name="revert" text="Revert selected context" />
+            <ui:Button name="open-folder" text="Open export folder" />
+        </ui:VisualElement>
+        <ui:Label name="message" class="readout" />
+    </ui:VisualElement>
+</ui:UXML>

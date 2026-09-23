@@ -6,7 +6,8 @@ namespace TwoBirds
     public sealed class SlingshotPresentation : MonoBehaviour
     {
         public Transform LeftFork, RightFork, RestCenter, DrawCenter, LoadedPebble;
-        public Vector3 PullingPalmEuler, PullingPalmOffset;
+        private ItemPalmContact pullingContact;
+        private Vector3 prefabScale;
         public LineRenderer LeftBand, RightBand;
         private const int BandPoints = 9;
         private const float SettleSeconds = 0.35f;
@@ -35,8 +36,9 @@ namespace TwoBirds
             ResetPose();
         }
 
-        internal Pose Evaluate(Pose frame, ItemActionState state, float charge, double age, in HeldItemBodyFrame body, Vector3 drawOffset)
+        internal Pose Evaluate(Pose frame, ItemActionState state, float charge, double age, in HeldItemBodyFrame body, Vector3 drawOffset, ItemPalmContact contact, Vector3 scale)
         {
+            pullingContact = contact; prefabScale = scale;
             if (previous == ItemActionState.Charging && state != ItemActionState.Charging)
                 returnPullWeight = LeftWeight;
             if (previous == ItemActionState.Charging && state == ItemActionState.Idle)
@@ -49,10 +51,9 @@ namespace TwoBirds
             Loaded = state == ItemActionState.Charging;
             LeftWeight = state == ItemActionState.Idle && cancelDraw > 0f ? returnPullWeight * amount / cancelDraw :
                 state == ItemActionState.Recovering ? returnPullWeight * (1f - Mathf.Clamp01((float)age / 0.2f)) : 0f;
-            Quaternion palmRotation = frame.rotation * Quaternion.Euler(PullingPalmEuler);
+            Quaternion palmRotation = frame.rotation * contact.Rotation;
             Vector3 drawPosition = draw + drawOffset;
             Vector3 local = Vector3.Lerp(rest, drawPosition, amount);
-            Vector3 scale = transform.lossyScale;
             bandDown = frame.rotation * Vector3.down;
             bandWave = Vector3.zero;
             slack = 1f - amount;
@@ -75,7 +76,7 @@ namespace TwoBirds
                 ((body.Measurements.LeftShoulder - body.Measurements.RightShoulder) * body.Scale);
             Quaternion wrist = palmRotation * Quaternion.Inverse(body.Measurements.LeftWristToPalmRotation);
             Vector3 wristOffset = wrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
-            Vector3 palmOffset = palmRotation * PullingPalmOffset;
+            Vector3 palmOffset = frame.rotation * Vector3.Scale(scale, contact.Position);
             float reach = (body.Measurements.LeftArm.x + body.Measurements.LeftArm.y) * body.Scale * 0.85f;
             Vector3 wristPosition = Center + palmOffset - wristOffset;
             if (Loaded)
@@ -111,7 +112,7 @@ namespace TwoBirds
         internal void CommitPalm(Pose palm)
         {
             if (!Loaded || LeftWeight < 1f) return;
-            Center = palm.position - palm.rotation * PullingPalmOffset;
+            Center = HeldItemPoseCalculation.ItemFromPalm(palm, pullingContact, prefabScale).position;
             DepartureCenter = Center;
             LoadedPebble.position = Center;
             Band(LeftBand, LeftFork.position, left); Band(RightBand, RightFork.position, right);
