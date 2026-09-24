@@ -23,23 +23,23 @@ MonoBehaviour:
   ThrowChargeTime: 1
   HoldMode: 1
   RightPalmContact:
-    Position: {x: 0.03347742, y: 0, z: 0.028499536}
-    Euler: {x: 90, y: -90, z: 0}
+    Position: {x: 0.052996747, y: -0.0000000033974088, z: 0.028499527}
+    Euler: {x: 90, y: 270, z: 0}
   LeftPalmContact:
-    Position: {x: -0.031374946, y: 0, z: 0.028499536}
+    Position: {x: -0.044601187, y: -0.0000000033974088, z: 0.028499527}
     Euler: {x: 90, y: 90, z: 0}
-  OverrideHoldSettings: 0
+  OverrideHoldSettings: 1
   OverrideFirstPersonPose: 0
   FirstPersonPose:
-    HoldPosition: {x: -0.05, y: -0.25, z: 0.78}
-    HoldWristEuler: {x: 0, y: 0, z: 15}
-    ChargeControlPosition: {x: 0.05, y: -0.05, z: 0.72}
-    ChargedPosition: {x: 0.18, y: 0.12, z: 0.5}
-    ChargedWristEuler: {x: -35, y: 0, z: 100}
+    HoldPosition: {x: 0, y: -1.1780026, z: 1.0409929}
+    HoldWristEuler: {x: -0, y: 0, z: 0}
+    ChargeControlPosition: {x: 0, y: 0.1, z: 0.7}
+    ChargedPosition: {x: 0, y: 0.6, z: 0.25}
+    ChargedWristEuler: {x: 0, y: 0, z: 0}
   GripFingers: {fileID: 0}
   HandPose:
-    HoldPosition: {x: 0, y: -0.4, z: 0.5}
-    HoldWristEuler: {x: 0, y: 0, z: 0}
+    HoldPosition: {x: 0, y: -1.0917461, z: 1.0443505}
+    HoldWristEuler: {x: -0, y: 0, z: 0}
     ChargeControlPosition: {x: 0, y: 0.1, z: 0.7}
     ChargedPosition: {x: 0, y: 0.6, z: 0.25}
     ChargedWristEuler: {x: 0, y: 0, z: 0}

@@ -26,7 +26,7 @@ namespace TwoBirds
         private readonly HashSet<uint> supplied = new();
         private readonly Dictionary<Transform, int> originalLayers = new();
         private byte pendingItem;
-        private bool attached, choosing, cleaning;
+        private bool attached, attaching, choosing, cleaning;
         private UnityEngine.InputSystem.InputAction editToggle;
         public GripComparisonViews Views { get; private set; }
         public GripAuthoringDrafts Drafts => GripAuthoringSession.Drafts;
@@ -44,7 +44,16 @@ namespace TwoBirds
         }
         private void SessionChanged()
         {
-            if (attached || session.Phase != SessionPhase.InGame || !session.LocalPlayer) return;
+            if (attached || attaching || session.Phase != SessionPhase.InGame || !session.LocalPlayer) return;
+            StartCoroutine(Attach());
+        }
+        private IEnumerator Attach()
+        {
+            attaching = true;
+            // InGame can fire from inside the local player's OnStartClient; let its start cycle finish.
+            yield return null;
+            attaching = false;
+            if (attached || session.Phase != SessionPhase.InGame || !session.LocalPlayer) yield break;
             attached = true;
             var player = session.LocalPlayer;
             inventory = player.GetComponent<PlayerInventory>(); equipment = player.GetComponent<PlayerEquipment>();
