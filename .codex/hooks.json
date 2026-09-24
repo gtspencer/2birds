@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "command -v pwsh >/dev/null 2>&1 || { echo 'BLOCKED: pwsh is not installed; hook cannot run.' >&2; exit 2; }; pwsh -NoProfile -NonInteractive -File \"$(git rev-parse --show-toplevel)/.hooks/.agentignore.codex.hook.ps1\" || exit 2",
-            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.hooks\\.agentignore.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.agents\\hooks\\.agentignore.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
             "timeout": 10,
             "statusMessage": "Checking .agentignore"
           }
@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "command -v pwsh >/dev/null 2>&1 || { echo 'BLOCKED: pwsh is not installed; hook cannot run.' >&2; exit 2; }; pwsh -NoProfile -NonInteractive -File \"$(git rev-parse --show-toplevel)/.hooks/.agentreadonly.codex.hook.ps1\" || exit 2",
-            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.hooks\\.agentreadonly.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.agents\\hooks\\.agentreadonly.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
             "timeout": 10,
             "statusMessage": "Checking .agentreadonly"
           }
@@ -32,7 +32,7 @@
           {
             "type": "command",
             "command": "command -v pwsh >/dev/null 2>&1 || { echo 'BLOCKED: pwsh is not installed; hook cannot run.' >&2; exit 2; }; pwsh -NoProfile -NonInteractive -File \"$(git rev-parse --show-toplevel)/.hooks/block-git-writes.codex.hook.ps1\" || exit 2",
-            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.hooks\\block-git-writes.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (git rev-parse --show-toplevel) '.agents\\hooks\\block-git-writes.codex.hook.ps1'); if ($LASTEXITCODE -ne 0) { exit 2 }",
             "timeout": 10,
             "statusMessage": "Checking Git command"
           }
