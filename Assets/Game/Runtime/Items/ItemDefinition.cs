@@ -3,7 +3,7 @@ using UnityEngine.Serialization;
 
 namespace TwoBirds
 {
-    public enum ItemHoldMode { Hand = 0, Heavy = 1 }
+    public enum ItemHoldMode { OneHand = 0, TwoHand = 1, Slingshot = 2 }
 
     public struct ItemStack
     {
@@ -49,13 +49,7 @@ namespace TwoBirds
         public ItemHoldMode HoldMode;
         [Tooltip("Palm contact in item-root metres before prefab scale, with Euler degrees.")]
         public ItemPalmContact RightPalmContact, LeftPalmContact;
-
-        [Header("Held Hand Pose")]
-        public bool OverrideHoldSettings;
-        public bool OverrideFirstPersonPose;
-        public HeldItemSpatialSettings FirstPersonPose = HeldItemSpatialSettings.FirstPersonDefault;
         public AnimationClip GripFingers;
-        public HeldItemPoseSettings HandPose = HeldItemPoseSettings.Default;
 
         [Header("Player Impacts")]
         [Tooltip("When true, the item bounces off players without shoving them.")]

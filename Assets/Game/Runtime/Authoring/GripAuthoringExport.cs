@@ -21,12 +21,10 @@ namespace TwoBirds
                 {
                     ["RightPalmContact"] = "Item-root metres before prefab scale; Euler degrees",
                     ["LeftPalmContact"] = "Item-root metres before prefab scale; Euler degrees",
-                    ["PullingPalmContact"] = "Moving pouch origin, item-root axes; metres before prefab scale; Euler degrees",
+                    ["PullingPalmContact"] = "Pouch origin mapped from the posed left palm; item-root axes; metres before prefab scale; Euler degrees",
                     ["PalmCorrection"] = "Generated palm local axes; metres before avatar scale; Euler degrees",
-                    ["HandPose"] = "Shoulder-relative arm lengths; heavy: shoulder midpoint and average arm lengths; Euler degrees; timing seconds",
-                    ["FirstPersonPose"] = "Camera-oriented shoulder frame; arm lengths; Euler degrees",
-                    ["ChargePose"] = "Camera/aim offset metres; palm Euler degrees; draw offset item-root metres before scale",
-                    ["AvatarPlacement"] = "VisualHeight metres; StandingOffset body metres; first-person placement metres; reach/hold offsets arm lengths; YawOffset degrees",
+                    ["HoldModePoses"] = "Pose clips; timing seconds; follow reach fraction",
+                    ["AvatarPlacement"] = "VisualHeight metres; StandingOffset body metres; first-person placement metres; reach offsets arm lengths; YawOffset degrees",
                     ["FirstPersonHands"] = "ShoulderOffset metres; free-hand positions arm lengths; Euler degrees; transition durations seconds"
                 }
             };
@@ -36,16 +34,13 @@ namespace TwoBirds
                 var item = (ItemDefinition)record.Runtime;
                 output["Effective"] = new JObject
                 {
-                    ["HandPose"] = Fields(drafts.Held.ResolveHold(item)),
-                    ["FirstPersonPose"] = Fields(drafts.Held.ResolveSpatial(item, true)),
+                    ["HoldModePoses"] = Fields(drafts.Held.Poses(item.HoldMode)),
                     ["GripFingers"] = item.GripFingers ? item.GripFingers.name : drafts.Avatars.Animations.GripFingers.name,
                     ["GripFingersSource"] = item.GripFingers ? item.name : drafts.Avatars.Animations.name
                 };
                 var authored = (JObject)output["Authored"];
-                if (item.HoldMode != ItemHoldMode.Heavy) authored.Remove("LeftPalmContact");
-                if (item is not SlingshotDefinition)
-                    foreach (string field in new[] { "PullingPalmContact", "OverrideRemoteChargePose", "OverrideFirstPersonChargePose",
-                        "RemoteChargePose", "FirstPersonChargePose", "RecoverySeconds" }) authored.Remove(field);
+                if (item.HoldMode != ItemHoldMode.TwoHand) authored.Remove("LeftPalmContact");
+                if (item is not SlingshotDefinition) { authored.Remove("PullingPalmContact"); authored.Remove("RecoverySeconds"); }
             }
             if (record.Context == GripAuthoringContext.AvatarCalibration) output["AvatarId"] = record.AvatarId.ToString();
             Directory.CreateDirectory(Folder);

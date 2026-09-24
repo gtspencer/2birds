@@ -397,7 +397,7 @@ namespace TwoBirds
             var grip = equipment.HeldPresentation.Grip(Definition);
             Vector3 scale = parent.lossyScale;
             transform.localScale = new Vector3(defaultScale.x / scale.x, defaultScale.y / scale.y, defaultScale.z / scale.z);
-            var root = grip.Heavy ? new Pose(parent.position, parent.rotation) :
+            var root = grip.TwoHand ? new Pose(parent.position, parent.rotation) :
                 HeldItemPoseCalculation.ItemFromPalm(new Pose(parent.position, parent.rotation), grip.RightContact, grip.PrefabScale);
             transform.SetPositionAndRotation(root.position, root.rotation);
             ClearVisualOffset();

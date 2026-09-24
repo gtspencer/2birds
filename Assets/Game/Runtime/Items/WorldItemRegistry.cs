@@ -88,8 +88,8 @@ namespace TwoBirds
 
         internal HeldItemSettings HeldDefaults => itemRegistry.HeldItemDefaults;
 
-        internal HeldItemPoseData GetHeldPose(ItemDefinition definition, bool firstPerson = false, uint worldId = 0) =>
-            new(definition, itemRegistry.HeldItemDefaults, firstPerson, items.GetValueOrDefault(worldId));
+        internal HeldItemPoseData GetHeldPose(ItemDefinition definition, uint worldId = 0) =>
+            new(definition, itemRegistry.HeldItemDefaults, items.GetValueOrDefault(worldId));
 
         private void NotifyPresentation(uint id, int previousHolder)
         {

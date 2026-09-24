@@ -37,8 +37,6 @@ namespace TwoBirds
         [Range(0f, 1f)] public float FootCorrection = 1f, PelvisCorrection = 1f;
         public GameObject FirstPersonSource;
         public Vector3 FirstPersonPlacementOffset, FirstPersonReachOffset;
-        [Tooltip("Offset for the first-person item hold target in arm lengths: right, up, forward.")]
-        public Vector3 FirstPersonHoldOffset;
         public List<SpringChain> AdditionalSprings = new();
         public PalmCorrection LeftPalmCorrection, RightPalmCorrection;
         [Header("Generated source and skeleton")]
@@ -135,7 +133,7 @@ namespace TwoBirds
                 throw new InvalidOperationException("Avatar body measurements are invalid; process the source again.");
             if (!Finite(settings.LeftPalmCorrection.Position) || !Finite(settings.LeftPalmCorrection.Euler) ||
                 !Finite(settings.RightPalmCorrection.Position) || !Finite(settings.RightPalmCorrection.Euler) ||
-                !Finite(settings.FirstPersonHoldOffset) || !Finite(settings.FirstPersonPlacementOffset) || !Finite(settings.FirstPersonReachOffset) ||
+                !Finite(settings.FirstPersonPlacementOffset) || !Finite(settings.FirstPersonReachOffset) ||
                 !Finite(settings.StandingOffset) || !Finite(settings.SeatedPelvisOffset) || !Finite(settings.CarriedOffset) ||
                 !Finite(settings.DriverSeatedOffset) || !Finite(settings.DriverHandOffset) ||
                 !float.IsFinite(settings.YawOffset) || !float.IsFinite(settings.NamePanelOffset) || !Positive(settings.PlaybackMultiplier) ||

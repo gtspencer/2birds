@@ -21,6 +21,7 @@ namespace TwoBirds
         private Vector2 orbitStart;
         private bool orbiting;
         public Action<GripAuthoringDraft> Save;
+        public Action<GripPoseCapture> SavePose;
         public Action OpenFolder, BeforeEdit;
         public Func<string, AnimationClip, Action<AnimationClip>, VisualElement> ClipField;
         public Action<UnityEngine.Object> Inspect;
@@ -107,11 +108,15 @@ namespace TwoBirds
                 {
                     Header(fields, "Palm calibration ? generated palm local axes / metres before avatar scale / Euler degrees");
                     Field(fields, record, "LeftPalmCorrection", true); Field(fields, record, "RightPalmCorrection", true);
-                    Header(fields, "Avatar scale and placement ? height/standing/placement in metres; reach/hold in arm lengths; yaw in degrees");
-                    foreach (string field in new[] { "VisualHeight", "StandingOffset", "YawOffset", "FirstPersonPlacementOffset", "FirstPersonReachOffset", "FirstPersonHoldOffset" })
+                    Header(fields, "Avatar scale and placement ? height/standing/placement in metres; reach in arm lengths; yaw in degrees");
+                    foreach (string field in new[] { "VisualHeight", "StandingOffset", "YawOffset", "FirstPersonPlacementOffset", "FirstPersonReachOffset" })
                         Field(fields, record, field, true);
                 }
-                else ObjectFields(fields, record, record.Values, "", true);
+                else
+                {
+                    if (scene && record.Runtime is HeldItemSettings) PoseEditor();
+                    ObjectFields(fields, record, record.Values, "", true);
+                }
                 UpdateReadouts();
             }
             finally { rebuilding = false; }
@@ -120,36 +125,56 @@ namespace TwoBirds
         {
             Header(fields, "Palm contacts · item-root metres before prefab scale / Euler degrees");
             Field(fields, record, "RightPalmContact", true);
-            if (item.HoldMode == ItemHoldMode.Heavy) Field(fields, record, "LeftPalmContact", true);
+            if (item.HoldMode == ItemHoldMode.TwoHand)
+            {
+                Field(fields, record, "LeftPalmContact", true);
+                fields.Add(new Button(() =>
+                {
+                    BeforeEdit?.Invoke();
+                    var right = (ItemPalmContact)GripAuthoringFields.Get(record.Values, "RightPalmContact");
+                    Quaternion q = right.Rotation;
+                    var mirrored = new ItemPalmContact { Position = new Vector3(-right.Position.x, right.Position.y, right.Position.z),
+                        Euler = new Quaternion(q.x, -q.y, -q.z, q.w).eulerAngles };
+                    drafts.Edit(record, () => GripAuthoringFields.Set(record.Values, "LeftPalmContact", mirrored));
+                    Rebuild();
+                }) { text = "Mirror R→L" });
+            }
             if (item is SlingshotDefinition) Field(fields, record, "PullingPalmContact", true);
             Field(fields, record, "GripFingers", true);
-            Header(fields, "Hold placement and action timing");
-            Group(record, "OverrideHoldSettings", "HandPose", drafts.Held.ResolveHold(item),
-                item.HoldMode == ItemHoldMode.Heavy ? "HeavyHoldSettings · collider center / shoulder midpoint / average arm lengths" : "HoldSettings · shoulder frame / arm lengths");
-            Group(record, "OverrideFirstPersonPose", "FirstPersonPose", drafts.Held.ResolveSpatial(item, true),
-                item.HoldMode == ItemHoldMode.Heavy ? "resolved heavy hold spatial fields" : "FirstPersonPose · camera-oriented shoulder frame / arm lengths");
+            Header(fields, $"Hold mode · {item.HoldMode} · clips and timing from {drafts.Held.name}");
             Field(fields, record, "ThrowChargeTime", true);
-            if (item is SlingshotDefinition sling)
+            if (item is SlingshotDefinition)
             {
-                Group(record, "OverrideRemoteChargePose", "RemoteChargePose", drafts.Held.ResolveCharge(sling, false), "SlingshotChargePose · aim axes");
-                Group(record, "OverrideFirstPersonChargePose", "FirstPersonChargePose", drafts.Held.ResolveCharge(sling, true), "SlingshotChargePose · camera axes");
                 Field(fields, record, "RecoverySeconds", true);
                 if (Inspect != null) fields.Add(new Button(() => Inspect(item.WorldPrefab)) { text = "Inspect mechanical pouch / forks / bands" });
             }
         }
-        private void Group(GripAuthoringDraft record, string flag, string name, object effective, string source)
+        private void PoseEditor()
         {
-            bool enabled = (bool)GripAuthoringFields.Get(record.Values, flag);
-            var toggle = new Toggle(flag) { value = enabled };
-            toggle.RegisterValueChangedCallback(evt =>
-            {
-                BeforeEdit?.Invoke(); editing = true;
-                try { drafts.SetOverride(record, flag, evt.newValue); } finally { editing = false; }
-                Rebuild();
-            }); fields.Add(toggle);
-            fields.Add(new Label(enabled ? $"{record.DisplayName}.{name} · override" : $"{drafts.Held.name}.{source} · inherited"));
-            if (enabled) Field(fields, record, name, true);
-            else ObjectFields(fields, record, effective, name, false);
+            Header(fields, "Pose editor");
+            var item = drafts.Items.Get(drafts.SelectedItem);
+            var mode = new DropdownField("Mode", new List<string> { "OneHand", "TwoHand", "Slingshot" },
+                scene.PoseEditing ? (int)scene.PoseMode : item ? (int)item.HoldMode : 0);
+            var slot = new DropdownField("Slot", new List<string> { "Third person hold", "Third person charged", "First person hold", "First person charged" },
+                scene.PoseEditing ? scene.PoseSlot : 0);
+            var edit = new Toggle("Edit pose") { value = scene.PoseEditing };
+            void Begin() { if (edit.value) scene.BeginPoseEdit((ItemHoldMode)mode.index, slot.index); }
+            mode.RegisterValueChangedCallback(_ => Begin());
+            slot.RegisterValueChangedCallback(_ => Begin());
+            edit.RegisterValueChangedCallback(evt => { if (evt.newValue) Begin(); else scene.EndPoseEdit(); });
+            fields.Add(mode); fields.Add(slot); fields.Add(edit);
+            var rightSwivel = Swivel("Right elbow swivel °", true);
+            var leftSwivel = Swivel("Left elbow swivel °", false);
+            void Reset() { scene.ResetPoseEdit(); rightSwivel.SetValueWithoutNotify(0f); leftSwivel.SetValueWithoutNotify(0f); }
+            fields.Add(new Button(Reset) { text = "Reset palms to clip" });
+            fields.Add(new Button(() => { if (scene.TryCapturePose(out var capture)) { SavePose?.Invoke(capture); Reset(); } }) { text = "Save pose clip" });
+        }
+        private Slider Swivel(string label, bool right)
+        {
+            var slider = new Slider(label, -180f, 180f) { showInputField = true, value = scene.PoseSwivel(right) };
+            slider.RegisterValueChangedCallback(evt => scene.SetSwivel(right, evt.newValue));
+            fields.Add(slider);
+            return slider;
         }
         private static void Header(VisualElement parent, string text)
         { var label = new Label(text); label.AddToClassList("section-label"); parent.Add(label); }
@@ -159,13 +184,11 @@ namespace TwoBirds
         {
             foreach (var field in value.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
             {
-                if (record.Runtime is SlingshotDefinition && path is "HandPose" or "FirstPersonPose" &&
-                    field.Name is "ChargeControlPosition" or "ChargedPosition" or "ChargedWristEuler" or "ChargePoseDuration") continue;
                 string next = string.IsNullOrEmpty(path) ? field.Name : path + "." + field.Name;
-                ValueField(parent, record, next, field.GetValue(value), editable);
+                ValueField(parent, record, next, field.GetValue(value), editable, field.FieldType);
             }
         }
-        private void ValueField(VisualElement parent, GripAuthoringDraft record, string path, object value, bool editable)
+        private void ValueField(VisualElement parent, GripAuthoringDraft record, string path, object value, bool editable, Type type = null)
         {
             string name = path.Split('.').Last();
             void Set(object next)
@@ -201,7 +224,7 @@ namespace TwoBirds
                 var field = new Toggle(name) { value = boolean }; field.SetEnabled(editable);
                 field.RegisterValueChangedCallback(evt => Set(evt.newValue)); parent.Add(field);
             }
-            else if (value is AnimationClip || value == null && name.Contains("Fingers"))
+            else if (value is AnimationClip || value == null && (type == typeof(AnimationClip) || name.Contains("Fingers")))
             {
                 var clip = value as AnimationClip;
                 if (editable && ClipField != null) parent.Add(ClipField(path, clip, next => Set(next)));
@@ -292,14 +315,10 @@ namespace TwoBirds
             if (dot < 0) { field.SetValue(root, value); return; }
             var child = field.GetValue(root); Set(child, path[(dot + 1)..], value); field.SetValue(root, child);
         }
-        public static bool IsSpatial(string path) => path.EndsWith("Contact") || path.EndsWith("Correction") ||
-            path is "HandPose" or "FirstPersonPose" or "RemoteChargePose" or "FirstPersonChargePose" or "HoldSettings" or "HeavyHoldSettings" or "SlingshotChargePose" ||
-            path.EndsWith(".HoldPosition") || path.EndsWith(".ChargedPosition") || path.EndsWith(".ChargeControlPosition") ||
-            path.EndsWith(".ChargedPositionOffset") || path.EndsWith(".PullingHandDrawOffset");
+        public static bool IsSpatial(string path) => path.EndsWith("Contact") || path.EndsWith("Correction");
         public static string Units(string path) => path.Contains("Correction") ? "generated palm axes; metres before avatar scale / Euler degrees" :
             path.Contains("Contact") ? "item axes; metres before prefab scale / Euler degrees" :
-            path.Contains("ChargePose") ? "camera/aim offset metres / Euler degrees / item draw metres" :
-            path.Contains("Pose") || path.Contains("HoldSettings") || path is "Left" or "Right" ? "arm lengths / Euler degrees / seconds" : "metres / seconds";
+            path is "Left" or "Right" ? "arm lengths / Euler degrees / seconds" : "metres / seconds";
     }
 }
 #endif

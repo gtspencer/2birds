@@ -22,7 +22,7 @@ namespace TwoBirds
         internal bool ReadyForUse => State != null && State.ReadyForUse;
         internal Transform Attachment => State?.Attachment;
         internal float HeavyFrameWeight => State?.HeavyFrameWeight ?? 0f;
-        internal HeldItemBodyFrame HeavyBody(AvatarSettings settings) => TwoHandHoldPresentation.Body(playerAvatar, settings);
+        internal float ArmWeight => State?.ArmWeight ?? 0f;
         internal bool IsPendingRelease(uint id) => State != null && State.IsPendingRelease(id);
         internal bool MatchesPendingRelease(in ItemRecord record) => State != null && State.MatchesPendingRelease(record);
         internal HeldItemPoseData Grip(ItemDefinition definition) => State.Grip(definition);
@@ -135,7 +135,6 @@ namespace TwoBirds
                 FirstPerson = firstPerson, HasAction = networkState.HasActionSnapshot,
                 CanEquip = inventory.CanEquip, CanCharge = networkState.CanCharge,
                 Placement = playerAvatar.CurrentPlacement, Aim = player.AimPose,
-                Camera = playerAvatar.Hands ? playerAvatar.Hands.CameraPose : player.AimPose,
                 EnvironmentMask = registry.EnvironmentMask
             };
             if (action.State != ItemActionState.Recovering || actionDefinition is SlingshotDefinition) return value;
@@ -166,13 +165,7 @@ namespace TwoBirds
             networkState.CompleteRecovery(action.WorldId, action.Operation);
         }
         internal void PrepareHands(AvatarBinding binding, HeldItemBodyFrame? body) { Sync(); State?.PrepareHands(binding, body); }
-        internal void PrepareCandidate(AvatarBinding binding, in HeldItemBodyFrame body) => State?.PrepareCandidate(binding, body);
-        internal bool CommitHands(AvatarBinding binding)
-        {
-            if (State == null) return true;
-            return State.CommitHands(binding);
-        }
-        internal bool CorrectCommittedPose() => State != null && State.CorrectCommittedPose();
+        internal Vector3 CommitHands(AvatarBinding binding) => State?.CommitHands(binding) ?? Vector3.zero;
         internal void ReleaseSubmitted() => State?.ReleaseSubmitted();
         internal void RejectRelease(uint id, uint operation)
         {
@@ -197,16 +190,12 @@ namespace TwoBirds
             var desired = new Pose(slingshot.Center, release.rotation);
             float radius = definition.PebblePrefab.Radius;
             if (!ItemReleaseClearance.TryResolve(desired, player.AimPose.position, radius, State.LastBody.Rotation,
-                registry.EnvironmentMask, desired.position, 0.2f, out var allowed)) return false;
+                registry.EnvironmentMask, out var allowed)) return false;
             Vector3 correction = allowed.position - desired.position;
-            if (correction.sqrMagnitude > 0.000001f)
-            {
-                if (!State.CorrectItem(new Pose(release.position + correction, release.rotation))) return false;
-                playerAvatar.Hands.CommitCorrection();
-            }
+            if (correction.sqrMagnitude > 0.000001f) { playerAvatar.Hands.TranslateRig(correction); State.Shift(correction); }
             center = slingshot.Center;
-            return State.committed.Clear && ItemReleaseClearance.TryResolve(new Pose(center, release.rotation), player.AimPose.position,
-                radius, State.LastBody.Rotation, registry.EnvironmentMask, center, 0f, out _);
+            return State.committed.Clear && ItemReleaseClearance.TryResolve(new Pose(center, release.rotation), player.AimPose.position, radius,
+                State.LastBody.Rotation, registry.EnvironmentMask, out var check) && (check.position - center).sqrMagnitude < 0.000001f;
         }
         internal bool TryPebbleDeparture(uint weapon, uint shot, uint launched, out Vector3 center)
         { center = default; return State != null && State.TryPebbleDeparture(weapon, shot, launched, out center); }

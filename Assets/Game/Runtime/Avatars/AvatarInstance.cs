@@ -123,6 +123,7 @@ namespace TwoBirds
                 resetRequested = false;
             }
             var clips = host.Registry.Animations;
+            graph.Arms.Set(host.HandTargets.Arms);
             var leftHand = host.HandTargets.Resolve(AvatarIKGoal.LeftHand); var rightHand = host.HandTargets.Resolve(AvatarIKGoal.RightHand);
             graph.Fingers.Select(false, leftHand.Fingers ? leftHand.Fingers : clips.RelaxedFingers, clips.OpenFingers, leftHand.OpenWeight);
             graph.Fingers.Select(true, rightHand.Fingers ? rightHand.Fingers : clips.RelaxedFingers, clips.OpenFingers, rightHand.OpenWeight);

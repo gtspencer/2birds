@@ -14,26 +14,39 @@ namespace TwoBirds
         private GameObject visual;
         private SlingshotPresentation slingshot;
         private AvatarCosmeticPresentation cosmetics;
+        private float lateral;
+        private bool followsOwner;
         private readonly HashSet<ulong> isolatedBindings = new();
         internal HeldItemPresentationState State { get; private set; }
         public AvatarPresentation Presentation => presentation;
         public Transform ItemRoot => visual ? visual.transform : null;
-        internal void Initialize(PlayerAvatarPresentation owner, GripAuthoringDrafts drafts)
+        internal string DisplayName => presentation.Resolved?.Settings.DisplayName;
+        internal void Initialize(PlayerAvatarPresentation owner, GripAuthoringDrafts drafts, AvatarId avatar = default, float lateral = 0f)
         {
-            this.owner = owner; this.drafts = drafts;
+            this.owner = owner; this.drafts = drafts; this.lateral = lateral;
             held = owner.GetComponent<PlayerHeldItemPresentation>();
             presentation = GetComponent<AvatarPresentation>();
             presentation.Configure(drafts.Avatars, true);
-            presentation.InputSource = () => owner.CurrentPlacement;
+            presentation.InputSource = () => Shifted(owner.CurrentPlacement);
             State = new HeldItemPresentationState(presentation, transform, drafts.Held);
             State.CommitItem = pose => { if (visual) visual.transform.SetPositionAndRotation(pose.position, pose.rotation); };
             presentation.PreparingHands += Prepare;
             presentation.HandsEvaluated += Commit;
             presentation.DidBind += Bound;
             presentation.WillUnbind += Unbound;
-            owner.Presentation.IdentityResolved += SelectedAvatar;
             drafts.ContentChanged += ContentChanged;
+            followsOwner = !avatar.IsValid;
+            if (!followsOwner) { presentation.RequestAvatar(avatar); return; }
+            owner.Presentation.IdentityResolved += SelectedAvatar;
             if (owner.Presentation.Resolved != null) SelectedAvatar(owner.Presentation.Resolved);
+        }
+        private Vector3 Offset(in AvatarPresentationInput placement) =>
+            Quaternion.Euler(0f, placement.Facing.rotation.eulerAngles.y, 0f) * Vector3.right * lateral;
+        private AvatarPresentationInput Shifted(AvatarPresentationInput placement)
+        {
+            Vector3 offset = Offset(placement);
+            placement.SolePosition += offset; placement.Facing.position += offset;
+            return placement;
         }
         private void SelectedAvatar(AvatarRegistry.Entry entry) => presentation.RequestAvatar(entry.Id);
         private void ContentChanged(GripAuthoringDraft record) => State.RefreshContent();
@@ -54,6 +67,11 @@ namespace TwoBirds
                 foreach (var body in binding.Animator.GetComponentsInChildren<Rigidbody>(true)) { body.isKinematic = true; body.detectCollisions = false; }
             }
             var input = held.CaptureInput(false);
+            if (lateral != 0f)
+            {
+                Vector3 offset = Offset(input.Placement);
+                input.Placement = Shifted(input.Placement); input.Aim.position += offset; input.Projectile.position += offset;
+            }
             if (definition != input.SelectedDefinition)
             {
                 if (visual) Destroy(visual);
@@ -66,14 +84,13 @@ namespace TwoBirds
                 binding.Animator.transform.rotation, binding.Measurements, binding.Scale,
                 leftShoulder: binding.GetBone(HumanBodyBones.LeftUpperArm).position);
             presentation.HandTargets.SetBody(binding.Body);
-            if (presentation.Binding != null && presentation.Binding != binding) State.PrepareCandidate(binding, frame);
-            else State.PrepareHands(binding, frame);
+            if (presentation.Binding == null || presentation.Binding == binding) State.PrepareHands(binding, frame);
             if (visual) visual.SetActive(State.CanShowHeldItem);
         }
         private void Commit(AvatarBinding binding) => State.CommitHands(binding);
         private void OnDestroy()
         {
-            if (owner) owner.Presentation.IdentityResolved -= SelectedAvatar;
+            if (owner && followsOwner) owner.Presentation.IdentityResolved -= SelectedAvatar;
             if (drafts != null) drafts.ContentChanged -= ContentChanged;
             if (presentation)
             {

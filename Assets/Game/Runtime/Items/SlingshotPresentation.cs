@@ -5,94 +5,70 @@ namespace TwoBirds
     [DisallowMultipleComponent]
     public sealed class SlingshotPresentation : MonoBehaviour
     {
-        public Transform LeftFork, RightFork, RestCenter, DrawCenter, LoadedPebble;
-        private ItemPalmContact pullingContact;
-        private Vector3 prefabScale;
+        public Transform LeftFork, RightFork, RestCenter, LoadedPebble;
         public LineRenderer LeftBand, RightBand;
         private const int BandPoints = 9;
         private const float SettleSeconds = 0.35f;
-        private Vector3 left, right, rest, draw;
+        private Vector3 left, right, rest, releaseLocal;
         private Vector3 bandDown, bandWave;
         private ItemActionState previous;
-        private float lastDraw, cancelDraw, slack, wavePhase, returnPullWeight;
-        private double cancelledAt, engagedAt = -1d;
+        private float slack, wavePhase, recoilDraw;
         public Vector3 Center { get; private set; }
         public bool Loaded { get; private set; }
         internal bool HasLoadedPose { get; private set; }
         internal Vector3 DepartureCenter { get; private set; }
-        internal float LeftWeight { get; private set; }
-        internal Vector3 ForkMidpoint => Vector3.Scale((left + right) * 0.5f, transform.lossyScale);
-        internal Vector3 Pouch(float amount, Vector3 drawOffset) =>
-            Vector3.Scale(Vector3.Lerp(rest, draw + drawOffset, amount), transform.lossyScale);
 
         private void Awake()
         {
             left = transform.InverseTransformPoint(LeftFork.position);
             right = transform.InverseTransformPoint(RightFork.position);
             rest = transform.InverseTransformPoint(RestCenter.position);
-            draw = transform.InverseTransformPoint(DrawCenter.position);
             LeftBand.useWorldSpace = RightBand.useWorldSpace = false;
             LeftBand.positionCount = RightBand.positionCount = BandPoints;
             ResetPose();
         }
 
-        internal Pose Evaluate(Pose frame, ItemActionState state, float charge, double age, in HeldItemBodyFrame body, Vector3 drawOffset, ItemPalmContact contact, Vector3 scale)
+        internal void Evaluate(Pose frame, ItemActionState state, double age, float draw, float attach, float recovery,
+            Pose? palm, ItemPalmContact contact, Vector3 scale)
         {
-            pullingContact = contact; prefabScale = scale;
-            if (previous == ItemActionState.Charging && state != ItemActionState.Charging)
-                returnPullWeight = LeftWeight;
-            if (previous == ItemActionState.Charging && state == ItemActionState.Idle)
-            { cancelledAt = Time.unscaledTimeAsDouble; cancelDraw = lastDraw; }
-            if (state == ItemActionState.Charging && previous != state)
-            { cancelDraw = 0f; engagedAt = -1d; HasLoadedPose = false; }
-            float amount = state == ItemActionState.Charging ? charge : state == ItemActionState.Idle
-                ? cancelDraw * (1f - Mathf.Clamp01((float)(Time.unscaledTimeAsDouble - cancelledAt) / 0.2f)) : 0f;
-            previous = state; lastDraw = amount;
+            Vector3 restWorld = frame.position + frame.rotation * Vector3.Scale(rest, scale);
+            Vector3 held = palm.HasValue
+                ? Vector3.Lerp(restWorld, HeldItemPoseCalculation.ItemFromPalm(palm.Value, contact, scale).position, attach) : restWorld;
+            if (state == ItemActionState.Recovering && previous != state)
+            {
+                recoilDraw = draw;
+                Vector3 local = Quaternion.Inverse(frame.rotation) * ((previous == ItemActionState.Charging ? Center : held) - frame.position);
+                releaseLocal = new Vector3(local.x / scale.x, local.y / scale.y, local.z / scale.z);
+            }
+            if (state == ItemActionState.Charging && previous != state) HasLoadedPose = false;
+            previous = state;
             Loaded = state == ItemActionState.Charging;
-            LeftWeight = state == ItemActionState.Idle && cancelDraw > 0f ? returnPullWeight * amount / cancelDraw :
-                state == ItemActionState.Recovering ? returnPullWeight * (1f - Mathf.Clamp01((float)age / 0.2f)) : 0f;
-            Quaternion palmRotation = frame.rotation * contact.Rotation;
-            Vector3 drawPosition = draw + drawOffset;
-            Vector3 local = Vector3.Lerp(rest, drawPosition, amount);
             bandDown = frame.rotation * Vector3.down;
             bandWave = Vector3.zero;
-            slack = 1f - amount;
+            Center = held;
+            slack = 1f - draw;
             if (state == ItemActionState.Recovering)
             {
                 float elapsed = Mathf.Max(0f, (float)age);
                 float envelope = 1f - Mathf.Clamp01(elapsed / SettleSeconds);
                 envelope *= envelope;
                 wavePhase = elapsed * (Mathf.PI * 8f / SettleSeconds);
-                float recoil = charge * (1f - Mathf.Clamp01(elapsed / 0.07f));
-                local = Vector3.Lerp(rest, drawPosition, recoil);
-                local += Vector3.up * ((drawPosition - rest).magnitude * 0.08f * Mathf.Lerp(0.2f, 1f, charge) *
+                float recoil = 1f - Mathf.Clamp01(elapsed / 0.07f);
+                Vector3 local = Vector3.Lerp(rest, releaseLocal, recoil);
+                local += Vector3.up * ((releaseLocal - rest).magnitude * 0.08f * Mathf.Lerp(0.2f, 1f, recoilDraw) *
                     envelope * Mathf.Sin(wavePhase));
-                bandWave = frame.rotation * Vector3.up * (Vector3.Scale(drawPosition - rest, scale).magnitude *
-                    0.12f * Mathf.Lerp(0.2f, 1f, charge) * envelope);
-                slack = 1f - recoil;
+                bandWave = frame.rotation * Vector3.up * (Vector3.Scale(releaseLocal - rest, scale).magnitude *
+                    0.12f * Mathf.Lerp(0.2f, 1f, recoilDraw) * envelope);
+                Vector3 loose = frame.position + frame.rotation * Vector3.Scale(local, scale);
+                Center = Vector3.Lerp(loose, held, Mathf.SmoothStep(0f, 1f,
+                    Mathf.InverseLerp(SettleSeconds, Mathf.Max(SettleSeconds, recovery), elapsed)));
+                slack = 1f - recoil * recoilDraw;
             }
-            Center = frame.position + frame.rotation * Vector3.Scale(local, scale);
-            Vector3 shoulder = body.Shoulder + body.Rotation *
-                ((body.Measurements.LeftShoulder - body.Measurements.RightShoulder) * body.Scale);
-            Quaternion wrist = palmRotation * Quaternion.Inverse(body.Measurements.LeftWristToPalmRotation);
-            Vector3 wristOffset = wrist * (body.Measurements.LeftWristToPalmPosition * body.Scale);
-            Vector3 palmOffset = frame.rotation * Vector3.Scale(scale, contact.Position);
-            float reach = (body.Measurements.LeftArm.x + body.Measurements.LeftArm.y) * body.Scale * 0.85f;
-            Vector3 wristPosition = Center + palmOffset - wristOffset;
-            if (Loaded)
-            {
-                if (Vector3.Distance(wristPosition, shoulder) > reach + 0.001f) engagedAt = -1d;
-                else if (engagedAt < 0d) engagedAt = age;
-                LeftWeight = engagedAt < 0d ? 0f : Mathf.SmoothStep(0f, 1f, (float)(age - engagedAt) / 0.1f);
-            }
-            if (!Loaded && LeftWeight > 0f)
-                Center += (shoulder + Vector3.ClampMagnitude(wristPosition - shoulder, reach) - wristPosition) * LeftWeight;
             LoadedPebble.position = Center;
             if (Loaded) { HasLoadedPose = true; DepartureCenter = Center; }
             LoadedPebble.gameObject.SetActive(Loaded);
             Band(LeftBand, frame.position + frame.rotation * Vector3.Scale(left, scale), left);
             Band(RightBand, frame.position + frame.rotation * Vector3.Scale(right, scale), right);
-            return new Pose(Center + palmOffset, palmRotation);
         }
 
         private void Band(LineRenderer band, Vector3 fork, Vector3 anchor)
@@ -109,20 +85,18 @@ namespace TwoBirds
             }
         }
 
-        internal void CommitPalm(Pose palm)
+        internal void Shift(Vector3 offset)
         {
-            if (!Loaded || LeftWeight < 1f) return;
-            Center = HeldItemPoseCalculation.ItemFromPalm(palm, pullingContact, prefabScale).position;
-            DepartureCenter = Center;
+            Center += offset;
+            if (Loaded) DepartureCenter = Center;
             LoadedPebble.position = Center;
             Band(LeftBand, LeftFork.position, left); Band(RightBand, RightFork.position, right);
         }
 
         internal void ResetPose()
         {
-            previous = ItemActionState.Idle; lastDraw = cancelDraw = 0f; LeftWeight = 0f; Loaded = false;
+            previous = ItemActionState.Idle; Loaded = false; recoilDraw = 0f;
             HasLoadedPose = false;
-            engagedAt = -1d; returnPullWeight = 0f;
             bandDown = -transform.up; bandWave = Vector3.zero; slack = 1f; wavePhase = 0f;
             LoadedPebble.gameObject.SetActive(false);
             Center = RestCenter.position;

@@ -57,11 +57,7 @@ namespace TwoBirds.Editor
             toolbar.Add(new ToolbarButton(FrameSelected) { text = "Frame Selected" });
             var handle = new ToolbarMenu { text = handlePath };
             foreach (string path in new[] { "RightPalmContact", "LeftPalmContact", "PullingPalmContact", "LeftPalmCorrection", "RightPalmCorrection",
-                "HandPose.HoldPosition", "HandPose.ChargeControlPosition", "HandPose.ChargedPosition", "FirstPersonPose.HoldPosition",
-                "FirstPersonPose.ChargeControlPosition", "FirstPersonPose.ChargedPosition", "RemoteChargePose.ChargedPositionOffset",
-                "RemoteChargePose.PullingHandDrawOffset", "FirstPersonChargePose.ChargedPositionOffset", "FirstPersonChargePose.PullingHandDrawOffset",
-                "HoldSettings.HoldPosition", "HoldSettings.ChargeControlPosition", "HoldSettings.ChargedPosition",
-                "HeavyHoldSettings.HoldPosition", "HeavyHoldSettings.ChargeControlPosition", "HeavyHoldSettings.ChargedPosition", "SlingshotChargePose.ChargedPositionOffset", "SlingshotChargePose.PullingHandDrawOffset" })
+                "Pose.RightPalm", "Pose.LeftPalm" })
             { string selected = path; handle.menu.AppendAction(path, _ => { handlePath = selected; handle.text = selected; SceneView.RepaintAll(); }); }
             toolbar.Add(handle); rootVisualElement.Add(toolbar);
             var content = new VisualElement { style = { flexGrow = 1 } }; rootVisualElement.Add(content);
@@ -69,6 +65,7 @@ namespace TwoBirds.Editor
             panel = new GripAuthoringPanel(content, drafts, GripAuthoringScene.Instance && GripAuthoringScene.Instance.Views != null ? GripAuthoringScene.Instance : null)
             {
                 Save = record => GripAuthoringPersistence.Save(drafts, record), OpenFolder = GripAuthoringExport.OpenFolder,
+                SavePose = capture => GripAuthoringPersistence.SavePose(drafts, capture),
                 BeforeEdit = RecordEdit, Inspect = value => { Selection.activeObject = value; EditorGUIUtility.PingObject(value); },
                 SelectHandle = path => { handlePath = path; SceneView.RepaintAll(); },
                 ClipField = (path, value, changed) =>
@@ -115,8 +112,19 @@ namespace TwoBirds.Editor
         private void SceneGUI(SceneView view)
         {
             var scene = GripAuthoringScene.Instance;
-            if (!EditorApplication.isPlaying || !scene || !CompatibleHandle()) return;
-            if (!scene.TryHandle(handlePath, out var handle)) return;
+            if (!EditorApplication.isPlaying || !scene) return;
+            if (handlePath.StartsWith("Pose."))
+            {
+                bool right = handlePath == "Pose.RightPalm";
+                if (!scene.TryPoseHandle(right, out var palm)) return;
+                Handles.color = Color.yellow; Handles.Label(palm.position, handlePath);
+                EditorGUI.BeginChangeCheck();
+                Vector3 palmPosition = Handles.PositionHandle(palm.position, palm.rotation);
+                Quaternion palmRotation = Handles.RotationHandle(palm.rotation, palm.position);
+                if (EditorGUI.EndChangeCheck()) scene.SetPosePalm(right, new Pose(palmPosition, palmRotation));
+                return;
+            }
+            if (!CompatibleHandle() || !scene.TryHandle(handlePath, out var handle)) return;
             Pose pose = handle.World;
             Handles.color = Color.yellow; Handles.Label(pose.position, handlePath);
             EditorGUI.BeginChangeCheck();
@@ -135,12 +143,10 @@ namespace TwoBirds.Editor
             }
         }
         private bool CompatibleHandle() => drafts.Current != null && (drafts.Context == GripAuthoringContext.AvatarCalibration
-            ? handlePath.EndsWith("Correction") : drafts.Context == GripAuthoringContext.SharedDefaults
-                ? drafts.Current.Runtime is HeldItemSettings && (handlePath.StartsWith("HoldSettings") || handlePath.StartsWith("HeavyHoldSettings") ||
-                    handlePath.StartsWith("FirstPersonPose") || handlePath.StartsWith("SlingshotChargePose"))
-                : drafts.Context == GripAuthoringContext.Item && !handlePath.EndsWith("Correction") &&
-                (handlePath != "LeftPalmContact" || ((ItemDefinition)drafts.Current.Runtime).HoldMode == ItemHoldMode.Heavy) &&
-                (handlePath != "PullingPalmContact" && !handlePath.Contains("ChargePose") || drafts.Current.Runtime is SlingshotDefinition));
+            ? handlePath.EndsWith("Correction")
+            : drafts.Context == GripAuthoringContext.Item && handlePath.EndsWith("Contact") &&
+                (handlePath != "LeftPalmContact" || ((ItemDefinition)drafts.Current.Runtime).HoldMode == ItemHoldMode.TwoHand) &&
+                (handlePath != "PullingPalmContact" || drafts.Current.Runtime is SlingshotDefinition));
         private static void DrawContact(Pose requested, Pose evaluated)
         {
             Handles.color = Color.yellow; Handles.SphereHandleCap(0, requested.position, requested.rotation, 0.018f, EventType.Repaint);

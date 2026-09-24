@@ -37,7 +37,7 @@ namespace TwoBirds
             {
                 var copy = root.AddComponent<SlingshotPresentation>();
                 copy.LeftFork = map[sling.LeftFork]; copy.RightFork = map[sling.RightFork];
-                copy.RestCenter = map[sling.RestCenter]; copy.DrawCenter = map[sling.DrawCenter]; copy.LoadedPebble = map[sling.LoadedPebble];
+                copy.RestCenter = map[sling.RestCenter]; copy.LoadedPebble = map[sling.LoadedPebble];
                 copy.LeftBand = map[sling.LeftBand.transform].GetComponent<LineRenderer>();
                 copy.RightBand = map[sling.RightBand.transform].GetComponent<LineRenderer>();
             }

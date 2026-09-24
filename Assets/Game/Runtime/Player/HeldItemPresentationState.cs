@@ -4,7 +4,6 @@ namespace TwoBirds
 {
     internal sealed class HeldItemPresentationState : System.IDisposable
     {
-        private enum RecoveryStage : byte { Follow, Pause, Return, Finished }
         private HeldItemPresentationInput input;
         private readonly HeldItemSettings defaults;
         private AvatarPresentation avatar;
@@ -21,30 +20,27 @@ namespace TwoBirds
         }
         internal ReleaseSample committed;
         internal System.Action<Pose> CommitItem;
-        private Pose correctedItem;
-        private Transform target, fallback, followBone, leftTarget;
+        private Transform target, fallback, leftTarget;
         private SlingshotPresentation slingshot;
-        private bool pullNeedsCorrection;
         private bool SlingshotRecovery => action.State == ItemActionState.Recovering && actionDefinition is SlingshotDefinition;
         private ItemDefinition selectedDefinition, actionDefinition;
         private HeldItemPoseData selectedData, actionData;
         private ItemActionSnapshot action;
-        private HeldItemPose pose, preparedPose;
         private HeldItemBodyFrame lastBody;
         private uint selectedId, preparedId;
-        private Vector3 chargeStart, followStart, retainedPosition, returnStart;
-        private Quaternion chargeRotation, retainedRotation, returnRotation;
-        private Pose retainedItem, followItem, returnItem, returnLeft;
-        private readonly TwoHandHoldPresentation twoHands = new();
-        private float leftWeight, returnLeftWeight, returnFrameWeight;
-        private bool returnHeavy;
-        private double age, clock, blendStart, returnSegmentStart;
-        private float weight, returnWeight, blendDuration, effectiveReach, returnReach;
-        private RecoveryStage stage;
-        private bool running = true, hasPose, blending, prepared, tracking, submitted, targetInstalled;
-        private bool recoveryNeedsPose, releaseUnavailable;
-        private bool chargeFromBlend;
+        private readonly HandHoldPresentation hands = new();
+        private readonly float[] weights = new float[3], startWeights = new float[3];
+        private float charge, startCharge, releaseCharge;
+        private ItemHoldMode chargeMode;
+        private Pose preparedLeft, preparedRight;
+        private double age, clock, blendStart;
+        private float blendDuration;
+        private bool running = true, hasBody, blending, prepared, tracking, submitted, targetInstalled;
+        private bool releaseUnavailable;
         private int advancedFrame = -1;
+        internal float HeavyFrameWeight => running && input.CanEquip ? weights[(int)ItemHoldMode.TwoHand] : 0f;
+        internal float ArmWeight => running && input.CanEquip ? weights[0] + weights[1] + weights[2] : 0f;
+        private static float Ease(float progress) => LeanTween.easeOutSine(0f, 1f, Mathf.Clamp01(progress));
 
         internal HeldItemPresentationState(AvatarPresentation avatar, Transform host, HeldItemSettings defaults)
         {
@@ -64,35 +60,31 @@ namespace TwoBirds
             FindProjectile();
             if (!input.CanEquip || !input.CanCharge)
             {
-                hasPose = blending = tracking = false; weight = leftWeight = 0f;
-                twoHands.Reset(); ClearTarget();
+                blending = tracking = false; charge = 0f;
+                hands.Reset(); ClearTargets();
             }
         }
         internal bool RecoveryFinished => action.State == ItemActionState.Recovering && actionDefinition && submitted &&
             age >= (actionDefinition is SlingshotDefinition sling ? sling.RecoverySeconds :
-                Mathf.Max(0f, actionData.Settings.MaximumFollowDuration) + Mathf.Max(0f, actionData.Settings.EndPosePauseDuration) +
-                Mathf.Max(0f, actionData.Settings.ReturnBlendDuration));
-        internal void Advance() { CurrentAge(); advancedFrame = Time.frameCount; }
+                Mathf.Max(0f, actionData.Poses.MaximumFollowDuration) + Mathf.Max(0f, actionData.Poses.EndPosePauseDuration) +
+                Mathf.Max(0f, actionData.Poses.ReturnBlendDuration));
+        internal void Advance() { CurrentAge(); RefreshArms(); advancedFrame = Time.frameCount; }
         internal HeldItemBodyFrame LastBody => lastBody;
-        internal HeldItemPose Pose => pose;
         internal SlingshotPresentation Slingshot => slingshot;
         internal Transform RightTarget => target;
         internal Transform LeftTarget => leftTarget;
         internal GripReachReadout Readout { get; private set; }
         private bool clearanceAdjusted;
-        internal bool Blending => action.State == ItemActionState.Recovering || blending || weight < 0.999f || leftWeight > 0f && leftWeight < 0.999f;
+        internal bool Blending => blending || action.State == ItemActionState.Recovering;
         internal void InvalidateBinding() { Bind(null); preparedBody = null; committed = default; }
         internal void StageRelease()
         {
             prepared = true; preparedId = committed.Item;
-            var data = action.State == ItemActionState.Charging ? actionData : selectedData;
-            preparedPose = data.Heavy ? new HeldItemPose(committed.ItemPose, committed.LeftPalm, committed.Palm, lastBody) :
-                HeldItemPoseCalculation.FromItem(committed.ItemPose, lastBody, data);
+            preparedLeft = committed.LeftPalm; preparedRight = committed.Palm;
         }
-        internal bool CorrectItem(Pose item) { correctedItem = item; committed.Clear = false; return CorrectCommittedPose(); }
         public void Dispose()
         {
-            running = false; ClearTarget();
+            running = false; ClearTargets(); avatar.HandTargets.SetArms(default);
             if (slingshot) slingshot.ResetPose();
             UnityEngine.Object.Destroy(target.gameObject); UnityEngine.Object.Destroy(leftTarget.gameObject);
             UnityEngine.Object.Destroy(fallback.gameObject);
@@ -107,34 +99,21 @@ namespace TwoBirds
         {
             get
             {
-                if (selectedDefinition && selectedData.Heavy && resolvedSettings && CanShowHeldItem)
+                if (selectedDefinition && selectedData.TwoHand && CanShowHeldItem)
                 {
-                    var body = HeavyBody(resolvedSettings);
-                    if (boundBinding != null) body = body.WithMeasurements(boundBinding.Measurements, boundBinding.Scale);
-                    var sample = hasPose && pose.Heavy ? pose : HeldItemPoseCalculation.Hold(body, resolvedSettings, selectedData);
-                    fallback.SetPositionAndRotation(sample.Item.position, sample.Item.rotation);
+                    if (boundBinding != null)
+                    {
+                        var item = HeldItemPoseCalculation.TwoHandAnchor(boundBinding.Palm(true), boundBinding.Palm(false),
+                            selectedData.RightContact, selectedData.LeftContact, selectedData.PrefabScale);
+                        fallback.SetPositionAndRotation(item.position, item.rotation);
+                    }
+                    else if (TryBody(out var body, out _))
+                    {
+                        var item = HeldItemPoseCalculation.Fallback(body, selectedData);
+                        fallback.SetPositionAndRotation(item.position, item.rotation);
+                    }
                 }
                 return fallback;
-            }
-        }
-        internal float HeavyFrameWeight
-        {
-            get
-            {
-                if (!running || !input.CanEquip) return 0f;
-                float destination = selectedDefinition && selectedData.Heavy ? 1f : 0f;
-                if (action.State == ItemActionState.Recovering)
-                {
-                    if (actionData.Heavy) return twoHands.Frame(actionData.Settings, age, destination);
-                    double start = actionData.Settings.MaximumFollowDuration + actionData.Settings.EndPosePauseDuration;
-                    double end = start + actionData.Settings.ReturnBlendDuration;
-                    if (age < start) return actionData.Heavy ? 1f : 0f;
-                    start = System.Math.Max(start, returnSegmentStart);
-                    return Mathf.Lerp(returnFrameWeight, destination, Mathf.SmoothStep(0f, 1f,
-                        end <= start ? 1f : Mathf.Clamp01((float)((age - start) / (end - start)))));
-                }
-                if (destination > 0f || action.State == ItemActionState.Charging && actionData.Heavy) return 1f;
-                return blending && returnHeavy ? 1f - Mathf.Clamp01((float)((Time.unscaledTimeAsDouble - blendStart) / blendDuration)) : 0f;
             }
         }
 
@@ -153,15 +132,16 @@ namespace TwoBirds
             input.ActionDefinition is not SlingshotDefinition;
         internal bool MatchesPendingRelease(in ItemRecord record) => IsPendingRelease(record.Motion.Id) &&
             input.Action.Operation == record.Operation;
-        internal HeldItemPoseData Grip(ItemDefinition definition) => definition == selectedDefinition ? selectedData : new HeldItemPoseData(definition, defaults, input.FirstPerson);
+        internal HeldItemPoseData Grip(ItemDefinition definition) => definition == selectedDefinition ? selectedData : new HeldItemPoseData(definition, defaults);
 
         private void Bind(AvatarBinding binding)
         {
-            ClearLeftTarget();
             boundBinding = binding;
             boundSettings = binding?.Settings;
-            followBone = binding?.GetBone(HumanBodyBones.RightHand);
             committed = default;
+#if UNITY_INCLUDE_INSTRUMENTATION
+            if (Edit != null) Edit.Seeded = false;
+#endif
         }
 
         private void SelectionChanged()
@@ -170,48 +150,25 @@ namespace TwoBirds
             uint id = input.SelectedId;
             var definition = input.SelectedDefinition;
             if (id == selectedId && definition == selectedDefinition) return;
-            float frameWeight = HeavyFrameWeight;
-            ClearLeftTarget();
             selectedId = id;
             selectedDefinition = definition;
-            if (definition) selectedData = new HeldItemPoseData(definition, defaults, input.FirstPerson);
-            if (action.State == ItemActionState.Recovering)
-            {
-                if (stage == RecoveryStage.Return && hasPose)
-                {
-                    returnStart = lastBody.ToLocal(pose.FollowPosition);
-                    returnRotation = Quaternion.Inverse(lastBody.Rotation) * pose.FollowRotation;
-                    returnWeight = weight;
-                    returnReach = effectiveReach;
-                    CaptureTwoHands(lastBody);
-                    returnSegmentStart = age;
-                    returnFrameWeight = frameWeight;
-                    if (actionData.Heavy) twoHands.Retarget(lastBody, age);
-                }
-            }
-            else BeginBlend(definition ? selectedData.Settings.ReturnBlendDuration : blendDuration);
-
+            if (definition) selectedData = new HeldItemPoseData(definition, defaults);
+            if (action.State == ItemActionState.Recovering && !SlingshotRecovery)
+            { if (hands.Stage == HandHoldPresentation.RecoveryStage.Return) BeginReturn(); }
+            else BeginBlend(definition ? selectedData.Poses.ReturnBlendDuration : blendDuration);
         }
 
         internal void RefreshContent()
         {
-            if (selectedDefinition) selectedData = new HeldItemPoseData(selectedDefinition, defaults, input.FirstPerson);
-            if (actionDefinition)
-                actionData = new HeldItemPoseData(actionDefinition, defaults, input.FirstPerson);
+            if (selectedDefinition) selectedData = new HeldItemPoseData(selectedDefinition, defaults);
+            if (actionDefinition) actionData = new HeldItemPoseData(actionDefinition, defaults);
             committed = default; prepared = false;
-            if (hasPose && action.State == ItemActionState.Recovering)
-            {
-                returnStart = lastBody.ToLocal(pose.FollowPosition);
-                returnRotation = Quaternion.Inverse(lastBody.Rotation) * pose.FollowRotation;
-                returnWeight = weight; returnReach = effectiveReach;
-                CaptureTwoHands(lastBody);
-                if (stage == RecoveryStage.Return) { returnSegmentStart = age; twoHands.Retarget(lastBody, age); }
-            }
+            if (hands.Stage == HandHoldPresentation.RecoveryStage.Return) BeginReturn();
         }
 
         private void FindProjectile()
         {
-            if (SlingshotRecovery || releaseUnavailable || recoveryNeedsPose) return;
+            if (SlingshotRecovery || releaseUnavailable) return;
             tracking |= input.ProjectileAvailable;
             releaseUnavailable |= input.ProjectileUnavailable;
         }
@@ -223,7 +180,7 @@ namespace TwoBirds
             if (input.HasAction && next.State == action.State && next.ControlRevision == action.ControlRevision &&
                 next.TransitionSequence == action.TransitionSequence) { return; }
             var previous = action;
-            float returnDuration = actionDefinition ? actionData.Settings.ReturnBlendDuration : blendDuration;
+            float returnDuration = actionDefinition ? actionData.Poses.ReturnBlendDuration : blendDuration;
             action = next;
             age = !input.FirstPerson && input.HasAction ? input.ActionAge : 0d;
             clock = Time.unscaledTimeAsDouble;
@@ -232,100 +189,33 @@ namespace TwoBirds
             var previousDefinition = actionDefinition;
             actionDefinition = input.ActionDefinition;
             if (actionDefinition && (action.State != ItemActionState.Recovering || previousDefinition != actionDefinition))
-                actionData = new HeldItemPoseData(actionDefinition, defaults, input.FirstPerson);
-            if (action.State == ItemActionState.Charging)
-            {
-                chargeFromBlend = blending && hasPose;
-                chargeStart = actionData.HoldPosition(boundSettings ? boundSettings : resolvedSettings);
-                chargeRotation = actionData.HoldRotation;
-                if (TryBody(out var body, out var settings))
-                {
-                    if (hasPose)
-                    {
-                        chargeStart = actionData.Heavy ? lastBody.CenterToLocal(pose.Item.position + pose.Item.rotation * actionData.Sphere.Center) : lastBody.ToLocal(pose.FollowPosition);
-                        chargeRotation = Quaternion.Inverse(lastBody.Rotation) * (actionData.Heavy
-                            ? pose.Item.rotation * Quaternion.Inverse(actionData.PrefabRotation) : pose.FollowRotation);
-                    }
-                    pose = ChargePose(body, settings, actionData, ChargeProgress(age), chargeFromBlend, out effectiveReach);
-                    lastBody = body;
-                    hasPose = true;
-                }
-                blending = false;
-                weight = 1f;
-            }
+                actionData = new HeldItemPoseData(actionDefinition, defaults);
+            if (action.State == ItemActionState.Charging) chargeMode = actionData.HoldMode;
             else if (SlingshotRecovery)
             {
                 submitted = !input.FirstPerson;
                 prepared = blending = false;
-                recoveryNeedsPose = !hasPose || previous.State != ItemActionState.Charging;
-                if ((!hasPose || previous.State != ItemActionState.Charging) && TryBody(out var body, out var settings))
-                {
-                    pose = ChargePose(body, settings, actionData, action.ReleaseArcProgress / 255f, false, out effectiveReach);
-                    lastBody = body; hasPose = true;
-                    recoveryNeedsPose = false;
-                }
-                if (hasPose)
-                {
-                    returnStart = lastBody.ToLocal(pose.FollowPosition);
-                    returnRotation = Quaternion.Inverse(lastBody.Rotation) * pose.FollowRotation;
-                }
-                returnWeight = 1f;
-                returnReach = effectiveReach;
-                stage = RecoveryStage.Return;
+                chargeMode = ItemHoldMode.Slingshot;
+                releaseCharge = charge = Ease(action.ReleaseArcProgress / 255f);
+                hands.Reset();
             }
             else if (action.State == ItemActionState.Recovering)
             {
-                stage = RecoveryStage.Follow;
-                returnSegmentStart = 0d;
-                returnFrameWeight = actionData.Heavy ? 1f : 0f;
-                blending = false;
                 submitted = !input.FirstPerson;
-                recoveryNeedsPose = true;
-                if (previous.State != ItemActionState.Charging)
-                { chargeStart = actionData.HoldPosition(boundSettings ? boundSettings : resolvedSettings); chargeRotation = actionData.HoldRotation; }
-                if (TryBody(out var body, out var settings))
-                {
-                    if (prepared && preparedId == action.WorldId)
-                    {
-                        pose = preparedPose;
-                    }
-                    else if (committed.Item == action.WorldId && hasPose)
-                    {
-                        pose = actionData.Heavy ? new HeldItemPose(committed.ItemPose, committed.LeftPalm, committed.Palm, body) :
-                            new HeldItemPose(committed.Palm.position, committed.Palm.rotation *
-                            Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, actionData);
-                    }
-                    else
-                    {
-                        pose = HeldItemPoseCalculation.Charge(body, settings, actionData, chargeStart, chargeRotation,
-                            action.ReleaseArcProgress / 255f);
-                    }
-                    lastBody = body;
-                    retainedRotation = Quaternion.Inverse(body.Rotation) * pose.FollowRotation;
-                    followStart = retainedPosition = body.ToLocal(pose.FollowPosition);
-                    followItem = retainedItem = HeavyItemPoseCalculation.ToLocal(pose.Item, body);
-                    if (actionData.Heavy) twoHands.BeginRelease(pose.LeftPalm, new Pose(pose.FollowPosition, pose.FollowRotation), body);
-                    leftWeight = actionData.Heavy ? 1f : 0f;
-                    hasPose = true;
-                    recoveryNeedsPose = false;
-                }
-                prepared = false;
-                weight = 1f;
+                blending = false;
+                chargeMode = actionData.HoldMode;
+                releaseCharge = charge = Ease(action.ReleaseArcProgress / 255f);
+                StartFollow();
+                for (int i = 0; i < 3; i++) startWeights[i] = i == (int)chargeMode ? 1f : 0f;
+                startCharge = charge; prepared = false;
                 FindProjectile();
             }
             else
             {
                 prepared = false;
-                if (previous.State == ItemActionState.Recovering)
-                {
-                    blending = false;
-                    hasPose = false;
-                    returnHeavy = false;
-                    leftWeight = 0f;
-                }
+                if (previous.State == ItemActionState.Recovering) { blending = false; hands.Reset(); charge = 0f; }
                 else BeginBlend(returnDuration);
             }
-
         }
 
         private double CurrentAge()
@@ -340,23 +230,8 @@ namespace TwoBirds
         }
 
         private float ChargeProgress(double elapsed) => actionDefinition is SlingshotDefinition
-            ? Mathf.Clamp01((float)(elapsed / actionDefinition.ThrowChargeTime)) : actionData.Settings.ChargePoseDuration <= 0f ? 1f :
-            Mathf.Clamp01((float)(elapsed / actionData.Settings.ChargePoseDuration));
-
-        private HeldItemPose ChargePose(in HeldItemBodyFrame body, AvatarSettings settings, in HeldItemPoseData data,
-            float progress, bool fromBlend, out float reach)
-        {
-            reach = data.Reach;
-            if (actionDefinition is not SlingshotDefinition || !slingshot)
-                return HeldItemPoseCalculation.Charge(body, settings, data, chargeStart, chargeRotation, progress);
-            var hold = HeldItemPoseCalculation.Hold(body, settings, data);
-            var start = fromBlend ? new HeldItemPose(body.ToWorld(chargeStart), body.Rotation * chargeRotation *
-                Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, data) : hold;
-            var placement = boundBinding != null ? avatar.Input : input.Placement;
-            return HeldItemPoseCalculation.SlingshotCharge(body, data, slingshot, hold, start, progress, input.FirstPerson,
-                input.Camera,
-                Quaternion.Euler(placement.LookPitch, placement.LookYaw, 0f), out reach);
-        }
+            ? Mathf.Clamp01((float)(elapsed / actionDefinition.ThrowChargeTime)) : actionData.Poses.ChargePoseDuration <= 0f ? 1f :
+            Mathf.Clamp01((float)(elapsed / actionData.Poses.ChargePoseDuration));
 
         private bool TryBody(out HeldItemBodyFrame body, out AvatarSettings settings)
         {
@@ -365,7 +240,7 @@ namespace TwoBirds
                 body = preparedBody.Value; settings = boundSettings ? boundSettings : resolvedSettings;
                 return settings;
             }
-            bool bound = followBone && boundSettings;
+            bool bound = boundBinding != null && boundSettings;
             settings = bound ? boundSettings : resolvedSettings;
             if (!settings) { body = default; return false; }
             if (HeavyFrameWeight > 0f) { body = HeavyBody(settings); return true; }
@@ -382,151 +257,214 @@ namespace TwoBirds
             return true;
         }
 
-        private void PrepareLeft(Pose frame, in HeldItemBodyFrame body, HeldItemPose? candidate = null)
-        {
-            var sample = candidate ?? pose;
-            if (sample.Heavy && leftWeight > 0f)
-            {
-                leftTarget.SetPositionAndRotation(sample.LeftPalm.position, sample.LeftPalm.rotation);
-                var clips = avatar.Registry.Animations;
-                var definition = action.State == ItemActionState.Idle ? selectedDefinition : actionDefinition;
-                var fingers = action.State == ItemActionState.Recovering ? clips.OpenFingers :
-                    definition && definition.GripFingers ? definition.GripFingers : clips.GripFingers;
-                avatar.HandTargets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget,
-                    leftWeight, leftWeight, HeavyItemPoseCalculation.MaximumReach, fingers, bodyRelative: true);
-                return;
-            }
-            if (!slingshot || !CanShowHeldItem) { ClearLeftTarget(); return; }
-            var state = selectedId == action.WorldId ? action.State : ItemActionState.Idle;
-            float draw = state == ItemActionState.Charging
-                ? ChargeProgress(age)
-                : state == ItemActionState.Recovering ? action.ReleaseArcProgress / 255f : 0f;
-            var data = state == ItemActionState.Idle ? selectedData : actionData;
-            Pose palm = slingshot.Evaluate(frame, state, draw, age, body, data.SlingshotCharge.PullingHandDrawOffset, data.PullingContact, data.PrefabScale);
-            leftTarget.SetPositionAndRotation(palm.position, palm.rotation);
-            if (slingshot.LeftWeight <= 0f) { ClearLeftTarget(); return; }
-            avatar.HandTargets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget,
-                slingshot.LeftWeight, slingshot.LeftWeight, 0.85f, avatar.Registry.Animations.GripFingers, bodyRelative: true);
-        }
-
-        private void ClearLeftTarget() => avatar.HandTargets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
-
         internal void ReleaseSubmitted()
         {
             submitted = true;
         }
 
-
         private void BeginBlend(float duration)
         {
             blendDuration = Mathf.Max(0f, duration);
-            if (!hasPose && followBone && TryBody(out var body, out var settings))
-            {
-                pose = selectedData.Heavy ? HeldItemPoseCalculation.Hold(body, settings, selectedData) :
-                    new HeldItemPose(fallback.position, followBone.rotation, body.Measurements, body.Scale, selectedData);
-                lastBody = body;
-                weight = 0f;
-                hasPose = true;
-            }
-            blending = hasPose && blendDuration > 0f;
-            blendStart = Time.unscaledTimeAsDouble;
-            if (!hasPose) return;
-            returnStart = lastBody.ToLocal(pose.FollowPosition);
-            returnRotation = Quaternion.Inverse(lastBody.Rotation) * pose.FollowRotation;
-            returnWeight = weight;
-            returnReach = effectiveReach;
-            CaptureTwoHands(lastBody);
+            System.Array.Copy(weights, startWeights, 3); startCharge = charge;
+            blendStart = Time.unscaledTimeAsDouble; blending = blendDuration > 0f;
         }
 
-        private void CaptureTwoHands(in HeldItemBodyFrame body)
+        private void BeginReturn()
         {
-            returnHeavy = pose.Heavy;
-            returnItem = HeavyItemPoseCalculation.ToLocal(pose.Item, body);
-            returnLeft = HeavyItemPoseCalculation.ToLocal(pose.LeftPalm, body);
-            returnLeftWeight = leftWeight;
+            System.Array.Copy(weights, startWeights, 3); startCharge = charge;
+            hands.Retarget(lastBody, age);
+        }
+
+        private void StartFollow()
+        {
+            hands.Reset();
+            if (!TryBody(out var body, out _)) return;
+            Pose left, right;
+            if (prepared && preparedId == action.WorldId) { left = preparedLeft; right = preparedRight; }
+            else if (committed.Item == action.WorldId) { left = committed.LeftPalm; right = committed.Palm; }
+            else if (boundBinding != null) { left = boundBinding.Palm(false); right = boundBinding.Palm(true); }
+            else return;
+            lastBody = body;
+            hands.BeginRelease(left, right, body, actionData.TwoHand);
+        }
+
+        private void RefreshArms()
+        {
+#if UNITY_INCLUDE_INSTRUMENTATION
+            if (Edit != null)
+            {
+                for (int i = 0; i < 3; i++) weights[i] = i == (int)Edit.Mode ? 1f : 0f;
+                charge = Edit.Charged ? 1f : 0f; chargeMode = Edit.Mode;
+                return;
+            }
+#endif
+            int selected = selectedDefinition && input.CanEquip ? (int)selectedData.HoldMode : -1;
+            float t;
+            if (action.State == ItemActionState.Recovering && !SlingshotRecovery && actionDefinition)
+            {
+                t = Mathf.SmoothStep(0f, 1f, hands.ReturnProgress(actionData.Poses, age));
+                charge = Mathf.Lerp(startCharge, 0f, t);
+            }
+            else
+            {
+                float blend = blending ? Mathf.Clamp01((float)((Time.unscaledTimeAsDouble - blendStart) / blendDuration)) : 1f;
+                if (blend >= 1f) blending = false;
+                t = Mathf.SmoothStep(0f, 1f, blend);
+                if (action.State == ItemActionState.Charging && actionDefinition) charge = Ease(ChargeProgress(age));
+                else if (SlingshotRecovery) charge = Mathf.Lerp(releaseCharge, 0f, Mathf.SmoothStep(0f, 1f,
+                    Mathf.Clamp01((float)(age / Mathf.Max(0.01f, ((SlingshotDefinition)actionDefinition).RecoverySeconds)))));
+                else charge = Mathf.Lerp(startCharge, 0f, t);
+            }
+            for (int i = 0; i < 3; i++) weights[i] = Mathf.Lerp(startWeights[i], i == selected ? 1f : 0f, t);
         }
 
         internal void PrepareHands(AvatarBinding binding, HeldItemBodyFrame? body)
         {
             if (!running) return;
-            if (advancedFrame != Time.frameCount) { advancedFrame = Time.frameCount; CurrentAge(); }
+            if (advancedFrame != Time.frameCount) Advance();
             committed = default;
             if (boundBinding != binding) Bind(binding);
             preparedBody = body;
-            RefreshPose();
+            hasBody = TryBody(out lastBody, out _);
+            if (!hasBody) { ClearTargets(); return; }
+            if (!input.CanEquip || !input.HasAction) { avatar.HandTargets.SetArms(default); ClearTargets(); return; }
+            SubmitTargets();
         }
 
-        internal void PrepareCandidate(AvatarBinding binding, in HeldItemBodyFrame body)
+        private void SubmitTargets()
         {
-            if (!running || !hasPose || weight <= 0f) return;
-            var data = action.State == ItemActionState.Idle || SlingshotRecovery ? selectedData : actionData;
-            float reach = effectiveReach > 0f ? effectiveReach : data.Reach;
-            HeldItemPose sample;
-            if (data.Heavy && pose.Heavy)
-                sample = HeldItemPoseCalculation.FromItem(pose.Item, body, data);
-            else if (action.State == ItemActionState.Charging)
-                sample = ChargePose(body, binding.Settings, data, ChargeProgress(age), chargeFromBlend, out reach);
-            else if (pose.Heavy)
-                sample = new HeldItemPose(pose.Item, pose.LeftPalm, new Pose(pose.FollowPosition, pose.FollowRotation), body);
+            var targets = avatar.HandTargets;
+            bool editing = false;
+#if UNITY_INCLUDE_INSTRUMENTATION
+            editing = Edit != null;
+            targets.Swivel[0] = editing ? Edit.LeftSwivel : 0f;
+            targets.Swivel[1] = editing ? Edit.RightSwivel : 0f;
+#endif
+            var placement = boundBinding != null ? avatar.Input : input.Placement;
+            targets.SetArms(new AvatarArmPose
+            {
+                Settings = defaults, OneHand = weights[0], TwoHand = weights[1], Slingshot = weights[2],
+                Charge = charge, ChargeMode = chargeMode,
+                Pitch = input.FirstPerson || editing ? 0f : Mathf.Clamp(placement.LookPitch, -40f, 50f) * charge
+            });
+            if (action.State == ItemActionState.Recovering && !SlingshotRecovery) { targets.ClearAnchor(); SubmitFollow(); return; }
+#if UNITY_INCLUDE_INSTRUMENTATION
+            if (editing) { SubmitEdit(); return; }
+#endif
+            if (!selectedDefinition || !CanShowHeldItem) { ClearTargets(); return; }
+            var data = action.State == ItemActionState.Charging ? actionData : selectedData;
+            var clips = avatar.Registry.Animations;
+            var fingers = data.Fingers ? data.Fingers : clips.GripFingers;
+            float weight = weights[(int)data.HoldMode];
+            if (data.TwoHand && weight > 0f)
+            {
+                targets.SetAnchor(data.RightContact, data.LeftContact, data.PrefabScale);
+                targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, 0.98f, fingers);
+                targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, weight, weight, 0.98f, fingers);
+            }
             else
             {
-                sample = new HeldItemPose(body.ToWorld(lastBody.ToLocal(pose.FollowPosition)),
-                    body.Rotation * Quaternion.Inverse(lastBody.Rotation) * pose.FollowRotation *
-                    Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, data);
-                if (selectedDefinition is SlingshotDefinition || reach > data.Reach)
-                    reach = HeldItemPoseCalculation.SlingshotReach(sample, body, data);
-                sample = HeldItemPoseCalculation.Resolve(sample.FollowPosition, sample.WristRotation, body, binding.Settings, data, out _,
-                    soften: false, effectiveReach: reach);
+                targets.ClearAnchor();
+                targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, 0f, 0f, fingers: fingers);
+                if (data.HoldMode == ItemHoldMode.Slingshot)
+                    targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, 0f, 0f, fingers: clips.GripFingers);
+                else targets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
             }
-            target.SetPositionAndRotation(sample.FollowPosition, sample.FollowRotation);
-            PrepareLeft(sample.Item, body, sample);
-            SetTarget(reach);
+            targetInstalled = true;
         }
 
-        internal bool CommitHands(AvatarBinding binding)
+        private void SubmitFollow()
         {
-            if (!running || !hasPose) return true;
-            Pose palm = binding != null ? binding.Palm(true) : new(pose.FollowPosition, pose.FollowRotation);
-            var grip = action.State == ItemActionState.Charging ? actionData : selectedData;
-            Pose itemPose = !grip.Heavy ? HeldItemPoseCalculation.ItemFromPalm(palm, grip.RightContact, grip.PrefabScale) :
-                binding != null ? AvatarHandTargets.Rebase(pose.Item, new Pose(lastBody.Center, lastBody.Rotation), binding.Body) : pose.Item;
-            fallback.SetPositionAndRotation(grip.Heavy ? itemPose.position : palm.position, grip.Heavy ? itemPose.rotation : palm.rotation);
-            bool clear = true;
-            if (selectedId != 0 && CanShowHeldItem)
+            if (!hands.Releasing) { ClearTargets(); return; }
+            bool available = tracking && input.ProjectileAvailable;
+            hands.Sample(HeldItemPoseCalculation.PalmFromItem(input.Projectile, actionData.LeftContact, actionData.PrefabScale),
+                HeldItemPoseCalculation.PalmFromItem(input.Projectile, actionData.RightContact, actionData.PrefabScale),
+                available, releaseUnavailable || tracking && !available, lastBody, actionData.Poses, input.EnvironmentMask, age, null, null);
+            if (!hands.Following) { tracking = false; releaseUnavailable = true; }
+            HandHoldPresentation.Submit(avatar.HandTargets, AvatarHandSource.Item, leftTarget, target, hands.Left, hands.Right,
+                hands.LeftWeight, hands.RightWeight, HandHoldPresentation.Reach(actionData.Poses), avatar.Registry.Animations.OpenFingers,
+                hands.Stage != HandHoldPresentation.RecoveryStage.Follow);
+            targetInstalled = true;
+        }
+
+        internal Vector3 CommitHands(AvatarBinding binding)
+        {
+            if (!running || binding == null && !hasBody) return Vector3.zero;
+            var data = action.State == ItemActionState.Charging ? actionData : selectedData;
+            bool showing = selectedId != 0 && CanShowHeldItem;
+            Pose palm, left, item;
+            if (binding != null)
             {
-                CommitItem?.Invoke(itemPose);
-                Vector3 previousLeft = leftTarget.position;
-                PrepareLeft(itemPose, lastBody);
-                pullNeedsCorrection = slingshot && slingshot.LeftWeight > 0f &&
-                    (leftTarget.position - previousLeft).sqrMagnitude > 0.000001f;
-                if (slingshot && binding != null) slingshot.CommitPalm(binding.Palm(false));
-                if (input.FirstPerson)
+                palm = binding.Palm(true); left = binding.Palm(false);
+                item = !data.TwoHand ? HeldItemPoseCalculation.ItemFromPalm(palm, data.RightContact, data.PrefabScale) :
+                    binding.AnchoredItem ?? HeldItemPoseCalculation.TwoHandAnchor(palm, left, data.RightContact, data.LeftContact, data.PrefabScale);
+            }
+            else
+            {
+                item = HeldItemPoseCalculation.Fallback(lastBody, data);
+                palm = HeldItemPoseCalculation.PalmFromItem(item, data.RightContact, data.PrefabScale);
+                left = HeldItemPoseCalculation.PalmFromItem(item, data.LeftContact, data.PrefabScale);
+            }
+            Pose requestedRight = data.TwoHand ? HeldItemPoseCalculation.PalmFromItem(item, data.RightContact, data.PrefabScale) : palm;
+            Pose requestedLeft = data.TwoHand ? HeldItemPoseCalculation.PalmFromItem(item, data.LeftContact, data.PrefabScale) : left;
+            Vector3 correction = Vector3.zero;
+            bool clear = true, resolve = showing && input.FirstPerson;
+#if UNITY_INCLUDE_INSTRUMENTATION
+            resolve &= Edit == null;
+#endif
+            if (resolve)
+            {
+                clear = ItemReleaseClearance.TryResolve(item, input.Aim.position,
+                    data.TwoHand ? data.Sphere : new ItemReleaseSphere(Vector3.zero, data.ReleaseRadius),
+                    lastBody.Rotation, input.EnvironmentMask, out var allowed);
+                if (clear) correction = allowed.position - item.position;
+                if (correction.sqrMagnitude < 0.000001f) correction = Vector3.zero;
+                palm.position += correction; left.position += correction; item.position += correction;
+                requestedRight.position += correction; requestedLeft.position += correction;
+            }
+            clearanceAdjusted = correction != Vector3.zero;
+            fallback.SetPositionAndRotation(data.TwoHand ? item.position : palm.position, data.TwoHand ? item.rotation : palm.rotation);
+            if (showing)
+            {
+                CommitItem?.Invoke(item);
+                if (slingshot)
                 {
-                    bool accessible = ResolveClearance(itemPose, lastBody, grip, out correctedItem);
-                    clear = accessible && (correctedItem.position - itemPose.position).sqrMagnitude < 0.000001f;
-                    if (!accessible) correctedItem = itemPose;
+                    var state = selectedId == action.WorldId ? action.State : ItemActionState.Idle;
+                    float recovery = actionDefinition is SlingshotDefinition sling ? sling.RecoverySeconds : 0.5f;
+                    float attach = defaults.Slingshot.Hold(input.FirstPerson) ? weights[(int)ItemHoldMode.Slingshot] : 0f;
+                    slingshot.Evaluate(item, state, age, charge, attach, recovery, binding != null ? left : (Pose?)null,
+                        data.PullingContact, data.PrefabScale);
                 }
             }
-            Pose evaluatedLeft = binding != null ? binding.Palm(false) : pose.LeftPalm;
-            bool impossible = pose.Heavy && !HeavyItemPoseCalculation.InReach(pose, lastBody, HeavyItemPoseCalculation.MaximumReach);
-            bool pulling = slingshot && CanShowHeldItem && (slingshot.Loaded || slingshot.LeftWeight > 0f);
-            Pose requestedLeft = slingshot ? new Pose(leftTarget.position, leftTarget.rotation) : pose.RequestedLeft;
+#if UNITY_INCLUDE_INSTRUMENTATION
+            if (Edit != null && binding != null && !Edit.Seeded)
+            {
+                Edit.Right = AvatarHandTargets.Rebase(binding.Palm(true), binding.Body, Pose.identity);
+                Edit.Left = AvatarHandTargets.Rebase(binding.Palm(false), binding.Body, Pose.identity);
+                Edit.Seeded = true;
+            }
+#endif
             Readout = new GripReachReadout
             {
-                RequestedRight = pose.RequestedRight, RequestedLeft = requestedLeft,
-                EvaluatedRight = palm, EvaluatedLeft = evaluatedLeft, ActiveBlend = Blending,
-                ReachLimited = pose.ReachLimited, ClearanceAdjusted = clearanceAdjusted,
-                RightUnreachable = !Blending && (impossible || slingshot && CanShowHeldItem) &&
-                    !InHandReach(pose.RequestedRight, true, pose.Heavy ? HeavyItemPoseCalculation.MaximumReach : effectiveReach),
-                LeftUnreachable = !Blending && (impossible || pulling) &&
-                    !InHandReach(requestedLeft, false, pulling ? 0.85f : pose.Heavy ? HeavyItemPoseCalculation.MaximumReach : effectiveReach),
-                HasLeft = pose.Heavy || pulling
+                RequestedRight = requestedRight, RequestedLeft = requestedLeft,
+                EvaluatedRight = palm, EvaluatedLeft = left, ActiveBlend = Blending, ClearanceAdjusted = clearanceAdjusted,
+                RightUnreachable = !Blending && data.TwoHand && !InHandReach(requestedRight, true, 0.98f),
+                LeftUnreachable = !Blending && data.TwoHand && !InHandReach(requestedLeft, false, 0.98f),
+                HasLeft = data.HoldMode != ItemHoldMode.OneHand
             };
             committed = new ReleaseSample { Item = selectedId, Generation = binding?.Generation ?? 0,
-                Palm = palm, LeftPalm = binding != null ? binding.Palm(false) : pose.LeftPalm,
-                ItemPose = itemPose, Clear = clear,
+                Palm = palm, LeftPalm = left, ItemPose = item, Clear = clear,
                 Progress = (byte)Mathf.RoundToInt((action.State == ItemActionState.Charging ? ChargeProgress(age) : 0f) * 255f) };
-            return clear && !pullNeedsCorrection;
+            return correction;
+        }
+
+        internal void Shift(Vector3 correction)
+        {
+            committed.Palm.position += correction; committed.LeftPalm.position += correction;
+            committed.ItemPose.position += correction;
+            fallback.position += correction;
+            CommitItem?.Invoke(committed.ItemPose);
+            if (slingshot) slingshot.Shift(correction);
         }
 
         private bool InHandReach(Pose palm, bool right, float reach)
@@ -538,269 +476,43 @@ namespace TwoBirds
                 (right ? lastBody.ArmLength : lastBody.LeftArmLength) * reach + 0.001f;
         }
 
-        internal bool CorrectCommittedPose()
+        private void ClearTargets()
         {
-            if (committed.Clear || (correctedItem.position - committed.ItemPose.position).sqrMagnitude < 0.000001f)
-            { bool retry = pullNeedsCorrection; pullNeedsCorrection = false; return retry; }
-            var data = action.State == ItemActionState.Charging ? actionData : selectedData;
-            ApplyClearancePose(correctedItem, lastBody, data);
-            target.SetPositionAndRotation(pose.FollowPosition, pose.FollowRotation);
-            PrepareLeft(pose.Item, lastBody);
-            return true;
-        }
-
-        private bool ResolveClearance(Pose desired, in HeldItemBodyFrame body, in HeldItemPoseData data, out Pose allowed)
-        {
-            if (data.Heavy)
-                return ItemReleaseClearance.TryResolve(desired, input.Aim.position, data.Sphere, body.Rotation,
-                    input.EnvironmentMask, HeavyItemPoseCalculation.Reach(desired, body, data), out allowed);
-            var sample = HeldItemPoseCalculation.FromItem(desired, body, data);
-            return ItemReleaseClearance.TryResolve(desired, input.Aim.position, data.ReleaseRadius, body.Rotation,
-                input.EnvironmentMask, body.Shoulder + desired.position - sample.WristPosition,
-                body.ArmLength * (effectiveReach > 0f ? effectiveReach : data.Reach), out allowed);
-        }
-
-        private void ApplyClearancePose(Pose allowed, in HeldItemBodyFrame body, in HeldItemPoseData data)
-        {
-            clearanceAdjusted |= (allowed.position - pose.Item.position).sqrMagnitude > 0.000001f;
-            var corrected = HeldItemPoseCalculation.FromItem(allowed, body, data);
-            var evaluated = !data.Heavy && pose.Heavy && leftWeight > 0f
-                ? new HeldItemPose(corrected.Item, pose.LeftPalm, new Pose(corrected.FollowPosition, corrected.FollowRotation), body)
-                : corrected;
-            pose = new HeldItemPose(evaluated, pose);
-        }
-
-        private void RefreshPose()
-        {
-            clearanceAdjusted = false;
-            if (!running) return;
-            if (!TryBody(out var body, out var settings)) { hasPose = false; ClearTarget(); return; }
-            if (!input.CanEquip || !input.HasAction)
-            { weight = 0f; ClearTarget(); return; }
-            effectiveReach = (action.State == ItemActionState.Idle || SlingshotRecovery) && selectedDefinition
-                ? selectedData.Reach : actionData.Reach;
-            if (SlingshotRecovery)
-            {
-                if (recoveryNeedsPose)
-                {
-                    pose = ChargePose(body, settings, actionData, action.ReleaseArcProgress / 255f, false, out effectiveReach);
-                    returnStart = body.ToLocal(pose.FollowPosition);
-                    returnRotation = Quaternion.Inverse(body.Rotation) * pose.FollowRotation;
-                    returnReach = effectiveReach;
-                    recoveryNeedsPose = false;
-                }
-                if (selectedId == action.WorldId) Blend(body, settings, Mathf.Clamp01((float)age / 0.2f), selectedData);
-                else if (selectedDefinition) { pose = HeldItemPoseCalculation.Hold(body, settings, selectedData); weight = 1f; hasPose = true; }
-                else weight = 0f;
-            }
-            else if (action.State == ItemActionState.Recovering && actionDefinition)
-            {
-                if (recoveryNeedsPose)
-                {
-                    pose = HeldItemPoseCalculation.Charge(body, settings, actionData, chargeStart, chargeRotation,
-                        action.ReleaseArcProgress / 255f);
-                    retainedRotation = Quaternion.Inverse(body.Rotation) * pose.FollowRotation;
-                    followStart = retainedPosition = body.ToLocal(pose.FollowPosition);
-                    followItem = retainedItem = HeavyItemPoseCalculation.ToLocal(pose.Item, body);
-                    if (actionData.Heavy) twoHands.BeginRelease(pose.LeftPalm, new Pose(pose.FollowPosition, pose.FollowRotation), body);
-                    leftWeight = actionData.Heavy ? 1f : 0f;
-                    recoveryNeedsPose = false;
-                    FindProjectile();
-                }
-                Recover(body, settings, age);
-            }
-            else if (action.State == ItemActionState.Charging && actionDefinition)
-            {
-                pose = ChargePose(body, settings, actionData, ChargeProgress(age), chargeFromBlend, out effectiveReach);
-                weight = 1f;
-                leftWeight = actionData.Heavy ? 1f : 0f;
-                hasPose = true;
-            }
-            else if (selectedDefinition || blending)
-            {
-                float t = blending ? Mathf.Clamp01((float)((Time.unscaledTimeAsDouble - blendStart) / blendDuration)) : 1f;
-                Blend(body, settings, t, selectedDefinition ? selectedData : actionData);
-                if (t >= 1f) blending = false;
-            }
-            else weight = 0f;
-            lastBody = body;
-            if (hasPose)
-            {
-                var data = action.State == ItemActionState.Charging ? actionData : selectedData;
-                if (input.FirstPerson && CanShowHeldItem && selectedId != 0 && ResolveClearance(pose.Item, body, data, out var allowed))
-                {
-                    ApplyClearancePose(allowed, body, data);
-                }
-                target.SetPositionAndRotation(pose.FollowPosition, pose.FollowRotation);
-                if (!followBone) fallback.SetPositionAndRotation(data.Heavy ? pose.Item.position : pose.FollowPosition,
-                    data.Heavy ? pose.Item.rotation : pose.FollowRotation);
-            }
-            PrepareLeft(pose.Item, body);
-            SetTarget(effectiveReach);
-        }
-
-        private void Recover(in HeldItemBodyFrame body, AvatarSettings settings, double elapsed)
-        {
-            if (actionData.Heavy) { RecoverHeavy(body, settings, elapsed); return; }
-            double followEnd = Mathf.Max(0f, actionData.Settings.MaximumFollowDuration);
-            double pauseEnd = followEnd + Mathf.Max(0f, actionData.Settings.EndPosePauseDuration);
-            double returnEnd = pauseEnd + Mathf.Max(0f, actionData.Settings.ReturnBlendDuration);
-            Quaternion palmToWrist = Quaternion.Inverse(body.Measurements.RightWristToPalmRotation);
-            if (stage == RecoveryStage.Follow)
-            {
-                bool unavailable = releaseUnavailable || tracking && !input.ProjectileAvailable;
-                bool beyond = false;
-                pose = HeldItemPoseCalculation.Resolve(body.ToWorld(retainedPosition), body.Rotation * retainedRotation * palmToWrist,
-                    body, settings, actionData, out _, soften: false);
-                if (tracking && !unavailable && elapsed < followEnd)
-                {
-                    var contact = HeldItemPoseCalculation.PalmFromItem(new Pose(input.Projectile.position, input.Projectile.rotation),
-                        actionData.RightContact, actionData.PrefabScale);
-                    Quaternion palm = contact.rotation;
-                    Vector3 follow = contact.position;
-                    var candidate = HeldItemPoseCalculation.Resolve(Vector3.Lerp(body.ToWorld(followStart), follow,
-                        LeanTween.easeOutSine(0f, 1f, Mathf.Clamp01((float)elapsed / 0.08f))),
-                        palm * palmToWrist, body, settings, actionData, out beyond, soften: false);
-                    if (Physics.Linecast(body.Shoulder, candidate.FollowPosition, input.EnvironmentMask, QueryTriggerInteraction.Ignore)) beyond = true;
-                    else
-                    {
-                        pose = candidate;
-                        retainedPosition = body.ToLocal(pose.FollowPosition);
-                        retainedRotation = Quaternion.Inverse(body.Rotation) * pose.FollowRotation;
-                    }
-                }
-                if (unavailable || beyond || elapsed >= followEnd)
-                {
-                    tracking = false; releaseUnavailable = true;
-                }
-                if (elapsed >= followEnd) stage = RecoveryStage.Pause;
-            }
-            if (stage == RecoveryStage.Pause)
-            {
-                pose = HeldItemPoseCalculation.Resolve(body.ToWorld(retainedPosition), body.Rotation * retainedRotation * palmToWrist,
-                    body, settings, actionData, out _, soften: false);
-                if (elapsed >= pauseEnd)
-                {
-                    stage = RecoveryStage.Return;
-                    returnStart = body.ToLocal(pose.FollowPosition);
-                    returnRotation = Quaternion.Inverse(body.Rotation) * pose.FollowRotation;
-                    returnWeight = 1f; returnSegmentStart = pauseEnd;
-                    returnReach = actionData.Reach;
-                    CaptureTwoHands(body);
-                }
-            }
-            if (stage == RecoveryStage.Return || stage == RecoveryStage.Finished)
-            {
-                float t = returnEnd <= returnSegmentStart ? 1f : Mathf.Clamp01((float)((elapsed - returnSegmentStart) / (returnEnd - returnSegmentStart)));
-                Blend(body, settings, t, selectedDefinition ? selectedData : actionData);
-                if (elapsed >= returnEnd) stage = RecoveryStage.Finished;
-            }
-            hasPose = true;
-        }
-
-        private void RecoverHeavy(in HeldItemBodyFrame body, AvatarSettings settings, double elapsed)
-        {
-            bool holding = selectedDefinition && input.CanEquip;
-            var data = holding ? selectedData : actionData;
-            var destination = HeldItemPoseCalculation.Hold(body, settings, data);
-            bool available = tracking && input.ProjectileAvailable;
-            var live = available ? HeldItemPoseCalculation.FromItem(new Pose(input.Projectile.position,
-                input.Projectile.rotation), body, actionData) : pose;
-            twoHands.Sample(live.LeftPalm, new Pose(live.FollowPosition, live.FollowRotation), available,
-                releaseUnavailable || tracking && !available, body, actionData.Settings, input.EnvironmentMask, elapsed,
-                holding && !data.Heavy ? twoHands.Left : destination.LeftPalm,
-                new Pose(destination.FollowPosition, destination.FollowRotation), holding && data.Heavy ? 1f : 0f,
-                holding ? 1f : 0f, holding && data.Heavy ? 1f : 0f);
-            if (available && twoHands.Following)
-            {
-                var root = HeavyItemPoseCalculation.Blend(HeavyItemPoseCalculation.ToWorld(followItem, body), live.Item,
-                    LeanTween.easeOutSine(0f, 1f, Mathf.Clamp01((float)elapsed / 0.08f)));
-                retainedItem = HeavyItemPoseCalculation.ToLocal(root, body);
-            }
-            if (!twoHands.Following) { tracking = false; releaseUnavailable = true; }
-            stage = (RecoveryStage)twoHands.Stage;
-            float blend = Mathf.SmoothStep(0f, 1f, twoHands.ReturnProgress(actionData.Settings, elapsed));
-            var item = HeavyItemPoseCalculation.Blend(HeavyItemPoseCalculation.ToWorld(retainedItem, body), destination.Item, blend);
-            pose = new HeldItemPose(item, twoHands.Left, twoHands.Right, body);
-            weight = twoHands.RightWeight; leftWeight = twoHands.LeftWeight;
-            effectiveReach = Mathf.Lerp(actionData.Reach, data.Reach, blend);
-            hasPose = true;
-        }
-
-        private void Blend(in HeldItemBodyFrame body, AvatarSettings settings, float t, in HeldItemPoseData data)
-        {
-            bool holding = selectedDefinition && input.CanEquip;
-            var destination = HeldItemPoseCalculation.Hold(body, settings, data);
-            if (data.Heavy || returnHeavy)
-            {
-                float heavyBlend = Mathf.SmoothStep(0f, 1f, t);
-                effectiveReach = data.Reach;
-                if (data.Heavy)
-                {
-                    var start = HeavyItemPoseCalculation.ToWorld(returnItem, body);
-                    Pose frame = t >= 1f || !hasPose ? destination.Item : new Pose(Vector3.Lerp(start.position, destination.Item.position, heavyBlend),
-                        Quaternion.Slerp(start.rotation, destination.Item.rotation, heavyBlend));
-                    var evaluated = HeldItemPoseCalculation.FromItem(frame, body, data);
-                    pose = new HeldItemPose(frame, evaluated.LeftPalm, new Pose(evaluated.FollowPosition, evaluated.FollowRotation), body,
-                        requestedRight: destination.RequestedRight, requestedLeft: destination.RequestedLeft,
-                        unreachable: destination.Unreachable);
-                }
-                else
-                {
-                    var right = HeldItemPoseCalculation.Resolve(Vector3.Lerp(body.ToWorld(returnStart), destination.FollowPosition, heavyBlend),
-                        Quaternion.Slerp(body.Rotation * returnRotation, destination.FollowRotation, heavyBlend) *
-                        Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body, settings, data, out _, soften: false);
-                    pose = new HeldItemPose(right.Item, HeavyItemPoseCalculation.ToWorld(returnLeft, body),
-                        new Pose(right.FollowPosition, right.FollowRotation), body);
-                }
-                weight = Mathf.Lerp(returnWeight, holding ? 1f : 0f, heavyBlend);
-                leftWeight = Mathf.Lerp(returnLeftWeight, holding && data.Heavy ? 1f : 0f, heavyBlend);
-                if (t >= 1f)
-                {
-                    returnHeavy = holding && data.Heavy;
-                    if (!data.Heavy) pose = destination;
-                }
-                hasPose = true;
-                return;
-            }
-            leftWeight = 0f;
-            bool extended = selectedDefinition is SlingshotDefinition || returnReach > data.Reach;
-            float movement = extended ? Mathf.SmoothStep(0f, 1f, t) : LeanTween.easeOutBack(0f, 1f, t, 0.5f);
-            effectiveReach = extended ? Mathf.Lerp(Mathf.Max(data.Reach, returnReach), data.Reach, movement) : data.Reach;
-            if (extended && t < 1f)
-            {
-                var sample = new HeldItemPose(Vector3.Lerp(body.ToWorld(returnStart), destination.FollowPosition, movement),
-                    Quaternion.Slerp(body.Rotation * returnRotation, destination.FollowRotation, movement) *
-                    Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body.Measurements, body.Scale, data);
-                effectiveReach = Mathf.Max(effectiveReach, HeldItemPoseCalculation.SlingshotReach(sample, body, data));
-            }
-            pose = t >= 1f ? destination : HeldItemPoseCalculation.Resolve(Vector3.LerpUnclamped(body.ToWorld(returnStart), destination.FollowPosition, movement),
-                Quaternion.SlerpUnclamped(body.Rotation * returnRotation, destination.FollowRotation, movement) *
-                Quaternion.Inverse(body.Measurements.RightWristToPalmRotation), body, settings, data, out _,
-                soften: false, effectiveReach: effectiveReach);
-            weight = Mathf.Lerp(returnWeight, holding ? 1f : 0f, LeanTween.easeInOutSine(0f, 1f, t));
-            hasPose = true;
-        }
-
-        private void SetTarget(float reach)
-        {
-            if (weight <= 0f) { ClearTarget(); return; }
-            var clips = avatar.Registry.Animations;
-            AnimationClip fingers = action.State == ItemActionState.Recovering && !SlingshotRecovery ? clips.OpenFingers :
-                selectedDefinition && selectedDefinition.GripFingers ? selectedDefinition.GripFingers : clips.GripFingers;
-            if (pose.Heavy)
-                TwoHandHoldPresentation.Submit(avatar.HandTargets, AvatarHandSource.Item, leftTarget, target,
-                    new Pose(leftTarget.position, leftTarget.rotation), new Pose(target.position, target.rotation),
-                    leftWeight, weight, HeavyItemPoseCalculation.MaximumReach, fingers);
-            else avatar.HandTargets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, reach, fingers, bodyRelative: true);
-            targetInstalled = true;
-        }
-        private void ClearTarget()
-        {
-            ClearLeftTarget();
+            avatar.HandTargets.ClearAnchor();
+            avatar.HandTargets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
             if (!targetInstalled) return;
-            TwoHandHoldPresentation.Clear(avatar.HandTargets, AvatarHandSource.Item);
+            HandHoldPresentation.Clear(avatar.HandTargets, AvatarHandSource.Item);
             targetInstalled = false;
         }
+
+#if UNITY_INCLUDE_INSTRUMENTATION
+        internal sealed class PoseEdit
+        {
+            internal ItemHoldMode Mode;
+            internal bool Charged, Seeded;
+            internal Pose Right, Left;
+            internal float RightSwivel, LeftSwivel;
+        }
+        internal PoseEdit Edit;
+
+        private void SubmitEdit()
+        {
+            var targets = avatar.HandTargets;
+            targets.ClearAnchor();
+            var fingers = selectedDefinition && selectedDefinition.GripFingers ? selectedDefinition.GripFingers : avatar.Registry.Animations.GripFingers;
+            float weight = Edit.Seeded ? 1f : 0f;
+            var right = AvatarHandTargets.Rebase(Edit.Right, Pose.identity, targets.Body);
+            target.SetPositionAndRotation(right.position, right.rotation);
+            targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, 0.98f, fingers, bodyRelative: true);
+            if (Edit.Mode == ItemHoldMode.OneHand) targets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
+            else
+            {
+                var left = AvatarHandTargets.Rebase(Edit.Left, Pose.identity, targets.Body);
+                leftTarget.SetPositionAndRotation(left.position, left.rotation);
+                targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, weight, weight, 0.98f, fingers, bodyRelative: true);
+            }
+            targetInstalled = true;
+        }
+#endif
     }
 }

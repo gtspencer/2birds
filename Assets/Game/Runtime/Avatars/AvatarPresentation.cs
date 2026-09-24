@@ -54,6 +54,7 @@ namespace TwoBirds
         }
         internal Pose Body => new((GetBone(HumanBodyBones.LeftUpperArm).position + GetBone(HumanBodyBones.RightUpperArm).position) * 0.5f,
             Animator.transform.rotation);
+        internal Pose? AnchoredItem { get; set; }
     }
 
     public sealed class AvatarPresentation : MonoBehaviour

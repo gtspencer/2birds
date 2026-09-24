@@ -10,6 +10,7 @@ namespace TwoBirds
         private Animator animator;
         private PlayableGraph graph;
         private AvatarFingerLayers fingers;
+        private AvatarArmLayers poses;
         private AvatarArmIK arms;
         private AvatarHandTargets targets;
         private Renderer[] renderers;
@@ -40,7 +41,7 @@ namespace TwoBirds
             graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
             var basis = AnimationClipPlayable.Create(graph, clips.Idle);
             basis.SetSpeed(0); basis.SetTime(0); basis.SetApplyPlayableIK(false); basis.SetApplyFootIK(false);
-            fingers = new AvatarFingerLayers(graph, basis);
+            poses = new AvatarArmLayers(graph, basis, true); fingers = new AvatarFingerLayers(graph, poses.Output);
             var output = AnimationPlayableOutput.Create(graph, "Hands", animator);
             output.SetSourcePlayable(fingers.Output);
             graph.Play(); graph.Evaluate(0f);
@@ -62,6 +63,7 @@ namespace TwoBirds
 
         internal void Evaluate(float dt, AvatarAnimationSet clips)
         {
+            poses.Set(targets.Arms);
             var left = targets.Resolve(AvatarIKGoal.LeftHand); var right = targets.Resolve(AvatarIKGoal.RightHand);
             fingers.Select(false, left.Fingers ? left.Fingers : clips.RelaxedFingers, clips.OpenFingers, left.OpenWeight);
             fingers.Select(true, right.Fingers ? right.Fingers : clips.RelaxedFingers, clips.OpenFingers, right.OpenWeight);
@@ -76,7 +78,7 @@ namespace TwoBirds
         }
         private void OnDestroy()
         {
-            fingers?.Dispose();
+            fingers?.Dispose(); poses?.Dispose();
             if (graph.IsValid()) graph.Destroy();
         }
     }

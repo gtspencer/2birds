@@ -8,38 +8,21 @@ namespace TwoBirds
         public event System.Action ContentChanged;
         public void NotifyContentChanged() => ContentChanged?.Invoke();
         private void OnValidate() => NotifyContentChanged();
-        public SlingshotChargePoseSettings SlingshotChargePose = SlingshotChargePoseSettings.Default;
-        public HeldItemSpatialSettings FirstPersonPose = HeldItemSpatialSettings.FirstPersonDefault;
-        public HeldItemPoseSettings HoldSettings = HeldItemPoseSettings.Default;
-        public HeldItemPoseSettings HeavyHoldSettings = HeldItemPoseSettings.HeavyDefault;
+        public HoldModePoses OneHand = HoldModePoses.Default, TwoHand = HoldModePoses.Default, Slingshot = HoldModePoses.Default;
+        public HoldModePoses Poses(ItemHoldMode mode) => mode switch
+        { ItemHoldMode.TwoHand => TwoHand, ItemHoldMode.Slingshot => Slingshot, _ => OneHand };
+    }
 
-        public HeldItemPoseSettings ResolveHold(ItemDefinition item) => item.OverrideHoldSettings ? item.HandPose :
-            item.HoldMode == ItemHoldMode.Heavy ? HeavyHoldSettings : HoldSettings;
-        public HeldItemSpatialSettings ResolveSpatial(ItemDefinition item, bool firstPerson) =>
-            !firstPerson ? HeldItemSpatialSettings.From(ResolveHold(item)) : item.OverrideFirstPersonPose ? item.FirstPersonPose :
-            item.HoldMode == ItemHoldMode.Heavy ? HeldItemSpatialSettings.From(ResolveHold(item)) : FirstPersonPose;
-        public SlingshotChargePoseSettings ResolveCharge(SlingshotDefinition item, bool firstPerson) => firstPerson
-            ? item.OverrideFirstPersonChargePose ? item.FirstPersonChargePose : SlingshotChargePose
-            : item.OverrideRemoteChargePose ? item.RemoteChargePose : SlingshotChargePose;
-
-        public void SetOverride(ItemDefinition item, string group, bool enabled)
-        {
-            switch (group)
-            {
-                case nameof(ItemDefinition.OverrideHoldSettings):
-                    if (enabled && !item.OverrideHoldSettings) item.HandPose = ResolveHold(item);
-                    item.OverrideHoldSettings = enabled; break;
-                case nameof(ItemDefinition.OverrideFirstPersonPose):
-                    if (enabled && !item.OverrideFirstPersonPose) item.FirstPersonPose = ResolveSpatial(item, true);
-                    item.OverrideFirstPersonPose = enabled; break;
-                case nameof(SlingshotDefinition.OverrideFirstPersonChargePose) when item is SlingshotDefinition sling:
-                    if (enabled && !sling.OverrideFirstPersonChargePose) sling.FirstPersonChargePose = ResolveCharge(sling, true);
-                    sling.OverrideFirstPersonChargePose = enabled; break;
-                case nameof(SlingshotDefinition.OverrideRemoteChargePose) when item is SlingshotDefinition sling:
-                    if (enabled && !sling.OverrideRemoteChargePose) sling.RemoteChargePose = ResolveCharge(sling, false);
-                    sling.OverrideRemoteChargePose = enabled; break;
-            }
-            item.NotifyContentChanged();
-        }
+    [System.Serializable]
+    public struct HoldModePoses
+    {
+        public AnimationClip ThirdPersonHold, ThirdPersonCharged, FirstPersonHold, FirstPersonCharged;
+        [Min(0f), Tooltip("Visual charge duration in seconds. Slingshot follows ThrowChargeTime instead.")] public float ChargePoseDuration;
+        [Min(0f)] public float MaximumFollowDuration, EndPosePauseDuration, ReturnBlendDuration;
+        [Range(0.01f, 0.85f)] public float FollowReachFraction;
+        public static HoldModePoses Default => new()
+        { ChargePoseDuration = 0.35f, FollowReachFraction = 0.85f, MaximumFollowDuration = 0.20f, ReturnBlendDuration = 0.20f };
+        internal AnimationClip Hold(bool firstPerson) => firstPerson ? FirstPersonHold : ThirdPersonHold;
+        internal AnimationClip Charged(bool firstPerson) => firstPerson ? FirstPersonCharged : ThirdPersonCharged;
     }
 }

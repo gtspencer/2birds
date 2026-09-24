@@ -21,6 +21,7 @@ MonoBehaviour:
   MinThrowSpeed: 8
   MaxThrowSpeed: 28
   ThrowChargeTime: 1
+  HoldMode: 2
   RightPalmContact:
     Position: {x: 0.02, y: -0.025, z: 0}
     Euler: {x: 0, y: 0, z: 90}

@@ -14,13 +14,8 @@ namespace TwoBirds
     {
         public ItemPalmContact RightPalmContact, LeftPalmContact;
         public AnimationClip GripFingers;
-        public bool OverrideHoldSettings, OverrideFirstPersonPose;
-        public HeldItemPoseSettings HandPose;
-        public HeldItemSpatialSettings FirstPersonPose;
         public float ThrowChargeTime;
         public ItemPalmContact PullingPalmContact;
-        public bool OverrideRemoteChargePose, OverrideFirstPersonChargePose;
-        public SlingshotChargePoseSettings RemoteChargePose, FirstPersonChargePose;
         public float RecoverySeconds;
     }
 
@@ -29,15 +24,13 @@ namespace TwoBirds
     {
         public PalmCorrection LeftPalmCorrection, RightPalmCorrection;
         public float VisualHeight, YawOffset;
-        public Vector3 StandingOffset, FirstPersonPlacementOffset, FirstPersonReachOffset, FirstPersonHoldOffset;
+        public Vector3 StandingOffset, FirstPersonPlacementOffset, FirstPersonReachOffset;
     }
 
     [Serializable]
     public sealed class GripHeldDefaultsValues
     {
-        public HeldItemPoseSettings HoldSettings, HeavyHoldSettings;
-        public HeldItemSpatialSettings FirstPersonPose;
-        public SlingshotChargePoseSettings SlingshotChargePose;
+        public HoldModePoses OneHand, TwoHand, Slingshot;
     }
 
     [Serializable]
@@ -193,14 +186,6 @@ namespace TwoBirds
         public void Edit(GripAuthoringDraft record, Action mutation)
         {
             mutation(); record.Apply(); ContentChanged?.Invoke(record); Changed?.Invoke();
-        }
-        public void SetOverride(GripAuthoringDraft record, string name, bool enabled)
-        {
-            Edit(record, () =>
-            {
-                Held.SetOverride((ItemDefinition)record.Runtime, name, enabled);
-                GripAuthoringDraft.CopyFields(record.Runtime, record.Values);
-            });
         }
         public void Revert(GripAuthoringDraft record)
         { record.Revert(); ContentChanged?.Invoke(record); Changed?.Invoke(); }

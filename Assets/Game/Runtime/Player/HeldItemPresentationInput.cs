@@ -10,7 +10,7 @@ namespace TwoBirds
         internal double ActionAge;
         internal bool FirstPerson, CanEquip, CanCharge, HasAction;
         internal AvatarPresentationInput Placement;
-        internal Pose Camera, Aim, Projectile;
+        internal Pose Aim, Projectile;
         internal bool ProjectileAvailable, ProjectileUnavailable;
         internal int EnvironmentMask;
     }

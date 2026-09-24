@@ -55,7 +55,7 @@ namespace TwoBirds.Editor
 
             EditorGUILayout.Space(6);
             existingItem = (ItemDefinition)EditorGUILayout.ObjectField("Existing Item", existingItem, typeof(ItemDefinition), false);
-            using (new EditorGUI.DisabledScope(!existingItem || !existingItem.WorldPrefab || existingItem.HoldMode == ItemHoldMode.Heavy))
+            using (new EditorGUI.DisabledScope(!existingItem || !existingItem.WorldPrefab || existingItem.HoldMode == ItemHoldMode.TwoHand))
                 if (GUILayout.Button("Recompute Held Offset"))
                 {
                     Undo.RecordObject(existingItem, "Recompute Held Offset");
@@ -243,7 +243,7 @@ namespace TwoBirds.Editor
 
         public static bool GenerateHeldOffset(GameObject root, ItemDefinition definition)
         {
-            if (definition.HoldMode == ItemHoldMode.Heavy) return false;
+            if (definition.HoldMode == ItemHoldMode.TwoHand) return false;
             Matrix4x4 toPalm = Matrix4x4.TRS(Vector3.zero, Quaternion.Inverse(definition.RightPalmContact.Rotation),
                 root.transform.localScale) * root.transform.worldToLocalMatrix;
             Bounds bounds = default;

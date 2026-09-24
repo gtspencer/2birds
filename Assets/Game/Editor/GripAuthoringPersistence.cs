@@ -14,6 +14,7 @@ namespace TwoBirds.Editor
         static GripAuthoringPersistence()
         {
             GripAuthoringScene.EditorSaveRequested += record => Save(GripAuthoringSession.Drafts, record);
+            GripAuthoringScene.EditorPoseSaveRequested += capture => SavePose(GripAuthoringSession.Drafts, capture);
             GripAuthoringSession.Changed += SessionChanged;
             EditorApplication.playModeStateChanged += PlayModeChanged;
         }
@@ -57,6 +58,32 @@ namespace TwoBirds.Editor
             GripAuthoringDraft.Notify(source);
             EditorUtility.SetDirty(source); AssetDatabase.SaveAssetIfDirty(source);
             record.Source = source; drafts.Saved(record);
+        }
+        public static void SavePose(GripAuthoringDrafts drafts, GripPoseCapture capture)
+        {
+            var record = drafts.Find("shared-held-item-settings");
+            string slot = (capture.FirstPerson ? "FirstPerson" : "ThirdPerson") + (capture.Charged ? "Charged" : "Hold");
+            string field = capture.Mode + "." + slot;
+            var clip = new AnimationClip { name = capture.Mode + slot };
+            for (int i = 0; i < HumanTrait.MuscleCount; i++)
+                if ((HumanBodyBones)HumanTrait.BoneFromMuscle(i) is HumanBodyBones.LeftShoulder or HumanBodyBones.RightShoulder or
+                    HumanBodyBones.LeftUpperArm or HumanBodyBones.RightUpperArm or HumanBodyBones.LeftLowerArm or
+                    HumanBodyBones.RightLowerArm or HumanBodyBones.LeftHand or HumanBodyBones.RightHand)
+                    AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve("", typeof(Animator), HumanTrait.MuscleName[i]),
+                        new AnimationCurve(new Keyframe(0f, capture.Muscles[i])));
+            var existing = GripAuthoringFields.Get(record.Values, field) as AnimationClip;
+            if (existing && AssetDatabase.Contains(existing))
+            {
+                EditorUtility.CopySerialized(clip, existing); UnityEngine.Object.DestroyImmediate(clip); clip = existing;
+                EditorUtility.SetDirty(clip); AssetDatabase.SaveAssetIfDirty(clip);
+            }
+            else
+            {
+                const string folder = "Assets/Art/Animations/HeldPoses";
+                if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder("Assets/Art/Animations", "HeldPoses");
+                AssetDatabase.CreateAsset(clip, AssetDatabase.GenerateUniqueAssetPath($"{folder}/{clip.name}.anim"));
+            }
+            drafts.Edit(record, () => GripAuthoringFields.Set(record.Values, field, clip));
         }
     }
 }
