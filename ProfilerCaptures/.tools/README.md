@@ -8,6 +8,7 @@ Run these from the repository root through the connected editor's `eval_file` co
 | `stop.cs` | Request completion of a run using the same configuration. |
 | `analyze.cs` | Load an existing capture and export main-thread frames, sample costs, direct-parent allocation groups, and optional allocation call stacks. |
 | `summarize.py` | Select an explicit time interval, deduplicate overlapping frame exports from one recording, and calculate statistics. |
+| `hitches.cs` | Classify long frames, split by in-game markers, detect periodic and first-use spikes. Runs automatically after `Stop`. |
 
 Start each session in a new `ProfilerCaptures/YYYY-MM-DD_HH-mm-ss/` folder. Keep configurations, evaluated snippets, captures, exports, and findings there. Never use `.tools` for session output. The examples use `SESSION` as a placeholder for that folder, and `$unityCli` for the executable specified in AGENTS.md.
 
@@ -84,6 +85,30 @@ python 'ProfilerCaptures/.tools/summarize.py' 'ProfilerCaptures/SESSION/rocks-ti
 Start time is relative to the earliest frame in the supplied exports. Omit duration to include the remaining frames. Pass explicit CSV paths, all from the same recording; summarize separate repeats separately. The helper removes overlapping frames by recording ID and exact nanosecond timestamp. It refuses a mix of recording IDs and refuses to overwrite output. Legacy exports must be regenerated with `analyze.cs` to supply these fields.
 
 The summary includes percentiles, maxima, allocation rate over captured frame time, elapsed versus captured time, gap candidates, source references for long frames, and a configurable `--long-frame-ms` threshold (default 20). Inspect gaps and actual interval coverage before using the result. The main-loop remainder subtracts two named waits and still includes other waits. The long-frame threshold is not a precise missed-frame-deadline count.
+
+## Hitch report
+
+`Stop` waits for the final save, then writes `<runName>-hitches.json` over all of the run's parts. To run it on its own (an existing run, or `capturePaths` for explicit files):
+
+```powershell
+& 'ProfilerCaptures/.tools/Invoke-Profiler.ps1' -Operation Hitches -Config 'ProfilerCaptures/SESSION/record.json' -UnityCli $unityCli
+```
+
+Optional config fields: `longFrameMs` (default 20), `capturePaths`. The analysis runs on the next editor update, because CLI requests are capped at a few seconds of main-thread time. The wrapper polls for the report or `<runName>-hitches-error.txt`. It refuses to overwrite an existing report.
+
+Pressing the in-game marker key (`P` / D-pad left, `LogMarkerService`) calls `Log.Marker()`, which emits profiler frame metadata. The report splits the run into segments at each marker (`start→M1`, `M1→M2`, …) with per-segment stats. This requires a build with `UNITY_INCLUDE_INSTRUMENTATION`.
+
+| Report field | Meaning |
+| --- | --- |
+| `segments` | Stats per marker interval: median/p95/p99/max, long frames, alloc B/s, GC count |
+| `tags` | Long-frame classes with count, worst frame, and interval regularity (`periodic`) |
+| `unknownLongFrames` | Long frames no rule matched; these need manual attribution |
+| `periodic` | Interval regularity of GC.Collect frames and of all long frames |
+| `firstUse` | Samples whose first appearance (self ms) is ≥5× their later median |
+| `worstFrames` | Top 25 long frames: tags, top self samples, physics steps, allocs, render-thread busy ms, capture + file-local frame for `analyze.cs` follow-up |
+| `topSelfMs`, `topAllocParentsBytes` | Whole-run self time and allocation parents |
+
+Tags: `gc`, `shader` (variant/PSO compile), `jit`, `spawn` (Instantiate), `load`, `ui` (UI Toolkit), `animation`, `focus-device`, `log`, `render-wait` (present/render-thread waits ≥5 ms), `physics-catchup` (≥2 physics steps in the frame), `untracked` (≥10 ms self time directly in PlayerLoop: an OS, window, driver, or save stall). Tag time is the inclusive time of the outermost matching sample. Rules live in `classify` in `hitches.cs`. Add a rule there instead of writing a one-off script for a recurring pattern.
 
 ## Focused extensions
 
