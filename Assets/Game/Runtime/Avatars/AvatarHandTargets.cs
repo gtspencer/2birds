@@ -29,7 +29,7 @@ namespace TwoBirds
 #endif
 
         public void Set(AvatarIKGoal hand, AvatarHandSource source, Transform target, float position = 1f,
-            float rotation = 1f, float maximumReach = 0.98f, AnimationClip fingers = null, float openWeight = 0f, bool bodyRelative = false)
+            float rotation = 1f, float maximumReach = AvatarArmIK.MaximumReach, AnimationClip fingers = null, float openWeight = 0f, bool bodyRelative = false)
         {
             candidates[hand == AvatarIKGoal.LeftHand ? 0 : 1, (int)source] = new Target
             {
@@ -47,6 +47,7 @@ namespace TwoBirds
                 if (candidates[index, i].Transform) return candidates[index, i];
             return default;
         }
+        internal Target Free(AvatarIKGoal hand) => candidates[hand == AvatarIKGoal.LeftHand ? 0 : 1, (int)AvatarHandSource.Free];
 
         internal static Pose Rebase(Pose pose, Pose from, Pose to)
         {

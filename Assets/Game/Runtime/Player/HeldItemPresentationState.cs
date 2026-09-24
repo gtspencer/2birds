@@ -103,7 +103,7 @@ namespace TwoBirds
                 {
                     if (boundBinding != null)
                     {
-                        var item = HeldItemPoseCalculation.TwoHandAnchor(boundBinding.Palm(true), boundBinding.Palm(false),
+                        var item = boundBinding.AnchoredItem ?? HeldItemPoseCalculation.TwoHandAnchor(boundBinding.Palm(true), boundBinding.Palm(false),
                             selectedData.RightContact, selectedData.LeftContact, selectedData.PrefabScale);
                         fallback.SetPositionAndRotation(item.position, item.rotation);
                     }
@@ -117,7 +117,7 @@ namespace TwoBirds
             }
         }
 
-        internal HeldItemBodyFrame HeavyBody(AvatarSettings settings) => Body(settings, true);
+        private HeldItemBodyFrame HeavyBody(AvatarSettings settings) => Body(settings, true);
         private HeldItemBodyFrame Body(AvatarSettings settings, bool heavy = false)
         {
             var placement = boundBinding != null ? avatar.Input : input.Placement;
@@ -359,8 +359,8 @@ namespace TwoBirds
             if (data.TwoHand && weight > 0f)
             {
                 targets.SetAnchor(data.RightContact, data.LeftContact, data.PrefabScale);
-                targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, 0.98f, fingers);
-                targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, weight, weight, 0.98f, fingers);
+                targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, AvatarArmIK.MaximumReach, fingers);
+                targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, weight, weight, AvatarArmIK.MaximumReach, fingers);
             }
             else
             {
@@ -383,7 +383,7 @@ namespace TwoBirds
             if (!hands.Following) { tracking = false; releaseUnavailable = true; }
             HandHoldPresentation.Submit(avatar.HandTargets, AvatarHandSource.Item, leftTarget, target, hands.Left, hands.Right,
                 hands.LeftWeight, hands.RightWeight, HandHoldPresentation.Reach(actionData.Poses), avatar.Registry.Animations.OpenFingers,
-                hands.Stage != HandHoldPresentation.RecoveryStage.Follow);
+                !(hands.Following && available));
             targetInstalled = true;
         }
 
@@ -407,6 +407,8 @@ namespace TwoBirds
             }
             Pose requestedRight = data.TwoHand ? HeldItemPoseCalculation.PalmFromItem(item, data.RightContact, data.PrefabScale) : palm;
             Pose requestedLeft = data.TwoHand ? HeldItemPoseCalculation.PalmFromItem(item, data.LeftContact, data.PrefabScale) : left;
+            bool rightUnreachable = !Blending && data.TwoHand && !InHandReach(requestedRight, true);
+            bool leftUnreachable = !Blending && data.TwoHand && !InHandReach(requestedLeft, false);
             Vector3 correction = Vector3.zero;
             bool clear = true, resolve = showing && input.FirstPerson;
 #if UNITY_INCLUDE_INSTRUMENTATION
@@ -448,8 +450,7 @@ namespace TwoBirds
             {
                 RequestedRight = requestedRight, RequestedLeft = requestedLeft,
                 EvaluatedRight = palm, EvaluatedLeft = left, ActiveBlend = Blending, ClearanceAdjusted = clearanceAdjusted,
-                RightUnreachable = !Blending && data.TwoHand && !InHandReach(requestedRight, true, 0.98f),
-                LeftUnreachable = !Blending && data.TwoHand && !InHandReach(requestedLeft, false, 0.98f),
+                RightUnreachable = rightUnreachable, LeftUnreachable = leftUnreachable,
                 HasLeft = data.HoldMode != ItemHoldMode.OneHand
             };
             committed = new ReleaseSample { Item = selectedId, Generation = binding?.Generation ?? 0,
@@ -467,17 +468,20 @@ namespace TwoBirds
             if (slingshot) slingshot.Shift(correction);
         }
 
-        private bool InHandReach(Pose palm, bool right, float reach)
+        private bool InHandReach(Pose palm, bool right)
         {
             var data = lastBody.Measurements;
             var rotation = palm.rotation * Quaternion.Inverse(right ? data.RightWristToPalmRotation : data.LeftWristToPalmRotation);
             var wrist = palm.position - rotation * ((right ? data.RightWristToPalmPosition : data.LeftWristToPalmPosition) * lastBody.Scale);
             return Vector3.Distance(wrist, right ? lastBody.Shoulder : lastBody.LeftShoulder) <=
-                (right ? lastBody.ArmLength : lastBody.LeftArmLength) * reach + 0.001f;
+                (right ? lastBody.ArmLength : lastBody.LeftArmLength) * AvatarArmIK.MaximumReach + 0.001f;
         }
 
         private void ClearTargets()
         {
+#if UNITY_INCLUDE_INSTRUMENTATION
+            avatar.HandTargets.Swivel[0] = avatar.HandTargets.Swivel[1] = 0f;
+#endif
             avatar.HandTargets.ClearAnchor();
             avatar.HandTargets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
             if (!targetInstalled) return;
@@ -503,13 +507,13 @@ namespace TwoBirds
             float weight = Edit.Seeded ? 1f : 0f;
             var right = AvatarHandTargets.Rebase(Edit.Right, Pose.identity, targets.Body);
             target.SetPositionAndRotation(right.position, right.rotation);
-            targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, 0.98f, fingers, bodyRelative: true);
+            targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, AvatarArmIK.MaximumReach, fingers, bodyRelative: true);
             if (Edit.Mode == ItemHoldMode.OneHand) targets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
             else
             {
                 var left = AvatarHandTargets.Rebase(Edit.Left, Pose.identity, targets.Body);
                 leftTarget.SetPositionAndRotation(left.position, left.rotation);
-                targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, weight, weight, 0.98f, fingers, bodyRelative: true);
+                targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, weight, weight, AvatarArmIK.MaximumReach, fingers, bodyRelative: true);
             }
             targetInstalled = true;
         }

@@ -12,7 +12,6 @@ namespace TwoBirds
 {
     internal sealed class GripGhostHand : IDisposable
     {
-        private static Material material;
         private readonly GameObject holder, root;
         private readonly Transform hand, hips;
         private readonly AvatarSettings settings;
@@ -20,7 +19,7 @@ namespace TwoBirds
         internal AvatarId Avatar { get; }
         internal AnimationClip Fingers { get; }
 
-        internal GripGhostHand(AvatarRegistry.Entry entry, AvatarAnimationSet clips, AnimationClip fingers, bool right, int layer)
+        internal GripGhostHand(AvatarRegistry.Entry entry, AvatarAnimationSet clips, AnimationClip fingers, bool right, int layer, Material material)
         {
             Avatar = entry.Id; Fingers = fingers; settings = entry.Settings; this.right = right;
             holder = new GameObject($"Ghost {(right ? "right" : "left")} hand source");
@@ -51,15 +50,6 @@ namespace TwoBirds
             hand.SetParent(root.transform, true);
             animator.enabled = false;
             hips.localScale = Vector3.zero;
-            if (!material)
-            {
-                material = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { hideFlags = HideFlags.HideAndDontSave };
-                material.SetFloat("_Surface", 1f); material.SetFloat("_Blend", 0f); material.SetFloat("_ZWrite", 0f);
-                material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha); material.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-                material.SetOverrideTag("RenderType", "Transparent"); material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                material.renderQueue = (int)RenderQueue.Transparent;
-                material.SetColor("_BaseColor", new Color(0.35f, 0.85f, 1f, 0.35f));
-            }
             foreach (var target in new[] { holder, root })
             {
                 foreach (var renderer in target.GetComponentsInChildren<Renderer>(true))

@@ -26,7 +26,9 @@ namespace TwoBirds
         private readonly PlayableGraph graph;
         private readonly bool firstPerson;
         private readonly Arm[] arms = new Arm[2];
+        private HeldItemSettings settings;
         internal AnimationLayerMixerPlayable Output { get; }
+        internal float Weight(bool right) => Output.GetInputWeight(right ? 2 : 1);
 
         internal AvatarArmLayers(PlayableGraph graph, Playable basis, bool firstPerson)
         {
@@ -48,18 +50,18 @@ namespace TwoBirds
 
         internal void Set(in AvatarArmPose pose)
         {
+            if (pose.Settings && pose.Settings != settings)
+            {
+                if (settings) settings.ContentChanged -= Rebind;
+                settings = pose.Settings; settings.ContentChanged += Rebind;
+                Rebind();
+            }
             for (int i = 0; i < 2; i++)
             {
                 var arm = arms[i];
                 float total = 0f;
                 for (int mode = 0; mode < 3; mode++)
-                {
-                    bool used = i == 1 || mode != (int)ItemHoldMode.OneHand;
-                    var poses = pose.Settings ? pose.Settings.Poses((ItemHoldMode)mode) : default;
-                    Bind(arm, mode * 2, used ? poses.Hold(firstPerson) : null);
-                    Bind(arm, mode * 2 + 1, used ? poses.Charged(firstPerson) : null);
                     if (arm.Clips[mode * 2]) total += pose.Weight((ItemHoldMode)mode);
-                }
                 Output.SetInputWeight(i + 1, Mathf.Clamp01(total));
                 for (int mode = 0; mode < 3; mode++)
                 {
@@ -69,6 +71,18 @@ namespace TwoBirds
                     arm.Mixer.SetInputWeight(mode * 2 + 1, share * charge);
                 }
             }
+        }
+
+        private void Rebind()
+        {
+            for (int i = 0; i < 2; i++)
+                for (int mode = 0; mode < 3; mode++)
+                {
+                    bool used = i == 1 || mode != (int)ItemHoldMode.OneHand;
+                    var poses = settings.Poses((ItemHoldMode)mode);
+                    Bind(arms[i], mode * 2, used ? poses.Hold(firstPerson) : null);
+                    Bind(arms[i], mode * 2 + 1, used ? poses.Charged(firstPerson) : null);
+                }
         }
 
         private void Bind(Arm arm, int slot, AnimationClip clip)
@@ -82,6 +96,10 @@ namespace TwoBirds
             graph.Connect(node, 0, arm.Mixer, slot);
         }
 
-        public void Dispose() { foreach (var arm in arms) if (arm?.Mask) UnityEngine.Object.Destroy(arm.Mask); }
+        public void Dispose()
+        {
+            if (settings) settings.ContentChanged -= Rebind;
+            foreach (var arm in arms) if (arm?.Mask) UnityEngine.Object.Destroy(arm.Mask);
+        }
     }
 }

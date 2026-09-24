@@ -17,6 +17,8 @@ namespace TwoBirds
         [SerializeField] private GripObserverPreview observer;
         [SerializeField] private Camera observerCamera;
         [SerializeField] private UIDocument document;
+        [SerializeField] private Material ghostMaterial;
+        private static readonly string[] GhostPaths = { "RightPalmContact", "LeftPalmContact", "PullingPalmContact" };
         private SessionController session;
         private PlayerInventory inventory;
         private PlayerEquipment equipment;
@@ -212,8 +214,9 @@ namespace TwoBirds
         private void UpdateGhosts()
         {
             var item = Drafts.Items.Get(Drafts.SelectedItem);
-            var entry = Drafts.Avatars.Entries.Find(value => value.Id == Drafts.SelectedAvatar);
-            foreach (string path in new[] { "RightPalmContact", "LeftPalmContact", "PullingPalmContact" })
+            AvatarRegistry.Entry entry = null;
+            foreach (var candidate in Drafts.Avatars.Entries) if (candidate.Id == Drafts.SelectedAvatar) { entry = candidate; break; }
+            foreach (string path in GhostPaths)
             {
                 ghosts.TryGetValue(path, out var ghost);
                 bool applies = Drafts.Context == GripAuthoringContext.Item && observer.ItemRoot && item && entry != null &&
@@ -225,7 +228,7 @@ namespace TwoBirds
                 {
                     ghost?.Dispose();
                     ghosts[path] = ghost = new GripGhostHand(entry, Drafts.Avatars.Animations, fingers, path == "RightPalmContact",
-                        LayerMask.NameToLayer(AvatarEditorPreview.LayerName));
+                        LayerMask.NameToLayer(AvatarEditorPreview.LayerName), ghostMaterial);
                 }
                 ghost.SetVisible(true);
                 ghost.Place(handle.World);

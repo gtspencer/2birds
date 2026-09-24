@@ -9,12 +9,11 @@ namespace TwoBirds
         internal Pose Right { get; private set; }
         internal float LeftWeight { get; private set; }
         internal float RightWeight { get; private set; }
-        internal float FrameWeight { get; private set; }
         internal RecoveryStage Stage { get; private set; }
         internal bool Following { get; private set; }
         internal bool Releasing { get; private set; }
         private Pose startLeft, startRight, retainedLeft, retainedRight;
-        private float startLeftWeight, startRightWeight, startFrameWeight;
+        private float frameWeight, startLeftWeight, startRightWeight, startFrameWeight;
         private double returnStart;
         private bool twoHanded;
 
@@ -23,7 +22,7 @@ namespace TwoBirds
         internal void Hold(Pose left, Pose right)
         {
             Left = left; Right = right;
-            LeftWeight = RightWeight = FrameWeight = 1f;
+            LeftWeight = RightWeight = frameWeight = 1f;
             Releasing = false;
         }
 
@@ -45,7 +44,7 @@ namespace TwoBirds
             if (Stage != RecoveryStage.Return) return;
             retainedLeft = body.CenterToLocal(Left);
             retainedRight = body.CenterToLocal(Right);
-            startLeftWeight = LeftWeight; startRightWeight = RightWeight; startFrameWeight = FrameWeight;
+            startLeftWeight = LeftWeight; startRightWeight = RightWeight; startFrameWeight = frameWeight;
             returnStart = elapsed;
         }
 
@@ -102,7 +101,7 @@ namespace TwoBirds
             }
             LeftWeight = Mathf.Lerp(startLeftWeight, destinationLeftWeight, blend);
             RightWeight = Mathf.Lerp(startRightWeight, destinationRightWeight, blend);
-            FrameWeight = Frame(settings, elapsed, destinationFrameWeight);
+            frameWeight = Frame(settings, elapsed, destinationFrameWeight);
         }
 
         private static Pose Blend(Pose from, Pose to, float t) =>
@@ -128,7 +127,7 @@ namespace TwoBirds
         internal void Reset()
         {
             Releasing = Following = false;
-            LeftWeight = RightWeight = FrameWeight = 0f;
+            LeftWeight = RightWeight = frameWeight = 0f;
             returnStart = -1d;
             Stage = RecoveryStage.Finished;
         }

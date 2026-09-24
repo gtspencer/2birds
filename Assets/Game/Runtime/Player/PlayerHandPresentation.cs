@@ -524,7 +524,8 @@ namespace TwoBirds
                 Vector3 euler = Vector3.Lerp(Vector3.Lerp(hand.RestEuler, hand.RiseEuler, rise), hand.FallEuler, fall);
                 var occupied = avatar.HandTargets.Resolve(right ? AvatarIKGoal.RightHand : AvatarIKGoal.LeftHand);
                 bool owned = occupied.Transform && occupied.Transform != freeTargets[i];
-                freeWeights[i] = !freeInitialized[i] ? 1f : owned ? 0f : Mathf.MoveTowards(freeWeights[i], 1f, dt / tuning.BlendTime);
+                freeWeights[i] = !freeInitialized[i] ? 1f : occupied.Source == AvatarHandSource.Item ? 1f - rig.PoseWeight(right) :
+                    owned ? 0f : Mathf.MoveTowards(freeWeights[i], 1f, dt / tuning.BlendTime);
                 float blend = freeInitialized[i] ? AvatarPresentation.Smooth(dt, tuning.BlendTime) : 1f;
                 freePositions[i] = Vector3.Lerp(freePositions[i], Vector3.ClampMagnitude(local, 0.85f), blend);
                 freeRotations[i] = Quaternion.Slerp(freeRotations[i], Quaternion.Euler(euler), blend);

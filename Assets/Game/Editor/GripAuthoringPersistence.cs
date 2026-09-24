@@ -71,15 +71,16 @@ namespace TwoBirds.Editor
                     HumanBodyBones.RightLowerArm or HumanBodyBones.LeftHand or HumanBodyBones.RightHand)
                     AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve("", typeof(Animator), HumanTrait.MuscleName[i]),
                         new AnimationCurve(new Keyframe(0f, capture.Muscles[i])));
+            const string folder = "Assets/Art/Animations/HeldPoses";
             var existing = GripAuthoringFields.Get(record.Values, field) as AnimationClip;
-            if (existing && AssetDatabase.Contains(existing))
+            if (existing && AssetDatabase.IsMainAsset(existing) && AssetDatabase.GetAssetPath(existing).StartsWith(folder + "/"))
             {
+                clip.name = existing.name;
                 EditorUtility.CopySerialized(clip, existing); UnityEngine.Object.DestroyImmediate(clip); clip = existing;
                 EditorUtility.SetDirty(clip); AssetDatabase.SaveAssetIfDirty(clip);
             }
             else
             {
-                const string folder = "Assets/Art/Animations/HeldPoses";
                 if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder("Assets/Art/Animations", "HeldPoses");
                 AssetDatabase.CreateAsset(clip, AssetDatabase.GenerateUniqueAssetPath($"{folder}/{clip.name}.anim"));
             }

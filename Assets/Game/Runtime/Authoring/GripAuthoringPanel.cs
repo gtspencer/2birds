@@ -102,6 +102,7 @@ namespace TwoBirds
                     source.RegisterValueChangedCallback(_ => { drafts.SharedKey = shared[source.index].Key; Rebuild(); }); fields.Add(source);
                 }
                 var record = drafts.Current;
+                if (scene && record?.Runtime is not HeldItemSettings) scene.EndPoseEdit();
                 if (record == null) return;
                 if (record.Runtime is ItemDefinition item) ItemFields(record, item);
                 else if (record.Runtime is AvatarSettings)

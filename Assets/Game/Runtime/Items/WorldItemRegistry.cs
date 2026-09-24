@@ -88,9 +88,6 @@ namespace TwoBirds
 
         internal HeldItemSettings HeldDefaults => itemRegistry.HeldItemDefaults;
 
-        internal HeldItemPoseData GetHeldPose(ItemDefinition definition, uint worldId = 0) =>
-            new(definition, itemRegistry.HeldItemDefaults, items.GetValueOrDefault(worldId));
-
         private void NotifyPresentation(uint id, int previousHolder)
         {
             int holder = items.TryGetValue(id, out var item) && item && item.Record.State == WorldItemState.Held

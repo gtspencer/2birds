@@ -4,6 +4,7 @@ namespace TwoBirds
 {
     internal sealed class AvatarArmIK
     {
+        internal const float MaximumReach = 0.98f;
         private sealed class Arm
         {
             internal Transform Upper, Lower, Hand;
@@ -35,6 +36,11 @@ namespace TwoBirds
                 right.Upper.rotation = pitch * right.Upper.rotation;
                 if (pose.ChargeMode != ItemHoldMode.OneHand) left.Upper.rotation = pitch * left.Upper.rotation;
             }
+            var leftTarget = targets.Resolve(AvatarIKGoal.LeftHand);
+            var rightTarget = targets.Resolve(AvatarIKGoal.RightHand);
+            // A held-item claim still blends out the free hand while the arm layer blends in.
+            if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), null, targets.Body, body, 0f, dt);
+            if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), null, targets.Body, body, 0f, dt);
             binding.AnchoredItem = null;
             Pose? leftGrip = null, rightGrip = null;
             var anchor = targets.Anchor;
@@ -45,8 +51,8 @@ namespace TwoBirds
                 rightGrip = HeldItemPoseCalculation.PalmFromItem(item, anchor.Right, anchor.Scale);
                 leftGrip = HeldItemPoseCalculation.PalmFromItem(item, anchor.Left, anchor.Scale);
             }
-            Solve(left, false, targets.Resolve(AvatarIKGoal.LeftHand), leftGrip, targets.Body, body, Swivel(targets, 0), dt);
-            Solve(right, true, targets.Resolve(AvatarIKGoal.RightHand), rightGrip, targets.Body, body, Swivel(targets, 1), dt);
+            Solve(left, false, leftTarget, leftGrip, targets.Body, body, Swivel(targets, 0), dt);
+            Solve(right, true, rightTarget, rightGrip, targets.Body, body, Swivel(targets, 1), dt);
         }
 
         private static float Swivel(AvatarHandTargets targets, int index)
@@ -82,7 +88,7 @@ namespace TwoBirds
             Quaternion wrist = palm.rotation * Quaternion.Inverse(rightHand ? data.RightWristToPalmRotation : data.LeftWristToPalmRotation);
             Vector3 root = arm.Upper.position;
             Vector3 delta = palm.position - wrist * ((rightHand ? data.RightWristToPalmPosition : data.LeftWristToPalmPosition) * scale) - root;
-            float reach = target.MaximumReach > 0f ? Mathf.Min(target.MaximumReach, 0.98f) : 0.98f;
+            float reach = target.MaximumReach > 0f ? Mathf.Min(target.MaximumReach, MaximumReach) : MaximumReach;
             float weight = target.Contact ? 1f - Mathf.SmoothStep(0f, 1f,
                 Mathf.InverseLerp(reach - 0.08f, reach, delta.magnitude / length)) : 1f;
             arm.Weight = target.Contact && arm.Seeded ? Mathf.Lerp(arm.Weight, weight, AvatarPresentation.Smooth(dt, 0.08f)) : weight;

@@ -13,11 +13,11 @@ namespace TwoBirds
         internal readonly ItemReleaseSphere Sphere;
         internal readonly float ReleaseRadius;
         internal bool TwoHand => HoldMode == ItemHoldMode.TwoHand;
-        internal HeldItemPoseData(ItemDefinition definition, HeldItemSettings defaults, WorldItem worldItem = null)
+        internal HeldItemPoseData(ItemDefinition definition, HeldItemSettings defaults)
         {
             HoldMode = definition.HoldMode;
             PrefabRotation = definition.WorldPrefab.transform.localRotation;
-            var geometry = worldItem ? worldItem : definition.WorldPrefab.GetComponent<WorldItem>();
+            var geometry = definition.WorldPrefab.GetComponent<WorldItem>();
             if (geometry) geometry.CacheReleaseGeometry();
             Sphere = geometry ? geometry.ReleaseSphere : default;
             ReleaseRadius = geometry ? geometry.ReleaseRadius : 0f;

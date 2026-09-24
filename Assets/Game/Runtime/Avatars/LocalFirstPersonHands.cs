@@ -17,6 +17,7 @@ namespace TwoBirds
         private bool[] rendererStates;
         private Vector3 shoulderCenter;
         internal AvatarBinding Binding { get; private set; }
+        internal float PoseWeight(bool right) => poses.Weight(right);
         internal HeldItemBodyFrame BodyFrame => new(Binding.GetBone(HumanBodyBones.RightUpperArm).position,
             transform.rotation, Binding.Measurements, Binding.Scale,
             leftShoulder: Binding.GetBone(HumanBodyBones.LeftUpperArm).position);
