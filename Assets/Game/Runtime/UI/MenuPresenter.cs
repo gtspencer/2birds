@@ -66,7 +66,7 @@ namespace TwoBirds
             entryError = root.Q<Label>("entry-error");
             entryPanel.RegisterCallback<NavigationCancelEvent>(EntryBack, TrickleDown.TrickleDown);
             BuildEntry();
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (root.Q<Button>("grip-authoring") == null)
                 root.Q<Button>("solo").parent.Add(new Button { name = "grip-authoring", text = "Grip Authoring" });
             Click("grip-authoring", session.StartGripAuthoring);

@@ -1,4 +1,4 @@
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -85,7 +85,6 @@ namespace TwoBirds
         {
             if (!input) return;
             input.AuthoringFocus = editing;
-            session.InputPresentation.SetGameplay(!editing);
         }
         public void SelectAvatar(AvatarId id)
         {
@@ -230,8 +229,8 @@ namespace TwoBirds
                 var body = state.LastBody;
                 if (field == "PullingHandDrawOffset")
                 {
-                    if (!observer.State.Slingshot) return false;
-                    basis = new Pose(observer.State.Slingshot.DrawCenter.position, observer.ItemRoot.rotation);
+                    if (!state.Slingshot) return false;
+                    basis = new Pose(state.Slingshot.DrawCenter.position, state.Slingshot.transform.rotation);
                     scale = item.WorldPrefab.transform.localScale; euler = null;
                 }
                 else if (group.Contains("ChargePose"))

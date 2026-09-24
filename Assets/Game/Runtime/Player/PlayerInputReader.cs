@@ -32,8 +32,18 @@ namespace TwoBirds
 #if UNITY_INCLUDE_INSTRUMENTATION
         internal System.Func<MoveInput> AutomatedInput;
 #endif
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        internal bool AuthoringFocus { get; set; }
+#if UNITY_INCLUDE_INSTRUMENTATION
+        private bool authoringFocus;
+        internal bool AuthoringFocus
+        {
+            get => authoringFocus;
+            set
+            {
+                if (authoringFocus == value) return;
+                authoringFocus = value;
+                RefreshInputPresentation();
+            }
+        }
         internal bool AuthoringCharge { get; private set; }
         internal void BeginAuthoringUse() { AuthoringCharge = true; equipment.BeginUse(); }
         internal void EndAuthoringUse(bool cancel = false)
@@ -53,7 +63,7 @@ namespace TwoBirds
                 if (inventoryOpen == value) return;
                 ClearContext();
                 inventoryOpen = value;
-                presentation?.SetGameplay(SessionInputAvailable);
+                RefreshInputPresentation();
             }
         }
         public bool SessionInputAvailable => gameplay && !InventoryOpen;
@@ -62,7 +72,7 @@ namespace TwoBirds
         public bool GiveUpHeld => SessionInputAvailable && health && health.IsDowned && !InputSuppressed && !giveUpBlocked && ButtonHeld(giveUp);
         public Vector2 CartMove => GameplayActive && !seating.TransitionPending ? movement : default;
         internal bool InputSuppressed =>
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             AuthoringFocus ||
 #endif
             presentation == null || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount;
@@ -115,7 +125,16 @@ namespace TwoBirds
             Clear();
             if (actions == null) return;
             if (gameplay) actions.Enable(); else actions.Disable();
-            presentation?.SetGameplay(SessionInputAvailable);
+            RefreshInputPresentation();
+        }
+
+        private void RefreshInputPresentation()
+        {
+            bool available = SessionInputAvailable;
+#if UNITY_INCLUDE_INSTRUMENTATION
+            available &= !AuthoringFocus;
+#endif
+            presentation?.SetGameplay(available);
         }
 
         private void ReadInput()
@@ -137,7 +156,7 @@ namespace TwoBirds
             if (giveUpBlocked && !ButtonHeld(giveUp)) giveUpBlocked = false;
             if (!SessionInputAvailable || InputSuppressed)
             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
                 if (AuthoringCharge && SessionInputAvailable) return;
 #endif
                 if (equipment.IsCharging || carry && carry.IsCharging) CancelUse();
@@ -197,7 +216,7 @@ namespace TwoBirds
 
         private void CancelUse()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             AuthoringCharge = false;
 #endif
             useBlocked = UseButtonHeld();

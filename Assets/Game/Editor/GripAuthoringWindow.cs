@@ -1,3 +1,4 @@
+#if UNITY_INCLUDE_INSTRUMENTATION
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -174,3 +175,4 @@ namespace TwoBirds.Editor
         }
     }
 }
+#endif

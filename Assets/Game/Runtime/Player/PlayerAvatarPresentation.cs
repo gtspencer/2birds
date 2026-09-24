@@ -153,7 +153,7 @@ namespace TwoBirds
             SessionController.Instance.Appearance.Commit(AvatarTattooPlacement.Transfer(
                 SessionController.Instance.Appearance.Committed, entry));
         }
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         public void RequestAuthoringAvatar(AvatarId id)
         {
             if (!IsOwner || !IsClientInitialized || !presentation.Registry.TryResolve(id, out var entry)) return;

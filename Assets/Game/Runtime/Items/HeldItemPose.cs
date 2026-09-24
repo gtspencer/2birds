@@ -86,11 +86,11 @@ namespace TwoBirds
             ReachLimited = requested.ReachLimited; Unreachable = requested.Unreachable;
         }
 
-        internal HeldItemPose(Pose root, Pose left, Pose right, in HeldItemBodyFrame body, bool heavy = true, Pose? requestedRight = null, Pose? requestedLeft = null, bool unreachable = false)
+        internal HeldItemPose(Pose root, Pose left, Pose right, in HeldItemBodyFrame body, bool heavy = true, Pose? requestedRight = null, Pose? requestedLeft = null, bool unreachable = false, bool limited = false)
         {
             Item = root; LeftPalm = left; Heavy = heavy;
             RequestedRight = requestedRight ?? right; RequestedLeft = requestedLeft ?? left;
-            ReachLimited = false; Unreachable = unreachable;
+            ReachLimited = limited; Unreachable = unreachable;
             FollowPosition = right.position; FollowRotation = right.rotation;
             WristRotation = right.rotation * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation);
             WristPosition = right.position - WristRotation * (body.Measurements.RightWristToPalmPosition * body.Scale);
@@ -220,7 +220,8 @@ namespace TwoBirds
             if (reachable) root.position = position;
             var resolved = FromItem(root, body, data);
             return new HeldItemPose(root, resolved.LeftPalm, new Pose(resolved.FollowPosition, resolved.FollowRotation), body,
-                requestedRight: requested.RequestedRight, requestedLeft: requested.LeftPalm, unreachable: !reachable);
+                requestedRight: requested.RequestedRight, requestedLeft: requested.LeftPalm, unreachable: !reachable,
+                limited: (root.position - requested.Item.position).sqrMagnitude > 0.000001f);
         }
 
         internal static Pose ToLocal(Pose pose, in HeldItemBodyFrame body) =>
@@ -318,8 +319,10 @@ namespace TwoBirds
             if (!firstPerson)
             {
                 Vector3 delta = result.WristPosition - body.Shoulder;
-                result = new HeldItemPose(result.FollowPosition + Vector3.ClampMagnitude(delta, body.ArmLength * 0.98f) - delta,
-                    result.WristRotation, body.Measurements, body.Scale, item);
+                Vector3 correction = Vector3.ClampMagnitude(delta, body.ArmLength * 0.98f) - delta;
+                result = new HeldItemPose(result.FollowPosition + correction,
+                    result.WristRotation, body.Measurements, body.Scale, item, result.RequestedRight,
+                    limited: correction.sqrMagnitude > 0.000001f);
             }
             reach = SlingshotReach(result, body, item);
             return result;

@@ -513,14 +513,16 @@ namespace TwoBirds
             }
             Pose evaluatedLeft = binding != null ? binding.Palm(false) : pose.LeftPalm;
             bool impossible = pose.Heavy && !HeavyItemPoseCalculation.Reach(pose.Item, lastBody, grip).TryProject(pose.Item.position, out _);
+            bool pulling = slingshot && CanShowHeldItem && (slingshot.Loaded || slingshot.LeftWeight > 0f);
+            Pose requestedLeft = slingshot ? new Pose(leftTarget.position, leftTarget.rotation) : pose.RequestedLeft;
             Readout = new GripReachReadout
             {
-                RequestedRight = pose.RequestedRight, RequestedLeft = slingshot ? new Pose(leftTarget.position, leftTarget.rotation) : pose.RequestedLeft,
+                RequestedRight = pose.RequestedRight, RequestedLeft = requestedLeft,
                 EvaluatedRight = palm, EvaluatedLeft = evaluatedLeft, ActiveBlend = Blending,
                 ReachLimited = pose.ReachLimited, ClearanceAdjusted = clearanceAdjusted,
-                RightUnreachable = !Blending && impossible && !InHandReach(new Pose(pose.FollowPosition, pose.FollowRotation), true),
-                LeftUnreachable = !Blending && impossible && !InHandReach(pose.LeftPalm, false),
-                HasLeft = pose.Heavy || slingshot && slingshot.LeftWeight > 0f
+                RightUnreachable = !Blending && (impossible || slingshot && CanShowHeldItem) && !InHandReach(pose.RequestedRight, true, effectiveReach),
+                LeftUnreachable = !Blending && (impossible || pulling) && !InHandReach(requestedLeft, false, pulling ? 0.85f : effectiveReach),
+                HasLeft = pose.Heavy || pulling
             };
             committed = new ReleaseSample { Item = selectedId, Generation = binding?.Generation ?? 0,
                 Palm = palm, LeftPalm = binding != null ? binding.Palm(false) : pose.LeftPalm,
@@ -529,13 +531,13 @@ namespace TwoBirds
             return clear && !pullNeedsCorrection;
         }
 
-        private bool InHandReach(Pose palm, bool right)
+        private bool InHandReach(Pose palm, bool right, float reach)
         {
             var data = lastBody.Measurements;
             var rotation = palm.rotation * Quaternion.Inverse(right ? data.RightWristToPalmRotation : data.LeftWristToPalmRotation);
             var wrist = palm.position - rotation * ((right ? data.RightWristToPalmPosition : data.LeftWristToPalmPosition) * lastBody.Scale);
             return Vector3.Distance(wrist, right ? lastBody.Shoulder : lastBody.LeftShoulder) <=
-                (right ? lastBody.ArmLength : lastBody.LeftArmLength) * effectiveReach + 0.001f;
+                (right ? lastBody.ArmLength : lastBody.LeftArmLength) * reach + 0.001f;
         }
 
         internal bool CorrectCommittedPose()
@@ -741,8 +743,13 @@ namespace TwoBirds
                     Pose frame = t >= 1f || !hasPose ? destination.Item : new Pose(Vector3.Lerp(start.position, destination.Item.position, heavyBlend),
                         Quaternion.Slerp(start.rotation, destination.Item.rotation, heavyBlend));
                     var reach = HeavyItemPoseCalculation.Reach(frame, body, data);
-                    if (reach.TryProject(frame.position, out var position)) frame.position = position;
-                    pose = HeldItemPoseCalculation.FromItem(frame, body, data);
+                    bool reachable = reach.TryProject(frame.position, out var position);
+                    bool limited = reachable && (position - frame.position).sqrMagnitude > 0.000001f;
+                    if (reachable) frame.position = position;
+                    var evaluated = HeldItemPoseCalculation.FromItem(frame, body, data);
+                    pose = new HeldItemPose(frame, evaluated.LeftPalm, new Pose(evaluated.FollowPosition, evaluated.FollowRotation), body,
+                        requestedRight: destination.RequestedRight, requestedLeft: destination.RequestedLeft,
+                        unreachable: destination.Unreachable || !reachable, limited: destination.ReachLimited || limited);
                 }
                 else
                 {

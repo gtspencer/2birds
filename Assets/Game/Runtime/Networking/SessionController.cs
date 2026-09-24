@@ -32,7 +32,7 @@ namespace TwoBirds
         public AvatarRegistry PresentationRegistryOverride { get; set; }
         public AvatarRegistry PresentationRegistry => PresentationRegistryOverride ? PresentationRegistryOverride : avatarRegistry;
         public string GameplayScene { get; private set; } = "Game";
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         private bool startingAuthoring;
         public void StartGripAuthoring()
         {
@@ -266,7 +266,7 @@ namespace TwoBirds
         public void StartSession(SessionMode mode, string address = "127.0.0.1", string portText = "7770")
         {
             if (Phase != SessionPhase.Idle) return;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             if (!startingAuthoring) GameplayScene = "Game";
 #endif
             bool local = LocalNetworking || mode == SessionMode.Solo;
@@ -574,7 +574,7 @@ namespace TwoBirds
             clientAttempts.Clear();
             Roster = Array.Empty<LobbyMember>();
             wireSession = 0;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
             GripAuthoringSession.End();
 #endif
             GameplayScene = "Game";

@@ -68,7 +68,7 @@ namespace TwoBirds
             itemRegistry = catalog;
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_INCLUDE_INSTRUMENTATION
         internal WorldItem SupplyAuthoringItem(byte definition, Vector3 position)
         {
             if (!worldReady || !IsHost || !GetDefinition(definition)) return null;
