@@ -86,11 +86,11 @@ namespace TwoBirds
             ReachLimited = requested.ReachLimited; Unreachable = requested.Unreachable;
         }
 
-        internal HeldItemPose(Pose root, Pose left, Pose right, in HeldItemBodyFrame body, bool heavy = true, Pose? requestedRight = null, Pose? requestedLeft = null, bool unreachable = false, bool limited = false)
+        internal HeldItemPose(Pose root, Pose left, Pose right, in HeldItemBodyFrame body, bool heavy = true, Pose? requestedRight = null, Pose? requestedLeft = null, bool unreachable = false)
         {
             Item = root; LeftPalm = left; Heavy = heavy;
             RequestedRight = requestedRight ?? right; RequestedLeft = requestedLeft ?? left;
-            ReachLimited = limited; Unreachable = unreachable;
+            ReachLimited = false; Unreachable = unreachable;
             FollowPosition = right.position; FollowRotation = right.rotation;
             WristRotation = right.rotation * Quaternion.Inverse(body.Measurements.RightWristToPalmRotation);
             WristPosition = right.position - WristRotation * (body.Measurements.RightWristToPalmPosition * body.Scale);
@@ -142,17 +142,12 @@ namespace TwoBirds
         internal readonly Quaternion Rotation;
         internal readonly float ArmLength, Scale;
         internal readonly AvatarSettings.GeneratedSkeleton Measurements;
-        private readonly Vector3 poseCenter;
-        private readonly float poseArmLength;
         internal HeldItemBodyFrame(Vector3 shoulder, Quaternion rotation, AvatarSettings.GeneratedSkeleton measurements, float scale,
-            Vector3? referenceCenter = null, float referenceArmLength = 0f, Vector3? leftShoulder = null)
+            Vector3? leftShoulder = null)
         {
             Shoulder = shoulder; Rotation = rotation; Measurements = measurements; Scale = scale;
             this.leftShoulder = leftShoulder ?? shoulder + rotation * ((measurements.LeftShoulder - measurements.RightShoulder) * scale);
             ArmLength = (measurements.RightArm.x + measurements.RightArm.y) * scale;
-            poseCenter = referenceCenter ?? shoulder + rotation * ((measurements.LeftShoulder - measurements.RightShoulder) * (scale * 0.5f));
-            poseArmLength = referenceArmLength > 0f ? referenceArmLength :
-                (ArmLength + (measurements.LeftArm.x + measurements.LeftArm.y) * scale) * 0.5f;
         }
         internal HeldItemBodyFrame(AvatarSettings settings, AvatarRegistry registry, in AvatarPresentationInput input, Quaternion torso, float seatedWeight, bool heavy = false)
         {
@@ -167,25 +162,22 @@ namespace TwoBirds
                 + Rotation * ((settings.Generated.RightShoulder - settings.Generated.Hips) * scale);
             Shoulder = Vector3.Lerp(standing, seated, seatedWeight);
             leftShoulder = Shoulder + Rotation * ((Measurements.LeftShoulder - Measurements.RightShoulder) * scale);
-            poseCenter = Shoulder + Rotation * ((Measurements.LeftShoulder - Measurements.RightShoulder) * (scale * 0.5f));
-            poseArmLength = (ArmLength + (Measurements.LeftArm.x + Measurements.LeftArm.y) * scale) * 0.5f;
         }
         internal Vector3 ToWorld(Vector3 position) => Shoulder + Rotation * (position * ArmLength);
         internal Vector3 ToLocal(Vector3 position) => Quaternion.Inverse(Rotation) * (position - Shoulder) / ArmLength;
         internal Vector3 LeftShoulder => leftShoulder;
         internal Vector3 Center => (Shoulder + LeftShoulder) * 0.5f;
         internal float LeftArmLength => (Measurements.LeftArm.x + Measurements.LeftArm.y) * Scale;
-        internal Vector3 CenterToWorld(Vector3 position) => poseCenter + Rotation * (position * poseArmLength);
-        internal Vector3 CenterToLocal(Vector3 position) => Quaternion.Inverse(Rotation) * (position - poseCenter) / poseArmLength;
+        internal Vector3 CenterToWorld(Vector3 position) => Center + Rotation * (position * ((ArmLength + LeftArmLength) * 0.5f));
+        internal Vector3 CenterToLocal(Vector3 position) => Quaternion.Inverse(Rotation) * (position - Center) / ((ArmLength + LeftArmLength) * 0.5f);
         internal HeldItemBodyFrame WithMeasurements(AvatarSettings.GeneratedSkeleton measurements, float scale) =>
-            new(Center + Rotation * ((measurements.RightShoulder - measurements.LeftShoulder) * (scale * 0.5f)), Rotation, measurements, scale,
-                poseCenter, poseArmLength);
-        internal HeldItemBodyFrame WithReference(in HeldItemBodyFrame reference) =>
-            new(Shoulder, Rotation, Measurements, Scale, reference.poseCenter, reference.poseArmLength, LeftShoulder);
+            new(Center + Rotation * ((measurements.RightShoulder - measurements.LeftShoulder) * (scale * 0.5f)), Rotation, measurements, scale);
     }
 
     internal static class HeavyItemPoseCalculation
     {
+        internal const float MaximumReach = 0.98f;
+
         internal static HeldItemPose FromItem(Pose root, in HeldItemBodyFrame body, in HeldItemPoseData data) =>
             new(root, HeldItemPoseCalculation.PalmFromItem(root, data.LeftContact, data.PrefabScale),
                 HeldItemPoseCalculation.PalmFromItem(root, data.RightContact, data.PrefabScale), body);
@@ -214,14 +206,9 @@ namespace TwoBirds
         {
             Quaternion orientation = body.Rotation * rotation * data.PrefabRotation;
             Pose root = new(body.CenterToWorld(center) - orientation * data.Sphere.Center, orientation);
-            var reach = Reach(root, body, data);
-            var requested = FromItem(root, body, data);
-            bool reachable = reach.TryProject(root.position, out var position);
-            if (reachable) root.position = position;
-            var resolved = FromItem(root, body, data);
-            return new HeldItemPose(root, resolved.LeftPalm, new Pose(resolved.FollowPosition, resolved.FollowRotation), body,
-                requestedRight: requested.RequestedRight, requestedLeft: requested.LeftPalm, unreachable: !reachable,
-                limited: (root.position - requested.Item.position).sqrMagnitude > 0.000001f);
+            var pose = FromItem(root, body, data);
+            return new HeldItemPose(root, pose.LeftPalm, new Pose(pose.FollowPosition, pose.FollowRotation), body,
+                unreachable: !InReach(pose, body, MaximumReach));
         }
 
         internal static Pose ToLocal(Pose pose, in HeldItemBodyFrame body) =>
@@ -257,12 +244,7 @@ namespace TwoBirds
             float reach = body.ArmLength * (effectiveReach > 0f ? effectiveReach : item.Reach);
             beyondReach = delta.sqrMagnitude > reach * reach;
             float distance = delta.magnitude;
-            float softStart = reach * 0.85f;
-            if (soften && distance > softStart)
-            {
-                float softRange = reach - softStart;
-                delta *= (softStart + softRange * (1f - Mathf.Exp(-(distance - softStart) / softRange))) / distance;
-            }
+            if (soften && distance > reach * 0.85f) delta *= AvatarArmIK.SoftReach(distance, reach) / distance;
             else delta = Vector3.ClampMagnitude(delta, reach);
             return new HeldItemPose(body.Shoulder + delta + offset, wrist, body.Measurements, body.Scale, item,
                 new Pose(follow, wrist * body.Measurements.RightWristToPalmRotation),

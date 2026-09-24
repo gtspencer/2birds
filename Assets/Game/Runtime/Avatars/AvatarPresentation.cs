@@ -52,6 +52,8 @@ namespace TwoBirds
             Quaternion rotation = right ? Measurements.RightWristToPalmRotation : Measurements.LeftWristToPalmRotation;
             return new Pose(wrist.position + wrist.rotation * (offset * Scale), wrist.rotation * rotation);
         }
+        internal Pose Body => new((GetBone(HumanBodyBones.LeftUpperArm).position + GetBone(HumanBodyBones.RightUpperArm).position) * 0.5f,
+            Animator.transform.rotation);
     }
 
     public sealed class AvatarPresentation : MonoBehaviour
@@ -293,22 +295,6 @@ namespace TwoBirds
                 candidate.Evaluate(0f, true);
             }
             catch (Exception exception) { PreparationFailed(exception); }
-        }
-
-        internal void CorrectHands()
-        {
-            if (Physical || !HandDependency) return;
-            if (active)
-            {
-                PreparingHands?.Invoke(active.Binding, 0f);
-                active.CorrectHands();
-                HandsEvaluated?.Invoke(active.Binding);
-            }
-            if (candidate && candidate.Initialized)
-            {
-                PreparingHands?.Invoke(candidate.Binding, 0f);
-                candidate.CorrectHands();
-            }
         }
 
         internal void Commit()

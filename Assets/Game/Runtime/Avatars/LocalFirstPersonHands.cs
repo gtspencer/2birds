@@ -10,13 +10,11 @@ namespace TwoBirds
         private Animator animator;
         private PlayableGraph graph;
         private AvatarFingerLayers fingers;
-        private AvatarHandIK ik;
+        private AvatarArmIK arms;
         private AvatarHandTargets targets;
         private Renderer[] renderers;
         private bool[] rendererStates;
         private Vector3 shoulderCenter;
-        private float deltaTime;
-        private bool evaluating, applied;
         internal AvatarBinding Binding { get; private set; }
         internal HeldItemBodyFrame BodyFrame => new(Binding.GetBone(HumanBodyBones.RightUpperArm).position,
             transform.rotation, Binding.Measurements, Binding.Scale,
@@ -41,20 +39,19 @@ namespace TwoBirds
             graph = PlayableGraph.Create("Local hands");
             graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
             var basis = AnimationClipPlayable.Create(graph, clips.Idle);
-            basis.SetSpeed(0); basis.SetTime(0); basis.SetApplyPlayableIK(true); basis.SetApplyFootIK(false);
+            basis.SetSpeed(0); basis.SetTime(0); basis.SetApplyPlayableIK(false); basis.SetApplyFootIK(false);
             fingers = new AvatarFingerLayers(graph, basis);
             var output = AnimationPlayableOutput.Create(graph, "Hands", animator);
             output.SetSourcePlayable(fingers.Output);
             graph.Play(); graph.Evaluate(0f);
             shoulderCenter = transform.InverseTransformPoint((bones[(int)HumanBodyBones.LeftUpperArm].position +
                 bones[(int)HumanBodyBones.RightUpperArm].position) * 0.5f);
-            ik = new AvatarHandIK(Binding);
+            arms = new AvatarArmIK(Binding);
         }
 
         internal void RefreshMeasurements()
         {
             Binding.RefreshMeasurements(); transform.localScale = Vector3.one * Binding.Scale;
-            ik = new AvatarHandIK(Binding);
         }
 
         internal void Place(Pose frame, Vector3 offset, float heavyWeight = 0f)
@@ -69,15 +66,8 @@ namespace TwoBirds
             fingers.Select(false, left.Fingers ? left.Fingers : clips.RelaxedFingers, clips.OpenFingers, left.OpenWeight);
             fingers.Select(true, right.Fingers ? right.Fingers : clips.RelaxedFingers, clips.OpenFingers, right.OpenWeight);
             fingers.Advance(dt);
-            deltaTime = dt; applied = false; evaluating = true;
-            try { graph.Evaluate(0f); }
-            finally { evaluating = false; }
-        }
-
-        private void OnAnimatorIK(int layer)
-        {
-            if (!evaluating || applied || layer != 0) return;
-            applied = true; ik.Apply(targets, deltaTime);
+            graph.Evaluate(0f);
+            arms.Solve(targets, dt);
         }
 
         internal void SetVisible(bool visible)

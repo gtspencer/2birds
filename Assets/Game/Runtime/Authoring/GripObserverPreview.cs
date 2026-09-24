@@ -65,7 +65,7 @@ namespace TwoBirds
             var frame = new HeldItemBodyFrame(binding.GetBone(HumanBodyBones.RightUpperArm).position,
                 binding.Animator.transform.rotation, binding.Measurements, binding.Scale,
                 leftShoulder: binding.GetBone(HumanBodyBones.LeftUpperArm).position);
-            if (State.HeavyFrameWeight > 0f) frame = frame.WithReference(State.HeavyBody(binding.Settings));
+            presentation.HandTargets.SetBody(binding.Body);
             if (presentation.Binding != null && presentation.Binding != binding) State.PrepareCandidate(binding, frame);
             else State.PrepareHands(binding, frame);
             if (visual) visual.SetActive(State.CanShowHeldItem);

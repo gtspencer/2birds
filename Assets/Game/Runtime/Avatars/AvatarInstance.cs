@@ -13,6 +13,7 @@ namespace TwoBirds
         private Vrm10Runtime runtime;
         private AvatarAnimationGraph graph;
         private AvatarHumanoidIK ik;
+        private AvatarArmIK arms;
         private Renderer[] renderers;
         private bool[] rendererStates;
         private bool released, springsRegistered, evaluating, resetRequested;
@@ -87,6 +88,7 @@ namespace TwoBirds
             graph.SampleSeated();
             seatedHips = transform.InverseTransformPoint(Binding.GetBone(HumanBodyBones.Hips).position);
             ik = new AvatarHumanoidIK(host, Binding);
+            arms = new AvatarArmIK(Binding);
             if (editorPoseHandler != null) editorPoseHandler.SetHumanPose(ref editorPose);
             Initialized = true;
             ApplyFeatures();
@@ -130,6 +132,7 @@ namespace TwoBirds
             ik.DeltaTime = dt;
             try { graph.Evaluate(host.State); }
             finally { evaluating = false; }
+            using (AvatarPresentationSystem.IkMarker.Auto()) arms.Solve(host.HandTargets, dt);
             if (host.EditorPreview && host.HeadLookEnabled) ApplyEditorHeadLook();
             using (AvatarPresentationSystem.VrmMarker.Auto())
             {
@@ -145,11 +148,6 @@ namespace TwoBirds
             float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -45f, 45f);
             float pitch = Mathf.Clamp(-Mathf.Atan2(local.y, new Vector2(local.x, local.z).magnitude) * Mathf.Rad2Deg, -25f, 25f);
             Head.rotation = transform.rotation * Quaternion.Euler(pitch, yaw, 0) * Quaternion.Inverse(transform.rotation) * Head.rotation;
-        }
-
-        internal void CorrectHands()
-        {
-            if (!physical && Initialized && host.AnimationEnabled) ik.CorrectHands();
         }
 
         private void OnAnimatorIK(int layerIndex)

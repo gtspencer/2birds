@@ -393,7 +393,7 @@ namespace TwoBirds
                 var fingers = action.State == ItemActionState.Recovering ? clips.OpenFingers :
                     definition && definition.GripFingers ? definition.GripFingers : clips.GripFingers;
                 avatar.HandTargets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget,
-                    leftWeight, leftWeight, effectiveReach, fingers);
+                    leftWeight, leftWeight, HeavyItemPoseCalculation.MaximumReach, fingers, bodyRelative: true);
                 return;
             }
             if (!slingshot || !CanShowHeldItem) { ClearLeftTarget(); return; }
@@ -406,7 +406,7 @@ namespace TwoBirds
             leftTarget.SetPositionAndRotation(palm.position, palm.rotation);
             if (slingshot.LeftWeight <= 0f) { ClearLeftTarget(); return; }
             avatar.HandTargets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget,
-                slingshot.LeftWeight, slingshot.LeftWeight, 0.85f, avatar.Registry.Animations.GripFingers);
+                slingshot.LeftWeight, slingshot.LeftWeight, 0.85f, avatar.Registry.Animations.GripFingers, bodyRelative: true);
         }
 
         private void ClearLeftTarget() => avatar.HandTargets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
@@ -463,12 +463,7 @@ namespace TwoBirds
             float reach = effectiveReach > 0f ? effectiveReach : data.Reach;
             HeldItemPose sample;
             if (data.Heavy && pose.Heavy)
-            {
-                var frame = pose.Item;
-                var constraint = HeavyItemPoseCalculation.Reach(frame, body, data);
-                if (constraint.TryProject(frame.position, out var position)) frame.position = position;
-                sample = HeldItemPoseCalculation.FromItem(frame, body, data);
-            }
+                sample = HeldItemPoseCalculation.FromItem(pose.Item, body, data);
             else if (action.State == ItemActionState.Charging)
                 sample = ChargePose(body, binding.Settings, data, ChargeProgress(age), chargeFromBlend, out reach);
             else if (pose.Heavy)
@@ -493,7 +488,8 @@ namespace TwoBirds
             if (!running || !hasPose) return true;
             Pose palm = binding != null ? binding.Palm(true) : new(pose.FollowPosition, pose.FollowRotation);
             var grip = action.State == ItemActionState.Charging ? actionData : selectedData;
-            Pose itemPose = grip.Heavy ? pose.Item : HeldItemPoseCalculation.ItemFromPalm(palm, grip.RightContact, grip.PrefabScale);
+            Pose itemPose = !grip.Heavy ? HeldItemPoseCalculation.ItemFromPalm(palm, grip.RightContact, grip.PrefabScale) :
+                binding != null ? AvatarHandTargets.Rebase(pose.Item, new Pose(lastBody.Center, lastBody.Rotation), binding.Body) : pose.Item;
             fallback.SetPositionAndRotation(grip.Heavy ? itemPose.position : palm.position, grip.Heavy ? itemPose.rotation : palm.rotation);
             bool clear = true;
             if (selectedId != 0 && CanShowHeldItem)
@@ -512,7 +508,7 @@ namespace TwoBirds
                 }
             }
             Pose evaluatedLeft = binding != null ? binding.Palm(false) : pose.LeftPalm;
-            bool impossible = pose.Heavy && !HeavyItemPoseCalculation.Reach(pose.Item, lastBody, grip).TryProject(pose.Item.position, out _);
+            bool impossible = pose.Heavy && !HeavyItemPoseCalculation.InReach(pose, lastBody, HeavyItemPoseCalculation.MaximumReach);
             bool pulling = slingshot && CanShowHeldItem && (slingshot.Loaded || slingshot.LeftWeight > 0f);
             Pose requestedLeft = slingshot ? new Pose(leftTarget.position, leftTarget.rotation) : pose.RequestedLeft;
             Readout = new GripReachReadout
@@ -520,8 +516,10 @@ namespace TwoBirds
                 RequestedRight = pose.RequestedRight, RequestedLeft = requestedLeft,
                 EvaluatedRight = palm, EvaluatedLeft = evaluatedLeft, ActiveBlend = Blending,
                 ReachLimited = pose.ReachLimited, ClearanceAdjusted = clearanceAdjusted,
-                RightUnreachable = !Blending && (impossible || slingshot && CanShowHeldItem) && !InHandReach(pose.RequestedRight, true, effectiveReach),
-                LeftUnreachable = !Blending && (impossible || pulling) && !InHandReach(requestedLeft, false, pulling ? 0.85f : effectiveReach),
+                RightUnreachable = !Blending && (impossible || slingshot && CanShowHeldItem) &&
+                    !InHandReach(pose.RequestedRight, true, pose.Heavy ? HeavyItemPoseCalculation.MaximumReach : effectiveReach),
+                LeftUnreachable = !Blending && (impossible || pulling) &&
+                    !InHandReach(requestedLeft, false, pulling ? 0.85f : pose.Heavy ? HeavyItemPoseCalculation.MaximumReach : effectiveReach),
                 HasLeft = pose.Heavy || pulling
             };
             committed = new ReleaseSample { Item = selectedId, Generation = binding?.Generation ?? 0,
@@ -742,14 +740,10 @@ namespace TwoBirds
                     var start = HeavyItemPoseCalculation.ToWorld(returnItem, body);
                     Pose frame = t >= 1f || !hasPose ? destination.Item : new Pose(Vector3.Lerp(start.position, destination.Item.position, heavyBlend),
                         Quaternion.Slerp(start.rotation, destination.Item.rotation, heavyBlend));
-                    var reach = HeavyItemPoseCalculation.Reach(frame, body, data);
-                    bool reachable = reach.TryProject(frame.position, out var position);
-                    bool limited = reachable && (position - frame.position).sqrMagnitude > 0.000001f;
-                    if (reachable) frame.position = position;
                     var evaluated = HeldItemPoseCalculation.FromItem(frame, body, data);
                     pose = new HeldItemPose(frame, evaluated.LeftPalm, new Pose(evaluated.FollowPosition, evaluated.FollowRotation), body,
                         requestedRight: destination.RequestedRight, requestedLeft: destination.RequestedLeft,
-                        unreachable: destination.Unreachable || !reachable, limited: destination.ReachLimited || limited);
+                        unreachable: destination.Unreachable);
                 }
                 else
                 {
@@ -797,8 +791,8 @@ namespace TwoBirds
             if (pose.Heavy)
                 TwoHandHoldPresentation.Submit(avatar.HandTargets, AvatarHandSource.Item, leftTarget, target,
                     new Pose(leftTarget.position, leftTarget.rotation), new Pose(target.position, target.rotation),
-                    leftWeight, weight, reach, fingers);
-            else avatar.HandTargets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, reach, fingers);
+                    leftWeight, weight, HeavyItemPoseCalculation.MaximumReach, fingers);
+            else avatar.HandTargets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, weight, weight, reach, fingers, bodyRelative: true);
             targetInstalled = true;
         }
         private void ClearTarget()

@@ -19,11 +19,11 @@ namespace TwoBirds
         internal ItemReleaseReach(Vector3 first, float firstRadius, Vector3 second, float secondRadius, bool valid)
         { this.first = first; this.second = second; this.firstRadius = firstRadius; this.secondRadius = secondRadius; dual = true; this.valid = valid; }
         internal bool Contains(Vector3 point) => valid &&
-            (point - first).sqrMagnitude <= firstRadius * firstRadius + 0.000001f &&
-            (!dual || (point - second).sqrMagnitude <= secondRadius * secondRadius + 0.000001f);
+            (point - first).sqrMagnitude <= firstRadius * firstRadius * (1f + 1e-4f) &&
+            (!dual || (point - second).sqrMagnitude <= secondRadius * secondRadius * (1f + 1e-4f));
         internal bool Dual => dual;
 
-        internal bool TryProject(Vector3 point, out Vector3 result)
+        internal bool TryProject(Vector3 point, Vector3 forward, out Vector3 result)
         {
             result = point;
             if (!valid) return false;
@@ -40,7 +40,8 @@ namespace TwoBirds
             float radius = Mathf.Sqrt(Mathf.Max(0f, firstRadius * firstRadius - along * along));
             Vector3 center = first + axis * along;
             Vector3 radial = Vector3.ProjectOnPlane(point - center, axis);
-            if (radial.sqrMagnitude < 0.000001f) radial = Vector3.Cross(axis, Mathf.Abs(axis.y) < 0.9f ? Vector3.up : Vector3.right);
+            if (radial.sqrMagnitude < 0.000001f) radial = Vector3.ProjectOnPlane(forward, axis);
+            if (radial.sqrMagnitude < 0.000001f) radial = Vector3.ProjectOnPlane(Vector3.up, axis);
             result = center + radial.normalized * radius;
             return Contains(result);
         }
@@ -119,7 +120,7 @@ namespace TwoBirds
 
             float nearest = float.PositiveInfinity;
             Vector3 best = default, route = desired.position - anchor;
-            if (reach.HasValue && reach.Value.TryProject(desired.position - centerOffset, out var projected)) Consider(projected + centerOffset);
+            if (reach.HasValue && reach.Value.TryProject(desired.position - centerOffset, forward, out var projected)) Consider(projected + centerOffset);
             if (route.sqrMagnitude > 0f && Physics.SphereCast(anchor, radius, route.normalized, out var hit,
                 route.magnitude, environmentMask, QueryTriggerInteraction.Ignore))
                 Consider(anchor + route.normalized * Mathf.Max(0f, hit.distance - Padding));
@@ -144,7 +145,7 @@ namespace TwoBirds
             {
                 if (reach.HasValue && reach.Value.Dual && !Reachable(candidate))
                 {
-                    if (!reach.Value.TryProject(candidate - centerOffset, out var position)) return;
+                    if (!reach.Value.TryProject(candidate - centerOffset, forward, out var position)) return;
                     candidate = position + centerOffset;
                 }
                 float distance = (candidate - desired.position).sqrMagnitude;

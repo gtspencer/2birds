@@ -119,9 +119,10 @@ namespace TwoBirds
         {
             leftTarget.SetPositionAndRotation(left.position, left.rotation);
             rightTarget.SetPositionAndRotation(right.position, right.rotation);
-            if (leftWeight > 0f) targets.Set(AvatarIKGoal.LeftHand, source, leftTarget, leftWeight, leftWeight, reach, fingers);
+            bool bodyRelative = source == AvatarHandSource.Item;
+            if (leftWeight > 0f) targets.Set(AvatarIKGoal.LeftHand, source, leftTarget, leftWeight, leftWeight, reach, fingers, bodyRelative: bodyRelative);
             else targets.Clear(AvatarIKGoal.LeftHand, source);
-            if (rightWeight > 0f) targets.Set(AvatarIKGoal.RightHand, source, rightTarget, rightWeight, rightWeight, reach, fingers);
+            if (rightWeight > 0f) targets.Set(AvatarIKGoal.RightHand, source, rightTarget, rightWeight, rightWeight, reach, fingers, bodyRelative: bodyRelative);
             else targets.Clear(AvatarIKGoal.RightHand, source);
         }
 

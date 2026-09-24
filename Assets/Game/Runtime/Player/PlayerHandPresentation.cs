@@ -365,7 +365,7 @@ namespace TwoBirds
             var body = new HeldItemBodyFrame(binding.GetBone(HumanBodyBones.RightUpperArm).position,
                 binding.Animator.transform.rotation, binding.Measurements, binding.Scale,
                 leftShoulder: binding.GetBone(HumanBodyBones.LeftUpperArm).position);
-            if (HeavyFrameWeight > 0f) body = body.WithReference(HeavyBody(binding.Settings));
+            avatar.HandTargets.SetBody(binding.Body);
             if (avatar.Binding != null && binding != avatar.Binding) held.PrepareCandidate(binding, body);
             else held.PrepareHands(binding, body);
             PrepareCarry(binding, body);
@@ -379,7 +379,7 @@ namespace TwoBirds
 
         internal bool TryBody(out HeldItemBodyFrame body)
         {
-            if (active) { body = BodyFor(active); return true; }
+            if (active) { body = active.BodyFrame; return true; }
             var settings = avatar.Resolved?.Settings;
             if (!settings) { body = default; return false; }
             var data = AvatarPalmCalibration.Measurements(settings, settings.FirstPersonGenerated.FormatVersion == AvatarSettings.CurrentFormatVersion);
@@ -396,9 +396,6 @@ namespace TwoBirds
             }
             return true;
         }
-
-        private HeldItemBodyFrame BodyFor(LocalFirstPersonHands rig) => HeavyFrameWeight >= 1f
-            ? rig.BodyFrame.WithReference(HeavyBody(rig.Binding.Settings)) : rig.BodyFrame;
 
         private void LateUpdate()
         {
@@ -429,9 +426,10 @@ namespace TwoBirds
                         candidate = Instantiate(entry.FirstPersonPrefab).GetComponent<LocalFirstPersonHands>();
                         candidate.Initialize(entry, avatar.Registry.Animations, avatar.HandTargets, ++generation);
                         Place(candidate, 0f);
+                        avatar.HandTargets.SetBody(candidate.Binding.Body);
                         FreeHands(candidate, 0f); Contacts(0f, candidate.Binding.Settings);
-                        held.PrepareHands(candidate.Binding, BodyFor(candidate));
-                        PrepareCarry(candidate.Binding, BodyFor(candidate));
+                        held.PrepareHands(candidate.Binding, candidate.BodyFrame);
+                        PrepareCarry(candidate.Binding, candidate.BodyFrame);
                         candidate.Evaluate(0f, avatar.Registry.Animations);
                         var nextCosmetics = new AvatarCosmeticPresentation(candidate.Binding,
                             SessionController.Instance.Hats, SessionController.Instance.Tattoos, true);
@@ -452,6 +450,7 @@ namespace TwoBirds
             }
             Contacts(dt, active ? active.Binding.Settings : avatar.Resolved?.Settings);
             if (active) { Place(active, dt); FreeHands(active, dt); }
+            if (active) avatar.HandTargets.SetBody(active.Binding.Body);
             held.PrepareHands(active ? active.Binding : null, TryBody(out var body) ? body : null);
             if (TryBody(out var carryFrame)) PrepareCarry(active ? active.Binding : null, carryFrame);
             if (active) active.Evaluate(dt, avatar.Registry.Animations);

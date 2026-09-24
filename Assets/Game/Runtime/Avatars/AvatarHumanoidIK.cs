@@ -16,7 +16,6 @@ namespace TwoBirds
         private readonly AvatarSettings settings;
         private readonly Animator animator;
         private readonly Transform head;
-        private readonly AvatarHandIK hands;
         private Foot left, right;
         private float groundedWeight, pelvis;
         private Vector3 lookDirection;
@@ -30,7 +29,6 @@ namespace TwoBirds
             this.host = host; settings = binding.Settings; animator = binding.Animator;
             height = settings.VisualHeight;
             head = binding.GetBone(HumanBodyBones.Head);
-            hands = new AvatarHandIK(binding);
             var data = settings.Generated;
             left = new Foot { Goal = AvatarIKGoal.LeftFoot, Hip = binding.GetBone(HumanBodyBones.LeftUpperLeg),
                 Length = (data.LeftLeg.x + data.LeftLeg.y) * settings.Scale, Offset = data.LeftSoleToGoal * settings.Scale,
@@ -42,8 +40,6 @@ namespace TwoBirds
                 Adjustment = settings.RightSoleAdjustment, AuthoredRotation = settings.RightFootRotation };
             Reset();
         }
-
-        internal void CorrectHands() => hands.CorrectCarry(host.HandTargets);
 
         internal void Reset()
         {
@@ -81,7 +77,6 @@ namespace TwoBirds
                 ApplyFoot(ref left, shift); ApplyFoot(ref right, shift);
             }
             ApplyHead();
-            hands.Apply(host.HandTargets, DeltaTime);
         }
 
         private void Calibrate(ref Foot foot)

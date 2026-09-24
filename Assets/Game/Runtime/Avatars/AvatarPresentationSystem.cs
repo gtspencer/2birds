@@ -93,12 +93,6 @@ namespace TwoBirds
                 try { host.Commit(); }
                 catch (Exception exception) { host.PresentationFailed(exception); }
             }
-            foreach (var host in evaluationOrder)
-            {
-                if (!host || host.Failed || !host.HandDependency) continue;
-                try { host.CorrectHands(); }
-                catch (Exception exception) { host.PresentationFailed(exception); }
-            }
         }
 
         private void OnDisable() => AvatarSpringBatch.Flush();

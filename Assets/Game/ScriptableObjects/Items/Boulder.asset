@@ -38,7 +38,7 @@ MonoBehaviour:
     ChargedWristEuler: {x: 0, y: 0, z: 0}
   GripFingers: {fileID: 0}
   HandPose:
-    HoldPosition: {x: 0, y: -1.0917461, z: 1.0443505}
+    HoldPosition: {x: 0, y: -0.7, z: 0.3}
     HoldWristEuler: {x: -0, y: 0, z: 0}
     ChargeControlPosition: {x: 0, y: 0.1, z: 0.7}
     ChargedPosition: {x: 0, y: 0.6, z: 0.25}
