@@ -19,9 +19,9 @@ namespace TwoBirds
             predictionManager.OnPostReconcile += EffectsAfterReconcile;
             GolfCartNetwork.LifetimeChanged += CartEffectLifetimeChanged;
             network.ClientManager.RegisterBroadcast<CraftingTransition>(ReceiveCrafting);
-            network.ServerManager.RegisterBroadcast<PotionContact>(ReceivePotionContact);
+            network.ServerManager.RegisterBroadcast<ItemContact>(ReceiveItemContact);
             network.ClientManager.RegisterBroadcast<PotionDoseMessage>(ReceiveDose);
-            network.ClientManager.RegisterBroadcast<PotionContactResult>(ContactResolved);
+            network.ClientManager.RegisterBroadcast<ItemContactResult>(ContactResolved);
             network.ServerManager.RegisterBroadcast<PotionDoseMessage>(AcceptDose);
         }
         private void UnregisterCraftingMessages()
@@ -29,9 +29,9 @@ namespace TwoBirds
             predictionManager.OnPostReconcile -= EffectsAfterReconcile;
             GolfCartNetwork.LifetimeChanged -= CartEffectLifetimeChanged;
             network.ClientManager.UnregisterBroadcast<CraftingTransition>(ReceiveCrafting);
-            network.ServerManager.UnregisterBroadcast<PotionContact>(ReceivePotionContact);
+            network.ServerManager.UnregisterBroadcast<ItemContact>(ReceiveItemContact);
             network.ClientManager.UnregisterBroadcast<PotionDoseMessage>(ReceiveDose);
-            network.ClientManager.UnregisterBroadcast<PotionContactResult>(ContactResolved);
+            network.ClientManager.UnregisterBroadcast<ItemContactResult>(ContactResolved);
             network.ServerManager.UnregisterBroadcast<PotionDoseMessage>(AcceptDose);
         }
         private void BeginCraftingWorld()
@@ -95,6 +95,7 @@ namespace TwoBirds
             BirdRegistry.Instance?.CompleteRelease(item);
             item.State = WorldItemState.Removed;
             item.Armed = false;
+            item.SplatArmed = false;
             item.Motion.Revision++;
             item.Motion.Tick = ServerTick;
             return item;
@@ -130,8 +131,8 @@ namespace TwoBirds
             GameObject predictedCloud = null;
             if (transition.HasActivation)
             {
-                var source = transition.Activation;
-                predictedClouds.Remove((source.SourceItem, source.Player, source.Operation), out predictedCloud);
+                var activation = transition.Activation;
+                predictedClouds.Remove((activation.SourceItem, activation.Player, activation.Operation), out predictedCloud);
             }
             Cauldron changed = null;
             if (transition.HasCauldron)
@@ -143,8 +144,25 @@ namespace TwoBirds
                     cauldrons.TryGetValue(state.Id, out changed);
                 }
             }
-            if (transition.HasActivation && LocalInventory && items.TryGetValue(transition.Activation.SourceItem, out var bottle))
-                bottle.SamplePlayerContact(LocalInventory.Hitbox);
+            uint sourceItem = transition.HasActivation ? transition.Activation.SourceItem : transition.HasSplat ? transition.Splat.Item : 0;
+            if (sourceItem != 0 && transition.Items != null &&
+                transition.Items.Exists(item => item.Motion.Id == sourceItem && item.State == WorldItemState.Removed) &&
+                LocalInventory && items.TryGetValue(sourceItem, out var source))
+            {
+                samplingAcceptedContact = true;
+                try
+                {
+                    source.SamplePlayerContact(LocalInventory.Hitbox);
+                    if (transition.HasSplat && splatAttachment.Resolve(transition.Splat.Target, out var target, out var owner))
+                    {
+                        TrackSplatOwner(owner);
+                        if (target) source.SampleSplatRemoval(LocalInventory.Hitbox, target.TransformPoint(transition.Splat.Point),
+                            target.rotation * transition.Splat.Rotation * Vector3.back);
+                    }
+                }
+                finally { samplingAcceptedContact = false; }
+            }
+            if (transition.HasSplat && !transition.Snapshot) AcceptSplat(transition.Splat);
             if (transition.Items != null) ApplyLifecycle(transition.Items);
             if (changed)
             {
@@ -156,6 +174,7 @@ namespace TwoBirds
         private void StepCrafting()
         {
             while (deferredFeatures.Count > 0) ApplyFeature(deferredFeatures.Dequeue());
+            while (deferredContactResults.Count > 0) ContactResolved(deferredContactResults.Dequeue(), Channel.Reliable);
             StepAreas();
             if (!IsHost) return;
             cauldronSteps.Clear();
@@ -211,7 +230,7 @@ namespace TwoBirds
         {
             foreach (var area in areas.Values) if (area) Destroy(area.gameObject);
             foreach (var cloud in predictedClouds.Values) if (cloud) Destroy(cloud);
-            predictedClouds.Clear(); deferredDoses.Clear(); reseedAreas = false;
+            predictedClouds.Clear(); deferredDoses.Clear(); deferredContactResults.Clear(); reseedAreas = false;
             areas.Clear(); activations.Clear(); doses.Clear(); contacts.Clear(); deferredFeatures.Clear();
             mixtures.Clear(); cauldrons.Clear(); cauldronSteps.Clear(); nextEffectId = 0;
         }

@@ -17,6 +17,15 @@ namespace TwoBirds
         internal BirdSpecies Species(ushort id) => species[id];
         internal float MaximumScareRadius { get; private set; }
 
+        internal bool TryGetSplatView(uint life, out BirdView view) => views.TryGetValue(life, out view) && view;
+        internal bool TryGetSplatBird(Collider collider, out uint life, out BirdView view)
+        {
+            view = null;
+            if (!shapeLives.TryGetValue(collider.GetEntityId(), out life)) return false;
+            views.TryGetValue(life, out view);
+            return true;
+        }
+
         private void Present(double now)
         {
             var player = SessionController.Instance.LocalPlayer;
@@ -50,6 +59,7 @@ namespace TwoBirds
         private void ReturnView(uint life)
         {
             if (!views.Remove(life, out var view)) return;
+            SplatTargetLifetime.Invalidate(view.transform);
             ushort id = viewSpecies[life]; viewSpecies.Remove(life); view.Return();
             if (pooledViews >= 64) { Destroy(view.gameObject); return; }
             if (!viewPools.TryGetValue(id, out var pool)) viewPools.Add(id, pool = new Stack<BirdView>());

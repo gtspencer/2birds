@@ -127,6 +127,7 @@ namespace TwoBirds
         public void BeginWorld(Scene scene)
         {
             worldScene = scene;
+            BeginSplatWorld(scene);
             sessionId = SessionController.Instance.SessionId;
             epoch = (uint)Random.Range(1, int.MaxValue);
             worldReady = true;
@@ -175,6 +176,7 @@ namespace TwoBirds
         {
             if (IsHost) return;
             worldScene = scene;
+            BeginSplatWorld(scene);
             sessionId = SessionController.Instance.SessionId;
             worldReady = true;
             foreach (var seed in FindObjectsByType<BakedPickup>())
@@ -230,13 +232,14 @@ namespace TwoBirds
 
         private void ApplyLifecycle(List<ItemRecord> changes)
         {
-            foreach (var record in changes)
+            foreach (var incoming in changes)
             {
+                var record = PreserveSplatConsumption(incoming);
                 uint id = record.Motion.Id;
                 if (records.TryGetValue(id, out var previous) && !Newer(record.Motion, previous.Motion)) continue;
                 records[id] = record;
                 pendingCartContacts.Remove(id);
-                if (record.State == WorldItemState.Held) ClearPredictedClouds(id);
+                if (record.State == WorldItemState.Held) { ClearPredictedClouds(id); CancelItemContacts(id); }
                 if (record.State == WorldItemState.Removed)
                 {
                     Pool(id);
@@ -315,6 +318,7 @@ namespace TwoBirds
 
         internal void UnregisterPlayer(PlayerInventory player)
         {
+            SplatTargetLifetime.Invalidate(player.transform);
             BirdRegistry.Instance?.UnregisterPlayer(player);
             cleanup.Clear();
             foreach (var record in records.Values)
@@ -469,12 +473,14 @@ namespace TwoBirds
 
         internal void SetHeld(uint id, PlayerInventory holder, bool equipped)
         {
+            CancelItemContacts(id);
             var record = records[id];
             int previousHolder = record.State == WorldItemState.Held ? record.Holder : -1;
             BirdRegistry.Instance?.CompleteRelease(record);
             record.Motion = items[id].Capture(ServerTick);
             record.Motion.Revision++;
             record.Armed = false;
+            record.SplatArmed = false;
             record.Cauldron = -1;
             record.State = WorldItemState.Held;
             record.Holder = holder.ObjectId;
@@ -511,6 +517,7 @@ namespace TwoBirds
             record.Motion = motion;
             record.State = WorldItemState.World;
             record.Armed = intent == ItemReleaseIntent.Throw && itemRegistry.Get(record.DefinitionId) is PotionDefinition;
+            record.SplatArmed = intent == ItemReleaseIntent.Throw && itemRegistry.Get(record.DefinitionId).CanSpawnSplat;
             record.Sleeping = false;
             record.Holder = -1;
             record.Releaser = player.ObjectId;
@@ -545,6 +552,7 @@ namespace TwoBirds
             record.Equipped = false;
             record.Sleeping = false;
             record.Armed = intent == ItemReleaseIntent.Throw && itemRegistry.Get(record.DefinitionId) is PotionDefinition;
+            record.SplatArmed = intent == ItemReleaseIntent.Throw && itemRegistry.Get(record.DefinitionId).CanSpawnSplat;
             record.Cauldron = -1;
             record.Releaser = releaser;
             record.Operation = operation;
@@ -563,7 +571,7 @@ namespace TwoBirds
         {
             if (pendingReleases.TryGetValue(id, out uint pending) && pending != operation) return;
             pendingReleases.Remove(id);
-            contacts.Remove(id);
+            CancelItemContacts(id);
             if (items.TryGetValue(id, out var item) && records.TryGetValue(id, out var record))
             {
                 int previousHolder = item.Record.State == WorldItemState.Held ? item.Record.Holder : -1;
@@ -577,6 +585,7 @@ namespace TwoBirds
             if (!IsHost || !records.TryGetValue(id, out var record) || record.State == WorldItemState.Removed) return;
             BirdRegistry.Instance?.CompleteRelease(record);
             record.Armed = false;
+            record.SplatArmed = false;
             record.State = WorldItemState.Removed;
             record.Motion.Revision++;
             record.Motion.Tick = ServerTick;
@@ -621,7 +630,7 @@ namespace TwoBirds
                 item.SampleBirdContacts();
                 if (!IsHost || !item.Simulating) item.SamplePlayerContact(victim);
             }
-            FlushPotionContacts();
+            FlushItemContacts();
             Pebbles.Present(victim);
         }
 
@@ -665,7 +674,7 @@ namespace TwoBirds
             ClearPredictedClouds(id);
             pendingReleases.Remove(id);
             pendingCartContacts.Remove(id);
-            contacts.Remove(id);
+            CancelItemContacts(id);
             if (!items.Remove(id, out var item) || item == null) return;
             if (item.Definition == null)
             {
@@ -689,6 +698,7 @@ namespace TwoBirds
 
         public void EndWorld()
         {
+            EndSplatWorld();
             Pebbles?.Clear();
             ItemContactPhysics.Clear();
             EndCraftingWorld();

@@ -7,7 +7,8 @@ namespace TwoBirds
 {
     public sealed partial class WorldItemRegistry
     {
-        private readonly Dictionary<uint, PotionContact> contacts = new();
+        private readonly Dictionary<(uint Epoch, uint Item, int Releaser, uint Operation), ItemContact> contacts = new();
+        private readonly Dictionary<(uint Epoch, uint Item, int Releaser, uint Operation), HashSet<NetworkConnection>> contactReporters = new();
         private readonly Dictionary<uint, PotionActivation> activations = new();
         private readonly Dictionary<uint, PotionArea> areas = new();
         private readonly Dictionary<int, PotionDose> doses = new();
@@ -17,6 +18,7 @@ namespace TwoBirds
         private uint nextEffectId;
         private bool reseedAreas;
         private readonly Queue<PotionDoseMessage> deferredDoses = new();
+        private readonly Queue<ItemContactResult> deferredContactResults = new();
         private void EffectsAfterReconcile(uint clientTick, uint serverTick) => reseedAreas = true;
 
         internal void QueueIntake(WorldItem item, Cauldron cauldron)
@@ -24,61 +26,97 @@ namespace TwoBirds
             if (Replaying || !item.ReleaseAvailable || !item.Simulating || !item.Definition.CanBeIngredient) return;
             var report = ContactFor(item);
             report.Cauldron = cauldron.ObjectId;
-            contacts[report.Item] = report;
+            contacts[ContactKey(report)] = report;
         }
-        internal void QueuePotionImpact(WorldItem item, Vector3 position, GolfCartNetwork cart = null)
+        internal void QueueItemImpact(WorldItem item, Vector3 position, GolfCartNetwork cart = null)
         {
             if (Replaying || !item.ReleaseAvailable || !item.Record.Armed || !item.Simulating) return;
             var report = ContactFor(item);
-            if (report.Impact) return;
-            report.Impact = true;
-            report.Cart = cart ? cart.ObjectId : -1;
-            report.CartLifetime = cart ? cart.EffectLifetime : 0;
-            report.Position = cart ? Quaternion.Inverse(cart.Controller.Body.rotation) * (position - cart.Controller.Body.position) : position;
-            contacts[report.Item] = report;
-            if (!IsHost && item.Definition is PotionDefinition potion && potion.CloudVfx)
+            if (!report.Impact)
+            {
+                report.Impact = true;
+                report.Cart = cart ? cart.ObjectId : -1;
+                report.CartLifetime = cart ? cart.EffectLifetime : 0;
+                report.Position = cart ? Quaternion.Inverse(cart.Controller.Body.rotation) * (position - cart.Controller.Body.position) : position;
+                contacts[ContactKey(report)] = report;
+            }
+            PredictContactCloud(report, item.Definition, position);
+        }
+        private void PredictContactCloud(ItemContact report, ItemDefinition definition, Vector3 position)
+        {
+            if (!IsHost && definition is PotionDefinition potion && potion.CloudVfx)
             {
                 var key = (report.Item, report.Releaser, report.Operation);
                 if (!predictedClouds.ContainsKey(key)) predictedClouds[key] = Instantiate(potion.CloudVfx, position, Quaternion.identity);
             }
         }
-        private PotionContact ContactFor(WorldItem item)
+        private ItemContact ContactFor(WorldItem item)
         {
             var record = item.Record;
-            if (contacts.TryGetValue(record.Motion.Id, out var existing) && existing.Operation == record.Operation && existing.Releaser == record.Releaser)
+            if (contacts.TryGetValue(SplatKey(record), out var existing))
                 return existing;
-            return new PotionContact { Epoch = epoch, Item = record.Motion.Id, Revision = record.Motion.Revision,
+            return new ItemContact { Epoch = epoch, Item = record.Motion.Id, Revision = record.Motion.Revision,
                 Releaser = record.Releaser, Operation = record.Operation, Cauldron = -1, Cart = -1, Position = item.PresentedRootPosition };
         }
-        private void FlushPotionContacts()
+        private void FlushItemContacts()
         {
             if (contacts.Count == 0) return;
-            var reports = new List<PotionContact>(contacts.Values);
+            var reports = new List<ItemContact>(contacts.Values);
             foreach (var report in reports)
             {
+                if (!IsHost) PredictSplat(report);
                 if (pendingReleases.ContainsKey(report.Item)) continue;
-                contacts.Remove(report.Item);
+                var key = ContactKey(report);
+                contacts.Remove(key);
                 if (IsHost)
                 {
-                    AcceptContact(report);
+                    bool duplicate = acceptedSplats.ContainsKey(key);
+                    bool accepted = AcceptContact(report);
+                    var result = new ItemContactResult { Epoch = epoch, Item = report.Item,
+                        Releaser = report.Releaser, Operation = report.Operation, HasSplat = report.HasSplat || accepted, SplatAccepted = accepted };
+                    if (contactReporters.Remove(key, out var reporters))
+                        foreach (var reporter in reporters)
+                        {
+                            if (!reporter.IsActive) continue;
+                            if (accepted && duplicate)
+                                network.ServerManager.Broadcast(reporter, new CraftingTransition { Epoch = epoch, HasSplat = true, Splat = acceptedSplats[key] });
+                            network.ServerManager.Broadcast(reporter, result);
+                        }
                     if (players.TryGetValue(report.Releaser, out var player) && player.Owner.IsActive && !player.IsOwner)
-                        network.ServerManager.Broadcast(player.Owner, new PotionContactResult { Epoch = epoch, Item = report.Item,
-                            Releaser = report.Releaser, Operation = report.Operation });
+                        network.ServerManager.Broadcast(player.Owner, result);
                 }
                 else network.ClientManager.Broadcast(report);
             }
         }
-        private void ReceivePotionContact(NetworkConnection connection, PotionContact report, Channel channel)
+        private void ReceiveItemContact(NetworkConnection connection, ItemContact report, Channel channel)
         {
             if (!worldReady || report.Epoch != epoch) return;
-            if (Replaying) { contacts[report.Item] = report; return; }
-            AcceptContact(report);
-            network.ServerManager.Broadcast(connection, new PotionContactResult { Epoch = epoch, Item = report.Item,
-                Releaser = report.Releaser, Operation = report.Operation });
+            var key = ContactKey(report);
+            if (contacts.TryGetValue(key, out var existing))
+            {
+                if (existing.Cauldron < 0) existing.Cauldron = report.Cauldron;
+                if (!existing.Impact && report.Impact)
+                {
+                    existing.Impact = true; existing.Position = report.Position;
+                    existing.Cart = report.Cart; existing.CartLifetime = report.CartLifetime;
+                }
+                if (!existing.HasSplat && report.HasSplat)
+                {
+                    existing.HasSplat = true; existing.Target = report.Target;
+                    existing.SplatPoint = report.SplatPoint; existing.SplatRotation = report.SplatRotation;
+                }
+                report = existing;
+            }
+            contacts[key] = report;
+            if (!contactReporters.TryGetValue(key, out var reporters)) contactReporters[key] = reporters = new();
+            reporters.Add(connection);
         }
-        private void ContactResolved(PotionContactResult result, Channel channel)
+        private void ContactResolved(ItemContactResult result, Channel channel)
         {
-            if (result.Epoch == epoch) RemovePredictedCloud((result.Item, result.Releaser, result.Operation));
+            if (result.Epoch != epoch) return;
+            if (Replaying) { deferredContactResults.Enqueue(result); return; }
+            RemovePredictedCloud((result.Item, result.Releaser, result.Operation));
+            if (result.HasSplat && !result.SplatAccepted) RejectSplat((result.Epoch, result.Item, result.Releaser, result.Operation));
         }
         private void RemovePredictedCloud((uint, int, uint) key)
         {
@@ -90,19 +128,33 @@ namespace TwoBirds
             foreach (var key in predictedClouds.Keys) if (key.Item == item) staleClouds.Add(key);
             foreach (var key in staleClouds) RemovePredictedCloud(key);
         }
-        private void AcceptContact(PotionContact report)
+        private bool AcceptContact(ItemContact report)
         {
+            if (report.Epoch != epoch) return false;
+            if (acceptedSplats.ContainsKey(ContactKey(report))) return true;
             if (!records.TryGetValue(report.Item, out var item) || item.State != WorldItemState.World ||
-                item.Operation != report.Operation || item.Releaser != report.Releaser || item.Motion.Revision < report.Revision) return;
+                item.Operation != report.Operation || item.Releaser != report.Releaser || item.Motion.Revision < report.Revision) return false;
             if (report.Cauldron >= 0 && GetDefinition(item.DefinitionId).CanBeIngredient &&
                 cauldrons.TryGetValue(report.Cauldron, out var cauldron) && cauldron.Accepting)
             {
                 var visual = items[report.Item];
                 Admit(item, cauldron, item.Releaser, item.Operation, visual.PresentedRootPosition, visual.PresentedRotation);
-                return;
+                return false;
             }
-            if (!report.Impact || !item.Armed || GetDefinition(item.DefinitionId) is not PotionDefinition) return;
-            CommitActivation(item, item.Releaser, item.Operation, report.Position, report.Cart, report.CartLifetime);
+            var definition = GetDefinition(item.DefinitionId);
+            bool splat = report.HasSplat && item.SplatArmed && definition.CanSpawnSplat;
+            bool potion = report.Impact && item.Armed && definition is PotionDefinition;
+            if (!splat && !potion) return false;
+            var transition = new CraftingTransition { HasSplat = splat, HasActivation = potion };
+            if (splat)
+            {
+                transition.Splat = BuildSplat(report, item.DefinitionId);
+                item.SplatArmed = false;
+            }
+            if (potion) transition.Activation = BuildActivation(item, item.Releaser, item.Operation, report.Position, report.Cart, report.CartLifetime);
+            if (potion || splat && definition.DestroyOnSplat) transition.Items = new() { Tombstone(item) };
+            CommitFeature(transition);
+            return splat;
         }
         internal bool UsePotion(ItemRecord item, PlayerInventory player, uint operation, Vector3 position)
         {
@@ -112,11 +164,16 @@ namespace TwoBirds
         }
         private void CommitActivation(ItemRecord item, int player, uint operation, Vector3 position, int cart, uint cartLifetime = 0)
         {
+            CommitFeature(new CraftingTransition { Items = new() { Tombstone(item) }, HasActivation = true,
+                Activation = BuildActivation(item, player, operation, position, cart, cartLifetime) });
+        }
+        private PotionActivation BuildActivation(ItemRecord item, int player, uint operation, Vector3 position, int cart, uint cartLifetime)
+        {
             var definition = (PotionDefinition)GetDefinition(item.DefinitionId);
             var activation = new PotionActivation { Id = ++nextEffectId, Definition = item.DefinitionId, StartTick = ServerTick,
                 Expiry = ServerTick + DurationTicks(definition.Application == PotionApplication.Zone ? definition.ZoneLifetime : 0.5f),
                 Player = player, Operation = operation, SourceItem = item.Motion.Id, Position = position, Cart = cart, CartLifetime = cartLifetime };
-            CommitFeature(new CraftingTransition { Items = new() { Tombstone(item) }, HasActivation = true, Activation = activation });
+            return activation;
         }
         private void CreateArea(PotionActivation activation, bool snapshot, GameObject predictedCloud)
         {
@@ -149,6 +206,7 @@ namespace TwoBirds
         }
         private void CartEffectLifetimeChanged(GolfCartNetwork cart, bool spawned)
         {
+            SplatTargetLifetime.Invalidate(cart.transform);
             if (spawned) return;
             expiredAreas.Clear();
             foreach (var activation in activations.Values)
@@ -220,7 +278,7 @@ namespace TwoBirds
             doses.Remove(player.ObjectId);
             cleanup.Clear();
             foreach (var report in contacts.Values) if (report.Releaser == player.ObjectId) cleanup.Add(report.Item);
-            foreach (uint id in cleanup) { contacts.Remove(id); ClearPredictedClouds(id); }
+            foreach (uint id in cleanup) { CancelItemContacts(id); ClearPredictedClouds(id); }
         }
         internal void ClearPlayerDose(int id) => doses.Remove(id);
 

@@ -318,6 +318,8 @@ namespace TwoBirds
 
         internal void PredictPickup()
         {
+            registry.CancelItemContacts(Record.Motion.Id);
+            ConsumeSplat();
             CancelHandoff();
             hasHeldPose = false;
             ResetContactState();
@@ -330,6 +332,7 @@ namespace TwoBirds
 
         internal void SetRecord(ItemRecord record)
         {
+            record = registry.PreserveSplatConsumption(record);
             if (releaseHandoff && (record.State != WorldItemState.World || record.Sleeping || record.Releaser != handoffReleaser ||
                 record.Operation != handoffOperation || record.Motion.Path != handoffPath || record.Motion.Boundary)) CancelHandoff();
             if (record.State == WorldItemState.Removed || record.State == WorldItemState.Held &&
@@ -696,6 +699,7 @@ namespace TwoBirds
 
         internal void ReturnToPool()
         {
+            SplatTargetLifetime.Invalidate(transform);
             InterruptUse();
             StopBody();
             ResetPresentation();
@@ -766,8 +770,9 @@ namespace TwoBirds
             releaseOperation = 0;
         }
 
-        private void ReportImpact(PlayerItemHitbox player, Vector3 rockVelocity, Vector3 playerVelocity, Vector3 intoPlayer)
+        private void ReportImpact(PlayerItemHitbox player, Vector3 rockVelocity, Vector3 playerVelocity, Vector3 intoPlayer, Vector3 point)
         {
+            registry.QueueSplat(this, player.Collider, point, -intoPlayer);
             float speed = Mathf.Max(0f, Vector3.Dot(rockVelocity - playerVelocity, intoPlayer));
             float incoming = Vector3.Dot(rockVelocity, intoPlayer);
             bool qualifies = incoming >= Definition.MinimumImpactSpeed && speed >= Definition.MinimumImpactSpeed;
@@ -787,6 +792,7 @@ namespace TwoBirds
         private void OnCollisionEnter(Collision collision)
         {
             if (registry && registry.Replaying) return;
+            SplatCollision(collision);
             cartPhysics?.Contact(collision);
             CancelHandoff();
             BirdContact(collision);
@@ -800,7 +806,7 @@ namespace TwoBirds
             if (contact.thisCollider != impactSphere) return;
             if (!collision.collider.TryGetComponent<PlayerItemHitbox>(out var player) || !player.Motor.IsOwner) return;
             UpdateIgnore();
-            playerContact.HostContact(player, ContactFrame, incomingVelocity, -contact.normal);
+            playerContact.HostContact(player, ContactFrame, incomingVelocity, -contact.normal, contact.point);
         }
 
         private void OnTriggerEnter(Collider other)

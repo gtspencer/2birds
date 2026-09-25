@@ -14,7 +14,11 @@ namespace TwoBirds
         {
             if (!registry || registry.Replaying || !Record.Armed || !ReleaseAvailable || !Simulating || !receiver.Eligible) return;
             if (receiver.Effects.ObjectId == Record.Releaser && ((long)registry.ServerTick - Record.LaunchTick) * registry.TickDelta < registry.ReleaseGrace) return;
-            registry.QueuePotionImpact(this, receiver.Collider.ClosestPoint(BodySpherePosition));
+            Vector3 point = receiver.Collider.ClosestPoint(BodySpherePosition);
+            Vector3 normal = BodySpherePosition - point;
+            if (normal.sqrMagnitude == 0f) normal = BodySpherePosition - receiver.Collider.bounds.center;
+            registry.QueueSplat(this, receiver.Collider, point, normal);
+            registry.QueueItemImpact(this, point);
         }
         private void PotionCollision(Collision collision)
         {
@@ -22,7 +26,7 @@ namespace TwoBirds
             var receiver = collision.collider.GetComponentInParent<PlayerPotionEffects>();
             if (receiver && receiver.ObjectId == Record.Releaser && ((long)registry.ServerTick - Record.LaunchTick) * registry.TickDelta < registry.ReleaseGrace) return;
             var cart = collision.collider.GetComponentInParent<GolfCartNetwork>();
-            registry.QueuePotionImpact(this, collision.GetContact(0).point, cart);
+            registry.QueueItemImpact(this, collision.GetContact(0).point, cart);
         }
         internal void BeforePotionPhysics()
         {

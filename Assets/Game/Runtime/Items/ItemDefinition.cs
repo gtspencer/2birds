@@ -75,6 +75,12 @@ namespace TwoBirds
         public bool OverrideCollisionDamage;
         [Min(0)] public int CollisionDamage;
 
+        [Header("Splat")]
+        public bool SpawnSplat;
+        public bool DestroyOnSplat;
+        public SplatDefinition SplatDefinition;
+        public bool CanSpawnSplat => SpawnSplat && SplatDefinition && SplatDefinition.SplatMaterial;
+
         [Header("Physics")]
         [Tooltip("Synchronize airborne rotation. Disable only for orientation-independent colliders and hit volumes with a collider-free visual root.")]
         public bool SyncRotation = true;

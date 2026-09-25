@@ -38,6 +38,7 @@ namespace TwoBirds
         public uint BirdPlayer;
         public int Simulator;
         public bool Armed;
+        public bool SplatArmed;
         public int Cauldron;
     }
 

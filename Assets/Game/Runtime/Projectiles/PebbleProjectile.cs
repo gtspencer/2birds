@@ -239,7 +239,7 @@ namespace TwoBirds
                 Vector3 center = impact.Contact.Point + impact.Contact.Normal * radius;
                 Vector3 velocity = impact.Contact.Velocity;
                 if (impact.Target.TryGetComponent<PlayerItemHitbox>(out var player))
-                    playerContact.HostContact(player, Frame, velocity, -impact.Contact.Normal);
+                    playerContact.HostContact(player, Frame, velocity, -impact.Contact.Normal, impact.Contact.Point);
                 playerContact.Segment(center, velocity, Mathf.Max(0.0001f, seconds), world.LocalTick);
                 body.position = center;
                 transform.position = center;
@@ -266,7 +266,7 @@ namespace TwoBirds
                         (simultaneous.Contact.Velocity - velocity).sqrMagnitude > 0.0001f) break;
                     index++;
                     if (simultaneous.Target.TryGetComponent<PlayerItemHitbox>(out var otherPlayer))
-                        playerContact.HostContact(otherPlayer, Frame, velocity, -simultaneous.Contact.Normal);
+                        playerContact.HostContact(otherPlayer, Frame, velocity, -simultaneous.Contact.Normal, simultaneous.Contact.Point);
                     if (BirdRegistry.Instance && BirdRegistry.Instance.ProjectileBirdContact(
                         new BirdHitReport { Source = record.Motion.Id == 0 ? record.Weapon : record.Motion.Id,
                             Player = record.BirdPlayer, Operation = record.Shot }, simultaneous.Target, velocity.magnitude,
@@ -346,7 +346,7 @@ namespace TwoBirds
         {
             if (!world.IsHost || !simulating) playerContact.SamplePlayerContact(player, Frame);
         }
-        private void ReportImpact(PlayerItemHitbox player, Vector3 velocity, Vector3 playerVelocity, Vector3 normal) =>
+        private void ReportImpact(PlayerItemHitbox player, Vector3 velocity, Vector3 playerVelocity, Vector3 normal, Vector3 point) =>
             playerContact.Damage(player, definition.PebbleDamage, Vector3.zero);
 
         private void StopPhysics()

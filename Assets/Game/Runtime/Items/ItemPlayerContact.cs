@@ -42,7 +42,7 @@ namespace TwoBirds
         private bool rebaseContactPose;
         private readonly WorldItemRegistry registry;
         private readonly RigidbodyMotionState motion;
-        private readonly Action<PlayerItemHitbox, Vector3, Vector3, Vector3> report;
+        private readonly Action<PlayerItemHitbox, Vector3, Vector3, Vector3, Vector3> report;
         private readonly Func<ItemMotion, Vector3> spherePosition;
         private ItemContactFrame current;
         private Vector3 physicsStartSphere;
@@ -58,14 +58,14 @@ namespace TwoBirds
         internal bool Rebase { get => rebaseContactPose; set => rebaseContactPose = value; }
 
         internal ItemPlayerContact(WorldItemRegistry owner, RigidbodyMotionState state,
-            Func<ItemMotion, Vector3> center, Action<PlayerItemHitbox, Vector3, Vector3, Vector3> impact)
+            Func<ItemMotion, Vector3> center, Action<PlayerItemHitbox, Vector3, Vector3, Vector3, Vector3> impact)
         { registry = owner; motion = state; spherePosition = center; report = impact; }
 
         private ItemMotion PresentedMotionAt(double tick, out Vector3 velocity) =>
             motion.Sample(tick, false, sphereRadius, registry.EnvironmentMask, registry.TickDelta, out velocity);
         private Vector3 SphereAt(double tick) => spherePosition(PresentedMotionAt(tick, out _));
-        private void ReportImpact(PlayerItemHitbox player, Vector3 velocity, Vector3 playerVelocity, Vector3 normal) =>
-            report(player, velocity, playerVelocity, normal);
+        private void ReportImpact(PlayerItemHitbox player, Vector3 velocity, Vector3 playerVelocity, Vector3 normal, Vector3 point) =>
+            report(player, velocity, playerVelocity, normal, point);
 
         internal void BeforePhysics(in ItemContactFrame frame, bool sample)
         {
@@ -107,11 +107,11 @@ namespace TwoBirds
             player.Damage(amount, velocityChange);
         }
 
-        internal void HostContact(PlayerItemHitbox player, in ItemContactFrame frame, Vector3 incoming, Vector3 normal)
+        internal void HostContact(PlayerItemHitbox player, in ItemContactFrame frame, Vector3 incoming, Vector3 normal, Vector3 point)
         {
             if (!registry.IsHost || !frame.Simulating || !frame.Eligible || !player || !player.Motor.IsOwner ||
                 frame.IgnoredPlayer == player.Collider) return;
-            report(player, incoming, player.IncomingVelocity, normal);
+            report(player, incoming, player.IncomingVelocity, normal, point);
         }
 
         internal void Reset()
@@ -125,6 +125,16 @@ namespace TwoBirds
         {
             current = frame;
             Sample(player);
+        }
+
+        internal void SampleTerminalContact(PlayerItemHitbox player, in ItemContactFrame frame, Vector3 center, Vector3 velocity)
+        {
+            current = frame;
+            if (!frame.Eligible || !player || player.Suspended || !player.Motor.IsOwner) return;
+            Vector3 from = hasContactPose ? previousSphere : frame.PresentedCenter;
+            Vector3 playerFrom = hasContactPose ? previousPlayer : player.PresentedCenter;
+            SweepContact(player, from, center, playerFrom, player.PresentedCenter,
+                velocity, player.PresentedVelocity, player.PresentedVelocity);
         }
 
         private void Sample(PlayerItemHitbox player)
@@ -242,7 +252,8 @@ namespace TwoBirds
                 !player.OverlapsSphere(from, sphereRadius + 0.03f, playerFrom)) damagedPlayer = null;
             if (ignoredPlayer != player.Collider && !touchingPlayer &&
                 player.SweepSphere(from, to, sphereRadius, playerFrom, playerTo, out Vector3 intoPlayer, out float fraction))
-                ReportImpact(player, rockVelocity, Vector3.Lerp(playerVelocityFrom, playerVelocityTo, fraction), intoPlayer);
+                ReportImpact(player, rockVelocity, Vector3.Lerp(playerVelocityFrom, playerVelocityTo, fraction), intoPlayer,
+                    Vector3.Lerp(from, to, fraction) + intoPlayer * sphereRadius);
             touchingPlayer = player.OverlapsSphere(to, sphereRadius, playerTo);
         }
 

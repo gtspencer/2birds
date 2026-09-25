@@ -37,18 +37,27 @@ namespace TwoBirds
     public struct CraftingTransition : IBroadcast
     {
         public uint Epoch;
-        public bool Snapshot, HasCauldron, HasActivation, Blast;
+        public bool Snapshot, HasCauldron, HasActivation, Blast, HasSplat;
         public List<ItemRecord> Items;
         public CauldronRecord Cauldron;
         public PotionActivation Activation;
+        public SplatEvent Splat;
     }
     public struct PotionDoseMessage : IBroadcast { public uint Epoch; public PotionDose Dose; }
-    public struct PotionContactResult : IBroadcast { public uint Epoch, Item, Operation; public int Releaser; }
-    public struct PotionContact : IBroadcast
+    public struct ItemContactResult : IBroadcast
+    {
+        public uint Epoch, Item, Operation;
+        public int Releaser;
+        public bool HasSplat, SplatAccepted;
+    }
+    public struct ItemContact : IBroadcast
     {
         public uint Epoch, Item, Revision, Operation, CartLifetime;
         public int Releaser, Cauldron, Cart;
-        public bool Impact;
+        public bool Impact, HasSplat;
+        public SplatTarget Target;
+        public Vector3 SplatPoint;
+        public Quaternion SplatRotation;
         public Vector3 Position;
     }
 }
