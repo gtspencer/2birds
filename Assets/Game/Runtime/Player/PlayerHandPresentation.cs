@@ -38,13 +38,15 @@ namespace TwoBirds
             bool attached = input.Seated || input.Carried && !input.ReleasePreview;
             Quaternion torso = remote ? avatar.transform.rotation : attached ? input.Facing.rotation :
                 Quaternion.Euler(0f, input.Facing.rotation.eulerAngles.y, 0f);
-            float seated = avatar.Binding != null ? avatar.State.Weights[(int)AvatarPose.Seated] : input.Seated ? 1f : 0f;
+            float seated = remote ? avatar.State.Weights[(int)AvatarPose.Seated] : input.Seated ? 1f : 0f;
             return new HeldItemBodyFrame(settings, avatar.Registry, input, torso, seated, true);
         }
         private AvatarPresentation avatar;
         private LocalFirstPersonHands active;
         private AvatarCosmeticPresentation cosmetics;
         internal void AppearanceChanged() => cosmetics?.Apply(owner.Appearance);
+        private PlayerEmote emote;
+        private bool hidden;
         private AvatarRegistry.Entry pending;
         private AvatarHandContact leftContact, rightContact;
         private readonly Transform[] freeTargets = new Transform[2];
@@ -106,6 +108,18 @@ namespace TwoBirds
             }
             IdentityResolved(avatar.Resolved);
             ContextChanged();
+            emote = owner.Emote;
+            emote.Changed += EmoteChanged;
+            EmoteChanged();
+        }
+
+        private void EmoteChanged()
+        {
+            bool value = owner.IsOwner && emote.Presenting;
+            if (hidden == value) return;
+            hidden = value;
+            if (active) active.SetVisible(!hidden);
+            cosmetics?.SetVisible(!hidden);
         }
 
         private void IdentityResolved(AvatarRegistry.Entry entry)
@@ -441,11 +455,12 @@ namespace TwoBirds
                         var nextCosmetics = new AvatarCosmeticPresentation(candidate.Binding,
                             SessionController.Instance.Hats, SessionController.Instance.Tattoos, true);
                         nextCosmetics.Apply(owner.Appearance);
+                        nextCosmetics.SetVisible(!hidden);
                         var previous = active; active = candidate;
                         cosmetics?.Dispose(); cosmetics = nextCosmetics;
                         TranslateRig(held.CommitHands(active.Binding));
                         if (previous) { previous.SetVisible(false); Destroy(previous.gameObject); }
-                        active.SetVisible(true);
+                        active.SetVisible(!hidden);
                         LocalBound?.Invoke(active.Binding);
                     }
                     catch (Exception exception)
@@ -553,6 +568,8 @@ namespace TwoBirds
             if (!running) return;
             running = false;
             PlayerPresentation.LocalCameraChanged -= LocalCameraChanged;
+            emote.Changed -= EmoteChanged;
+            hidden = false;
             cosmetics?.Dispose(); cosmetics = null;
             avatar.Registry.FirstPerson.ContentChanged -= FirstPersonChanged;
             avatar.IdentityResolved -= IdentityResolved; avatar.PreparingHands -= PrepareRemote; avatar.HandsEvaluated -= CommitRemote;

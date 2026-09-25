@@ -5,21 +5,29 @@ using UnityEngine.Playables;
 
 namespace TwoBirds
 {
-    internal enum AvatarPose { Locomotion, Jump, Fall, Seated, Count }
+    internal enum AvatarPose { Locomotion, Jump, Fall, Seated, Emote, Count }
 
     internal sealed class AvatarAnimationState
     {
         internal readonly float[] Direction = { 1f, 0f, 0f, 0f };
-        internal readonly float[] Weights = new float[(int)AvatarPose.Count];
-        private readonly float[] from = new float[(int)AvatarPose.Count];
+        internal readonly float[] Weights = new float[(int)AvatarPose.Emote];
+        private readonly float[] from = new float[(int)AvatarPose.Emote];
         internal float Phase, IdleTime, AirTime, FallTime, SeatedTime, Speed, Motion, Run;
         private float transition, duration, previousVertical;
         private int landingFrames;
         private bool initialized, attached;
         private AvatarPose pose;
+        internal EmoteDefinition Emote { get; private set; }
+        internal float EmoteTime { get; private set; }
+        internal float EmoteWeight => Mathf.SmoothStep(0f, 1f, emoteBlend);
+        private float emoteBlend;
+        private bool emotePlaying;
 
         internal AvatarAnimationState() => Weights[(int)AvatarPose.Locomotion] = 1f;
         internal void Seed(float seed) { Phase = seed; IdleTime = seed; }
+        internal void PlayEmote(EmoteDefinition value) { Emote = value; EmoteTime = 0f; emotePlaying = true; }
+        internal void StopEmote() => emotePlaying = false;
+        internal void ClearEmote() { Emote = null; EmoteTime = emoteBlend = 0f; emotePlaying = false; }
         internal void Snap(in AvatarPresentationInput input, float yaw, AvatarSettings settings, AvatarAnimationSet clips)
         {
             initialized = false;
@@ -106,6 +114,13 @@ namespace TwoBirds
                 maximumCycles = Mathf.Min(maximumCycles, AvatarAnimationSet.MaximumPlayback / slot.Clip.length);
             }
             if (Motion > 0f) Phase = Mathf.Repeat(Phase + Mathf.Clamp(cycles * Motion, minimumCycles, maximumCycles) * dt, 1f);
+            if (Emote)
+            {
+                emoteBlend = Mathf.MoveTowards(emoteBlend, emotePlaying ? 1f : 0f, dt / EmoteDefinition.BlendDuration);
+                float time = EmoteTime + dt * Emote.Speed, length = Emote.Clip.length;
+                EmoteTime = Emote.Loop ? Mathf.Repeat(time, length) : Mathf.Min(time, length);
+                if (!emotePlaying && emoteBlend <= 0f) ClearEmote();
+            }
         }
     }
 
@@ -115,7 +130,8 @@ namespace TwoBirds
         internal AvatarFingerLayers Fingers { get; private set; }
         internal AvatarArmLayers Arms { get; private set; }
         private readonly AnimationClipPlayable[] locomotion = new AnimationClipPlayable[8];
-        private AnimationClipPlayable idle, jump, fall, seated;
+        private AnimationClipPlayable idle, jump, fall, seated, emote;
+        private AnimationClip emoteClip;
         private AnimationMixerPlayable walk, run, gait, motion, states;
         private readonly AvatarAnimationSet clips;
 
@@ -180,8 +196,22 @@ namespace TwoBirds
             jump.SetTime(Mathf.Lerp(clips.AscentStart, clips.AscentEnd, state.AirTime / clips.AscentDuration) * clips.Jump.length);
             fall.SetTime(state.FallTime);
             seated.SetTime(state.SeatedTime);
-            for (int i = 0; i < state.Weights.Length; i++) states.SetInputWeight(i, state.Weights[i]);
+            var clip = state.Emote ? state.Emote.Clip : null;
+            if (clip != emoteClip) BindEmote(clip);
+            if (emote.IsValid()) emote.SetTime(state.EmoteTime);
+            float body = 1f - state.EmoteWeight;
+            for (int i = 0; i < state.Weights.Length; i++) states.SetInputWeight(i, state.Weights[i] * body);
+            states.SetInputWeight((int)AvatarPose.Emote, state.EmoteWeight);
             graph.Evaluate(0f);
+        }
+
+        private void BindEmote(AnimationClip clip)
+        {
+            if (emote.IsValid()) { states.DisconnectInput((int)AvatarPose.Emote); graph.DestroyPlayable(emote); }
+            emote = default; emoteClip = clip;
+            if (!clip) return;
+            emote = Create(clip);
+            graph.Connect(emote, 0, states, (int)AvatarPose.Emote);
         }
 
         public void Dispose() { Fingers?.Dispose(); Arms?.Dispose(); if (graph.IsValid()) graph.Destroy(); }

@@ -103,6 +103,12 @@ namespace TwoBirds
         internal bool CanPrepare => NeedsPreparation && (!lifeLocked || !active);
         internal bool Failed { get; private set; }
         public AvatarHandTargets HandTargets { get; } = new();
+        private static readonly AvatarHandTargets noTargets = new();
+        internal bool IgnoresHandTargets { get; set; }
+        internal AvatarHandTargets BodyTargets => IgnoresHandTargets ? noTargets : HandTargets;
+        internal bool Dormant { get; private set; }
+        internal bool Idle => Dormant && !NeedsPreparation && !candidate;
+        private bool waking;
         private AvatarInstance active, candidate;
         private AvatarRegistry.Entry candidateEntry;
         private AvatarSettings subscribedSettings;
@@ -223,6 +229,15 @@ namespace TwoBirds
             if (candidate && candidate.Initialized) candidate.ApplyFeatures();
         }
 
+        internal void SetDormant(bool value)
+        {
+            if (Dormant == value) return;
+            Dormant = value;
+            if (value) State.ClearEmote(); else waking = true;
+            if (active) active.SetDormant(value);
+            if (candidate && candidate.Initialized) candidate.ApplyFeatures();
+        }
+
         public void SetHandTarget(AvatarIKGoal hand, Transform target, float positionWeight, float rotationWeight, float maximumReach = 0f)
         {
             HandTargets.Set(hand, AvatarHandSource.Item, target, positionWeight, rotationWeight, maximumReach);
@@ -233,6 +248,7 @@ namespace TwoBirds
         {
             if (Physical) return;
             if (!lifeLocked && InputSource != null) Input = InputSource();
+            if (waking) { facingInitialized = false; gap = true; }
             bool attached = Input.Seated || Input.Carried && !Input.ReleasePreview || Input.Pending && wasAttached;
             float facing = Input.Facing.rotation.eulerAngles.y;
             if (!facingInitialized) { BodyYaw = facing; facingInitialized = true; }
@@ -258,7 +274,8 @@ namespace TwoBirds
             if (AnimationEnabled && animationsValid)
             {
                 var settings = active ? active.Settings : Resolved?.Settings;
-                if (settings) State.Advance(Input, BodyYaw, settings, registry.Animations, dt);
+                if (settings && waking) { State.Snap(Input, BodyYaw, settings, registry.Animations); waking = false; }
+                else if (settings) State.Advance(Input, BodyYaw, settings, registry.Animations, dt);
             }
             if (reset)
             {
@@ -292,7 +309,7 @@ namespace TwoBirds
         {
             if (Physical) return;
             if (candidate && candidateRequest != RequestGeneration) CancelCandidate();
-            if (active)
+            if (active && !Dormant)
             {
                 PreparingHands?.Invoke(active.Binding, dt);
                 active.Evaluate(dt);
@@ -330,6 +347,7 @@ namespace TwoBirds
                 }
                 if (old) old.SetVisible(false);
                 active.SetVisible(true);
+                if (Dormant) active.SetDormant(true);
                 FallbackChanged?.Invoke(false);
                 if (old) old.Release();
             }
@@ -344,6 +362,7 @@ namespace TwoBirds
 
         internal void PrepareRagdoll(AvatarPresentationInput input)
         {
+            SetDormant(false);
             Input = input;
             lifeLocked = true;
             SetVisual(true);
@@ -363,6 +382,7 @@ namespace TwoBirds
             Input.WorldVelocity = Vector3.zero;
             Input.Grounded = true;
             Input.Mode = MovementMode.Walking;
+            State.ClearEmote();
             if (Resolved != null && animationsValid) State.Snap(Input, input.Facing.rotation.eulerAngles.y, Resolved.Settings, registry.Animations);
             UpdateInput(0f, true);
             if (active) active.Evaluate(0f, true);

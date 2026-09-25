@@ -47,7 +47,7 @@ namespace TwoBirds
         internal PlayerRagdollSeed Capture(Vector3 velocity)
         {
             var input = playerAvatar.CurrentPlacement;
-            var hips = avatar.Binding?.GetBone(HumanBodyBones.Hips);
+            var hips = !avatar.Dormant && avatar.Binding != null ? avatar.Binding.GetBone(HumanBodyBones.Hips) : null;
             Vector3 root = hips ? hips.position : input.Facing.position;
             if (!hips && input.Seated && avatar.Resolved != null)
                 root += input.Facing.rotation * AvatarDriverPose.SeatedOffset(avatar.Resolved.Settings, avatar.Registry, input.Driver);

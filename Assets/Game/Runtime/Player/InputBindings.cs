@@ -42,12 +42,12 @@ namespace TwoBirds
             Add("Interact", "Interact");
             Add("Use", "Use");
             Add("DirectUse", "Use Potion");
-            Add("SecondaryInteract", "Secondary Interaction");
+            Add("SecondaryInteract", "Secondary Interaction / Exit Vehicle");
             Add("Drop", "Drop");
             Add("Inventory", "Inventory");
+            Add("Emote", "Emote");
             Add("Jump", "Jump / Handbrake");
             Add("GiveUp", "Give Up");
-            Add("ExitVehicle", "Exit Vehicle");
             Add("Lights", "Lights");
             Add("Horn", "Horn");
             Add("Previous", "Previous Item");

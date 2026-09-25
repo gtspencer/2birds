@@ -41,6 +41,10 @@ namespace TwoBirds
         private Image equippedIcon;
         private Label equippedLabel;
         private VisualElement crosshair;
+        private VisualElement emoteOverlay;
+        private EmoteWheel emoteWheel;
+        private EmoteWheelSelection wheelSelection;
+        private PlayerEmote emote;
         private VisualElement chargeTrack;
         private VisualElement chargeFill;
         private VisualElement[] hotbarSlots;
@@ -113,6 +117,9 @@ namespace TwoBirds
             chargeFill = root.Q("charge-fill");
             HideCharge();
             session = SessionController.Instance;
+            emoteOverlay = root.Q("emote-overlay");
+            emoteWheel = new EmoteWheel(session.Emotes);
+            emoteOverlay.Add(emoteWheel);
             presentation = session.InputPresentation;
             inventoryInput = new InventoryInputHandler(session, ToggleInventory);
             inventoryAction = InputSystem.actions.FindAction("Player/Inventory");
@@ -398,6 +405,13 @@ namespace TwoBirds
             playerMotor = inv ? inv.GetComponent<PlayerMotor>() : null;
             seating = inv ? inv.GetComponent<PlayerSeating>() : null;
             inventoryInput?.Bind(inv, inputReader);
+            if (wheelSelection != null) wheelSelection.Changed -= RefreshEmoteWheel;
+            if (emote) emote.Changed -= RefreshCrosshair;
+            wheelSelection = inputReader ? inputReader.EmoteWheel : null;
+            emote = inv ? inv.GetComponent<PlayerAvatarPresentation>().Emote : null;
+            if (wheelSelection != null) wheelSelection.Changed += RefreshEmoteWheel;
+            if (emote) emote.Changed += RefreshCrosshair;
+            RefreshEmoteWheel();
             if (inventory)
             {
                 inventory.InventoryChanged += Refresh;
@@ -419,10 +433,23 @@ namespace TwoBirds
         {
             bool downed = health && health.IsDowned;
             if (downed) { CloseInventory(); CancelItemGestures(); HideCharge(); interactionTooltip.Hide(); }
-            crosshair.style.display = downed ? DisplayStyle.None : DisplayStyle.Flex;
+            RefreshCrosshair();
             hotbar.style.display = downed ? DisplayStyle.None : DisplayStyle.Flex;
             vignette.Refresh();
             RefreshRescue();
+        }
+        private void RefreshEmoteWheel()
+        {
+            bool open = wheelSelection != null && wheelSelection.Open;
+            emoteOverlay.style.display = open ? DisplayStyle.Flex : DisplayStyle.None;
+            if (open) emoteWheel.Set(wheelSelection.Highlight, wheelSelection.Pointer, !wheelSelection.Controller);
+            RefreshCrosshair();
+        }
+        private void RefreshCrosshair()
+        {
+            if (crosshair == null) return;
+            crosshair.style.display = health && health.IsDowned || inventoryOpen ||
+                wheelSelection != null && wheelSelection.Open || emote && emote.Presenting ? DisplayStyle.None : DisplayStyle.Flex;
         }
         private void RefreshRescue()
         {
@@ -503,7 +530,7 @@ namespace TwoBirds
                 new ControlHint { Action = map.FindAction("Jump"), Label = "Handbrake" },
                 new ControlHint { Action = map.FindAction("Lights"), Label = "Lights" },
                 new ControlHint { Action = map.FindAction("Horn"), Label = "Horn" },
-                new ControlHint { Action = map.FindAction("ExitVehicle"), Label = "Exit" },
+                new ControlHint { Action = map.FindAction("SecondaryInteract"), Label = "Exit" },
             };
         }
 
@@ -514,7 +541,7 @@ namespace TwoBirds
             if (map == null) return;
             cartPassengerHints = new[]
             {
-                new ControlHint { Action = map.FindAction("ExitVehicle"), Label = "Exit" },
+                new ControlHint { Action = map.FindAction("SecondaryInteract"), Label = "Exit" },
             };
         }
 
@@ -539,7 +566,7 @@ namespace TwoBirds
             if (inputReader != null) inputReader.InventoryOpen = true;
             inventoryOpen = true;
             inventoryPanel.style.display = DisplayStyle.Flex;
-            if (crosshair != null) crosshair.style.display = DisplayStyle.None;
+            RefreshCrosshair();
             Refresh();
             if (focusedSlot < 0) focusedSlot = inventory.SelectedSlot >= 0 ? inventory.SelectedSlot : 0;
             inventoryPanel.schedule.Execute(() => { if (inventoryOpen) navigation?.Repair(); });
@@ -555,7 +582,7 @@ namespace TwoBirds
             ClearMove();
             inventoryPanel.style.display = DisplayStyle.None;
             navigation?.Repair();
-            if (crosshair != null) crosshair.style.display = DisplayStyle.Flex;
+            RefreshCrosshair();
             if (inputReader != null) inputReader.InventoryOpen = false;
         }
 
@@ -681,6 +708,7 @@ namespace TwoBirds
             rescueSchedule?.Pause();
             vignette?.RemoveFromHierarchy();
             reviveWheel?.RemoveFromHierarchy();
+            emoteWheel?.RemoveFromHierarchy();
         }
     }
 }

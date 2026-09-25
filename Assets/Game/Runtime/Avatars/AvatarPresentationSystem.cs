@@ -54,7 +54,7 @@ namespace TwoBirds
                 for (int i = 0; i < system.hosts.Count; i++)
                 {
                     var host = system.hosts[i];
-                    if (!host || host.Failed) continue;
+                    if (!host || host.Failed || host.Idle) continue;
                     try
                     {
                         host.UpdateInput(dt, Time.deltaTime > 0.25f);
@@ -76,7 +76,7 @@ namespace TwoBirds
                     for (int i = 0; i < pair.Value.hosts.Count; i++)
                     {
                         var host = pair.Value.hosts[i];
-                        if (host && !host.Failed && (host.HandDependency ? 1 : 0) == pass) evaluationOrder.Add(host);
+                        if (host && !host.Failed && !host.Idle && (host.HandDependency ? 1 : 0) == pass) evaluationOrder.Add(host);
                     }
             foreach (var host in evaluationOrder)
             {

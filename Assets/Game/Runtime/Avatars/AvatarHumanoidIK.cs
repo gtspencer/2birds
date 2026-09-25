@@ -104,7 +104,7 @@ namespace TwoBirds
             float delta = targetSole.y - sole.y;
             float displacement = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.06f * h, 0.12f * h, Mathf.Abs(delta)));
             float stride = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.015f * h, 0.075f * h, sole.y - host.Input.SolePosition.y));
-            float contact = Mathf.Lerp(1f, stride, host.State.Motion);
+            float contact = Mathf.Lerp(1f, stride, Mathf.Max(host.State.Motion, host.State.EmoteWeight));
             float slopeWeight = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(45f, 55f, slope));
             float reach = Reach(Vector3.Distance(foot.Hip.position, targetSole + soleRotation * foot.Offset), foot.Length);
             foot.Confidence = contact * displacement * slopeWeight * reach;
@@ -139,7 +139,8 @@ namespace TwoBirds
 
         private void ApplyHead()
         {
-            if (host.EditorPreview || !host.HeadLookEnabled) { animator.SetLookAtWeight(0f); return; }
+            float weight = 1f - host.State.EmoteWeight;
+            if (host.EditorPreview || !host.HeadLookEnabled || weight <= 0f) { animator.SetLookAtWeight(0f); return; }
             Vector3 local = Quaternion.Inverse(host.transform.rotation) *
                 (Quaternion.Euler(host.Input.LookPitch, host.Input.LookYaw, 0f) * Vector3.forward);
             float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -70f, 70f);
@@ -147,7 +148,7 @@ namespace TwoBirds
             Vector3 direction = host.transform.rotation * Quaternion.Euler(pitch, yaw, 0f) * Vector3.forward;
             lookDirection = lookDirection == Vector3.zero ? direction : Vector3.Slerp(lookDirection, direction, AvatarPresentation.Smooth(DeltaTime, 0.05f));
             LookTarget = head.position + lookDirection * (3f * height);
-            animator.SetLookAtWeight(1f, 0.15f, 1f, 0f, 0.5f);
+            animator.SetLookAtWeight(weight, 0.15f, 1f, 0f, 0.5f);
             animator.SetLookAtPosition(LookTarget);
         }
 

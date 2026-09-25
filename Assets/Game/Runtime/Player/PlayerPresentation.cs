@@ -36,6 +36,7 @@ namespace TwoBirds
         private PlayerHealth health;
         private PlayerRagdoll ragdoll;
         private PlayerNameLabel nameLabel;
+        private PlayerEmote emote;
         private int cameraMask;
         internal static event System.Action<Camera> LocalCameraChanged;
         [SerializeField] private Renderer[] fallbackRenderers = System.Array.Empty<Renderer>();
@@ -73,6 +74,7 @@ namespace TwoBirds
         public override void OnStartClient()
         {
             if (nameLabel) nameLabel.gameObject.SetActive(!IsOwner);
+            emote = GetComponent<PlayerAvatarPresentation>().Emote;
             if (!IsOwner) return;
             CreateCamera();
         }
@@ -120,14 +122,24 @@ namespace TwoBirds
                     target = root + Vector3.up * Mathf.Max(0f, overhead.distance - 0.02f);
                 if (Physics.CheckSphere(target, radius, cameraMask, QueryTriggerInteraction.Ignore)) target = root;
                 Quaternion rotation = Quaternion.Euler(input.Pitch, input.Yaw, 0f);
-                Vector3 direction = rotation * Vector3.back;
-                float distance = Physics.SphereCast(target, radius, direction, out var wall, 3f, cameraMask, QueryTriggerInteraction.Ignore)
-                    ? Mathf.Max(0f, wall.distance - 0.02f) : 3f;
-                localCamera.transform.SetPositionAndRotation(target + direction * distance, rotation);
+                localCamera.transform.SetPositionAndRotation(Orbit(target, rotation, 3f), rotation);
                 return;
             }
             var aim = AimPose;
+            if (emote && emote.ViewWeight > 0f)
+            {
+                localCamera.transform.SetPositionAndRotation(Orbit(aim.position, aim.rotation, 3f * Mathf.SmoothStep(0f, 1f, emote.ViewWeight)), aim.rotation);
+                return;
+            }
             localCamera.transform.SetPositionAndRotation(aim.position, aim.rotation);
+        }
+
+        private Vector3 Orbit(Vector3 target, Quaternion rotation, float maximum)
+        {
+            Vector3 direction = rotation * Vector3.back;
+            float distance = Physics.SphereCast(target, 0.18f, direction, out var wall, maximum, cameraMask, QueryTriggerInteraction.Ignore)
+                ? Mathf.Max(0f, wall.distance - 0.02f) : maximum;
+            return target + direction * distance;
         }
 
         internal void SetSeated(bool value, Pose? releasePreview = null)

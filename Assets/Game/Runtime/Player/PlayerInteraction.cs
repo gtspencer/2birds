@@ -53,7 +53,7 @@ namespace TwoBirds
             ClearTarget();
             var session = SessionController.Instance;
             if (!network.CanGameplayActions || !IsOwner || inputReader == null || !inputReader.GameplayActive || inputReader.Carried || session == null ||
-                session.Phase != SessionPhase.InGame || session.PanelOpen) return;
+                session.Phase != SessionPhase.InGame || session.PanelOpen || inputReader.EmoteWheelOpen) return;
             if (ViewCamera == null) return;
             var aim = presentation.AimPose;
             Vector3 direction = aim.rotation * Vector3.forward;

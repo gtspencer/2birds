@@ -107,7 +107,7 @@ namespace TwoBirds
             UnityEngine.Object.Destroy(fallback.gameObject);
         }
 
-        internal bool CanShowHeldItem => running && input.CanEquip && input.HasAction &&
+        internal bool CanShowHeldItem => running && input.CanEquip && input.HasAction && !input.Emoting &&
             (input.Action.State != ItemActionState.Recovering ||
                 input.ActionDefinition is SlingshotDefinition);
         internal bool ReadyForUse => running && input.CanEquip && input.CanCharge &&

@@ -48,7 +48,7 @@ namespace TwoBirds
             }
         }
 
-        internal void Set(in AvatarArmPose pose)
+        internal void Set(in AvatarArmPose pose, float weight = 1f)
         {
             Assign(0, pose.A); Assign(1, pose.B); Assign(2, pose.C);
             for (int i = 0; i < 2; i++)
@@ -57,7 +57,7 @@ namespace TwoBirds
                 float total = 0f;
                 for (int slot = 0; slot < AvatarArmPose.Slots; slot++)
                     if (arm.Clips[slot * 2]) total += Weight(pose, slot);
-                Output.SetInputWeight(i + 1, Mathf.Clamp01(total));
+                Output.SetInputWeight(i + 1, Mathf.Clamp01(total) * weight);
                 for (int slot = 0; slot < AvatarArmPose.Slots; slot++)
                 {
                     float share = total > 0f && arm.Clips[slot * 2] ? Weight(pose, slot) / total : 0f;

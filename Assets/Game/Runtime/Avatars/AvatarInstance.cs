@@ -16,7 +16,7 @@ namespace TwoBirds
         private AvatarArmIK arms;
         private Renderer[] renderers;
         private bool[] rendererStates;
-        private bool released, springsRegistered, evaluating, resetRequested;
+        private bool released, springsRegistered, evaluating, resetRequested, eyesActive;
         private uint serial, ikSerial;
         private Vector3 seatedHips;
         private float scale;
@@ -123,25 +123,31 @@ namespace TwoBirds
                 resetRequested = false;
             }
             var clips = host.Registry.Animations;
-            graph.Arms.Set(host.HandTargets.Arms);
-            var leftHand = host.HandTargets.Resolve(AvatarIKGoal.LeftHand); var rightHand = host.HandTargets.Resolve(AvatarIKGoal.RightHand);
+            var targets = host.BodyTargets;
+            float free = 1f - host.State.EmoteWeight;
+            graph.Arms.Set(targets.Arms, free);
+            var leftHand = targets.Resolve(AvatarIKGoal.LeftHand); var rightHand = targets.Resolve(AvatarIKGoal.RightHand);
             graph.Fingers.Select(false, leftHand.Fingers ? leftHand.Fingers : clips.RelaxedFingers, clips.OpenFingers, leftHand.OpenWeight);
             graph.Fingers.Select(true, rightHand.Fingers ? rightHand.Fingers : clips.RelaxedFingers, clips.OpenFingers, rightHand.OpenWeight);
             graph.Fingers.Advance(dt);
+            graph.Fingers.SetWeight(free);
             serial++;
             evaluating = true;
             ik.DeltaTime = dt;
             try { graph.Evaluate(host.State); }
             finally { evaluating = false; }
-            using (AvatarPresentationSystem.IkMarker.Auto()) arms.Solve(host.HandTargets, dt);
+            using (AvatarPresentationSystem.IkMarker.Auto()) arms.Solve(targets, dt, free);
 #if UNITY_INCLUDE_INSTRUMENTATION
-            if (host.HandTargets.RoundTripMuscles) Binding.RoundTripMuscles();
+            if (targets.RoundTripMuscles) Binding.RoundTripMuscles();
 #endif
             if (host.EditorPreview && host.HeadLookEnabled) ApplyEditorHeadLook();
             using (AvatarPresentationSystem.VrmMarker.Auto())
             {
-                if (host.HeadLookEnabled) runtime.LookAt.LookAtInput = new LookAtInput
+                bool eyes = host.HeadLookEnabled && host.State.EmoteWeight <= 0f;
+                if (eyes) runtime.LookAt.LookAtInput = new LookAtInput
                     { WorldPosition = host.EditorPreview ? host.EditorLookTarget : ik.LookTarget };
+                else if (eyesActive && host.HeadLookEnabled) runtime.LookAt.SetYawPitchManually(0f, 0f);
+                eyesActive = eyes;
                 runtime.Process();
             }
         }
@@ -165,7 +171,7 @@ namespace TwoBirds
         {
             if (!Initialized) return;
             ik.Reset();
-            bool springs = !physical && host.AnimationEnabled && host.SpringsEnabled;
+            bool springs = !physical && host.AnimationEnabled && host.SpringsEnabled && !host.Dormant;
             if (springs != springsRegistered)
             {
                 if (springs)
@@ -180,6 +186,13 @@ namespace TwoBirds
                 springsRegistered = springs;
             }
             if (!host.HeadLookEnabled) runtime.LookAt.SetYawPitchManually(0f, 0f);
+        }
+
+        internal void SetDormant(bool value)
+        {
+            if (!Initialized) return;
+            if (value) { ApplyFeatures(); gameObject.SetActive(false); }
+            else { gameObject.SetActive(true); ApplyFeatures(); ResetMotion(); }
         }
 
         internal void ResetMotion()

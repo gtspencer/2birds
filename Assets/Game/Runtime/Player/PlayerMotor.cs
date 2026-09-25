@@ -133,6 +133,7 @@ namespace TwoBirds
         public event System.Action<uint, uint, Vector3> Reconciled;
         public event System.Action<uint, Vector3> Simulated;
         internal event System.Action BeforeOwnerMove;
+        internal event System.Action Disturbed;
         internal event System.Action<Vector3> PresentationCorrected;
         private PlayerPresentation presentation;
         private Vector3 graphicsBeforeReconcile;
@@ -481,6 +482,7 @@ namespace TwoBirds
                     {
                         if (!PredictionManager.IsReconciling && carry && (IsOwner || IsServerInitialized && impact.RequestId == 0))
                             carry.ImpactDrop(Body.position, Body.rotation.eulerAngles.y);
+                        if (IsOwner && !PredictionManager.IsReconciling) Disturbed?.Invoke();
                         pendingVelocityChange = combined;
                         recoveryTicks = System.Math.Max(recoveryTicks, impact.RecoveryTicks);
                     }

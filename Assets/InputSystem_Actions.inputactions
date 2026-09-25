@@ -126,16 +126,6 @@
                     "priority": 0
                 },
                 {
-                    "name": "ExitVehicle",
-                    "type": "Button",
-                    "id": "53eab02e-fbd7-4699-9dd1-8d2115db2eb1",
-                    "expectedControlType": "Button",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false,
-                    "priority": 0
-                },
-                {
                     "name": "Use",
                     "type": "Button",
                     "id": "d77c2d4e-46e2-494a-b96d-7850ace8efd7",
@@ -262,6 +252,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "Emote",
+                    "type": "Button",
+                    "id": "5aef6057-7d02-4298-814a-5f47b4fbd533",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -328,28 +327,6 @@
                     "processors": "",
                     "groups": "Gamepad",
                     "action": "Horn",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "465f9a7c-d0cc-43ea-bb5a-ee1f9cb35743",
-                    "path": "<Keyboard>/f",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "Keyboard&Mouse",
-                    "action": "ExitVehicle",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "9c622164-4fe2-43c3-bca9-972d51ad5cc8",
-                    "path": "<Gamepad>/rightStickPress",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "Gamepad",
-                    "action": "ExitVehicle",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -1005,7 +982,7 @@
                 {
                     "name": "",
                     "id": "bc213c5f-b3f8-40eb-9215-3759bfa99312",
-                    "path": "<Keyboard>/r",
+                    "path": "<Keyboard>/f",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
@@ -1021,6 +998,28 @@
                     "processors": "",
                     "groups": "Gamepad",
                     "action": "SecondaryInteract",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d0d51867-f5c7-44b1-a7d1-f90e9ebbfae0",
+                    "path": "<Keyboard>/r",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Emote",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "dce1d720-8376-4c2a-a3a5-5ba22ffe6b56",
+                    "path": "<Gamepad>/dpad/left",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Emote",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

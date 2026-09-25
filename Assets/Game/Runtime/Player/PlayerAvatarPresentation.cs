@@ -34,6 +34,7 @@ namespace TwoBirds
     public sealed class PlayerAvatarPresentation : NetworkBehaviour
     {
         internal PlayerHandPresentation Hands { get; private set; }
+        internal PlayerEmote Emote { get; private set; }
         [SerializeField] private AvatarPresentation presentation;
         private readonly SyncVar<AvatarAppearance> selected = new();
         private AvatarAppearance desired;
@@ -74,6 +75,9 @@ namespace TwoBirds
             presentation.InputSource = CaptureInput;
             Hands = gameObject.AddComponent<PlayerHandPresentation>();
             Hands.Initialize(this);
+            Emote = gameObject.AddComponent<PlayerEmote>();
+            Emote.Initialize(this);
+            Emote.Changed += EmoteChanged;
         }
 
         internal void Initialize()
@@ -83,21 +87,23 @@ namespace TwoBirds
         }
         public override void OnStartClient()
         {
-            presentation.Configure(SessionController.Instance.Avatars, !IsOwner || health.IsDowned, state.Snapshot.SpawnSlot / 8f);
+            presentation.Configure(SessionController.Instance.Avatars, true, state.Snapshot.SpawnSlot / 8f);
+            RefreshBody();
             BindStore();
             if (!IsOwner) ResolveSelected(selected.Value);
             if (health.IsAlive) Hands.StartPresentation();
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
             contextDirty = IsOwner;
         }
-        public override void OnStopClient() { DetachStore(); Hands.StopPresentation(); presentation.SetVisual(false); }
+        public override void OnStopClient() { DetachStore(); Hands.StopPresentation(); Emote.ResetLocal(); presentation.SetVisual(false); }
         public override void OnOwnershipClient(NetworkConnection previousOwner)
         {
+            Emote.ResetLocal();
             Hands.StopPresentation();
             BindStore();
             if (!IsOwner) ResolveSelected(selected.Value);
             hasReceived = hasPending = false;
-            presentation.SetVisual(IsClientInitialized && (!IsOwner || health.IsDowned));
+            RefreshBody();
             player.SetFallbackVisible(!IsOwner && presentation.Binding == null);
             contextDirty = IsOwner;
             if (IsClientInitialized && health.IsAlive) Hands.StartPresentation();
@@ -110,6 +116,14 @@ namespace TwoBirds
             TargetLook(connection, baseline);
         }
         private bool Attached => seating.Seated || carry.IsCarried && !carry.ReleasePreview;
+
+        private void RefreshBody()
+        {
+            presentation.IgnoresHandTargets = IsOwner;
+            presentation.SetDormant(IsOwner && health.IsAlive && !Emote.Presenting);
+            presentation.SetVisual(IsClientInitialized);
+        }
+        private void EmoteChanged() { if (!Emote.Active) contextDirty = true; RefreshBody(); }
 
         private void IdentityChanged(AvatarAppearance oldValue, AvatarAppearance value, bool asServer)
         { if (IsClientInitialized && !IsOwner) ResolveSelected(value); }
@@ -182,7 +196,7 @@ namespace TwoBirds
 
         private void LateUpdate()
         {
-            if (health.IsDowned || !IsClientInitialized || !IsOwner || seating.AwaitingReference) return;
+            if (health.IsDowned || !IsClientInitialized || !IsOwner || seating.AwaitingReference || Emote.Active) return;
             float now = Time.unscaledTime;
             if (!contextDirty && now < nextSend) return;
             var aim = player.AimPose;
@@ -204,6 +218,9 @@ namespace TwoBirds
         }
         [ObserversRpc(ExcludeOwner = true)] private void ObserversLook(AvatarLookSample sample, Channel channel = Channel.Unreliable)
         { if (!IsServerInitialized) ReceiveLook(sample, false); }
+        internal void SendEmote(byte id) => ServerEmote(id);
+        [ServerRpc] private void ServerEmote(byte id) { if (IsClientInitialized && !IsOwner) Emote.Receive(id); ObserversEmote(id); }
+        [ObserversRpc(ExcludeOwner = true)] private void ObserversEmote(byte id) { if (!IsServerInitialized) Emote.Receive(id); }
         [TargetRpc] private void TargetLook(NetworkConnection connection, AvatarLookSample sample)
         { if (!IsOwner) ReceiveLook(sample, true); }
         private static bool Newer(ushort value, ushort previous) => (short)(value - previous) > 0;
@@ -253,6 +270,7 @@ namespace TwoBirds
             DetachStore(); cosmetics?.Dispose();
             if (presentation) { presentation.DidBind -= BindCosmetics; presentation.WillUnbind -= UnbindCosmetics; }
             if (health) health.LifeChanged -= LifeChanged;
+            if (Emote) Emote.Changed -= EmoteChanged;
             selected.OnChange -= IdentityChanged;
             if (seating) seating.PresentationContextChanged -= ContextChanged;
             if (carry) carry.PresentationContextChanged -= ContextChanged;
@@ -268,7 +286,7 @@ namespace TwoBirds
                 presentation.FinishRagdoll(CurrentPlacement);
                 Hands.StartPresentation();
             }
-            presentation.SetVisual(!IsOwner || health.IsDowned);
+            RefreshBody();
             ContextChanged();
         }
     }

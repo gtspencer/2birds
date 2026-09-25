@@ -8,7 +8,7 @@ namespace TwoBirds
         internal uint SelectedId;
         internal ItemActionSnapshot Action;
         internal double ActionAge;
-        internal bool FirstPerson, CanEquip, CanCharge, HasAction;
+        internal bool FirstPerson, CanEquip, CanCharge, HasAction, Emoting;
         internal AvatarPresentationInput Placement;
         internal Pose Aim, Projectile;
         internal bool ProjectileAvailable, ProjectileUnavailable;

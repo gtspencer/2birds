@@ -312,6 +312,7 @@ namespace TwoBirds
             }
             if (target > 0f)
             {
+                if (IsOwner && !PredictionManager.IsReconciling) Disturbed?.Invoke();
                 if (carry && carry.IsCarrying && (IsOwner || IsServerInitialized))
                 {
                     if (PredictionManager.IsReconciling)

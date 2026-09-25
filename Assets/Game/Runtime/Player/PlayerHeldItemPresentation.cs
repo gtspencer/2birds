@@ -13,6 +13,7 @@ namespace TwoBirds
         private PlayerSeating seating;
         private PlayerCarry carry;
         private WorldItemRegistry registry;
+        private PlayerEmote emote;
         private ItemDefinition selected, actionDefinition;
         private WorldItem selectedItem;
         private SlingshotPresentation slingshot;
@@ -49,6 +50,8 @@ namespace TwoBirds
             playerAvatar.Presentation.WillUnbind += Unbind;
             playerAvatar.Presentation.DidBind += Bound;
             playerAvatar.Presentation.IdentityResolved += IdentityResolved;
+            emote = playerAvatar.Emote;
+            emote.Changed += ContextChanged;
             SelectionChanged(); ActionChanged();
         }
         internal void StopPresentation()
@@ -67,6 +70,7 @@ namespace TwoBirds
             playerAvatar.Presentation.WillUnbind -= Unbind;
             playerAvatar.Presentation.DidBind -= Bound;
             playerAvatar.Presentation.IdentityResolved -= IdentityResolved;
+            emote.Changed -= ContextChanged;
             selected = actionDefinition = null; selectedItem = null; slingshot = null; selectedId = 0;
             State.Dispose(); State = null;
             networkState.ResetItemAction();
@@ -123,7 +127,7 @@ namespace TwoBirds
             {
                 SelectedDefinition = selected, SelectedId = selectedId, ActionDefinition = actionDefinition,
                 Action = action, ActionAge = networkState.HasActionSnapshot ? networkState.ActionAge(action) : 0d,
-                FirstPerson = firstPerson, HasAction = networkState.HasActionSnapshot,
+                FirstPerson = firstPerson, HasAction = networkState.HasActionSnapshot, Emoting = emote && emote.Presenting,
                 CanEquip = inventory.CanEquip, CanCharge = networkState.CanCharge,
                 Placement = playerAvatar.CurrentPlacement, Aim = player.AimPose,
                 EnvironmentMask = registry.EnvironmentMask

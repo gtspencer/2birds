@@ -10,7 +10,9 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump, sprint, drop, use, exit, interact, lights, horn, directUse, secondaryInteract;
+        private InputAction move, look, jump, sprint, drop, use, interact, lights, horn, directUse, secondaryInteract, emoteAction;
+        private InputAction[] emoteCancels;
+        private PlayerEmote emote;
         private PlayerSeating seating;
         private PlayerCarry carry;
         private PlayerHealth health;
@@ -19,7 +21,7 @@ namespace TwoBirds
         private bool giveUpBlocked;
         public bool Carried => carry && carry.IsCarried || seating && seating.AwaitingReference;
         private SessionController session;
-        private bool exitBlocked, interactBlocked, directUseBlocked, secondaryInteractBlocked;
+        private bool interactBlocked, directUseBlocked, secondaryInteractBlocked, emoteBlocked;
         private int suppressedInteractionFrame = -1;
         private PlayerInventory inventory;
         private PlayerEquipment equipment;
@@ -66,6 +68,9 @@ namespace TwoBirds
                 RefreshInputPresentation();
             }
         }
+        internal EmoteWheelSelection EmoteWheel { get; private set; }
+        internal bool EmoteWheelOpen => EmoteWheel != null && EmoteWheel.Open;
+        private bool WheelAvailable => GameplayActive && !InputSuppressed && !equipment.IsCharging && emote.CanStart;
         public bool SessionInputAvailable => gameplay && !InventoryOpen;
         public bool GameplayActive => SessionInputAvailable && (!health || health.IsAlive);
         public bool InteractHeld => GameplayActive && !InputSuppressed && !interactBlocked && ButtonHeld(interact);
@@ -78,9 +83,9 @@ namespace TwoBirds
             presentation == null || presentation.SuppressInput || suppressedInteractionFrame == Time.frameCount;
         public bool Handbrake => GameplayActive && !InputSuppressed && !jumpBlocked && !seating.TransitionPending && jump.IsPressed();
         public bool InteractPressed => !Carried && GameplayActive && !InputSuppressed && !seating.TransitionPending && !interactBlocked &&
-            suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame();
+            suppressedInteractionFrame != Time.frameCount && interact.WasPressedThisFrame() && !EmoteWheelOpen;
         public bool SecondaryInteractPressed => !Carried && GameplayActive && !InputSuppressed && !seating.TransitionPending &&
-            !secondaryInteractBlocked && secondaryInteract.WasPressedThisFrame();
+            !secondaryInteractBlocked && secondaryInteract.WasPressedThisFrame() && !EmoteWheelOpen && !seating.Seated;
         private InputPresentation presentation;
         public InputDevice ActiveDevice => presentation?.ActiveDevice;
 
@@ -97,7 +102,7 @@ namespace TwoBirds
             use = actions.FindAction("Use");
             directUse = actions.FindAction("DirectUse");
             secondaryInteract = actions.FindAction("SecondaryInteract");
-            exit = actions.FindAction("ExitVehicle");
+            emoteAction = actions.FindAction("Emote");
             interact = actions.FindAction("Interact");
             lights = actions.FindAction("Lights");
             horn = actions.FindAction("Horn");
@@ -109,7 +114,13 @@ namespace TwoBirds
             carry = GetComponent<PlayerCarry>();
             inventory = GetComponent<PlayerInventory>();
             equipment = GetComponent<PlayerEquipment>();
+            emoteCancels = new InputAction[7 + PlayerInventory.HotbarSize];
+            emoteCancels[0] = use; emoteCancels[1] = directUse; emoteCancels[2] = drop; emoteCancels[3] = interact;
+            emoteCancels[4] = secondaryInteract; emoteCancels[5] = actions.FindAction("Previous"); emoteCancels[6] = actions.FindAction("Next");
+            for (int i = 0; i < PlayerInventory.HotbarSize; i++) emoteCancels[7 + i] = actions.FindAction($"Hotbar{i + 1}");
             session = SessionController.Instance;
+            emote = GetComponent<PlayerAvatarPresentation>().Emote;
+            EmoteWheel = new EmoteWheelSelection(session.Emotes);
             presentation = session.InputPresentation;
             InputSystem.onAfterUpdate += ReadInput;
             SetGameplay(false);
@@ -142,11 +153,12 @@ namespace TwoBirds
             if (!IsOwner || InputState.currentUpdateType != UnityEngine.InputSystem.LowLevel.InputUpdateType.Dynamic) return;
             bool blockDirect = directUseBlocked;
             if (directUseBlocked && !ButtonHeld(directUse)) directUseBlocked = false;
+            bool blockSecondary = secondaryInteractBlocked;
             if (secondaryInteractBlocked && !ButtonHeld(secondaryInteract)) secondaryInteractBlocked = false;
             bool blocked = useBlocked;
             if (useBlocked && !UseButtonHeld()) useBlocked = false;
-            bool blockExit = exitBlocked;
-            if (exitBlocked && !ButtonHeld(exit)) exitBlocked = false;
+            bool blockEmote = emoteBlocked;
+            if (emoteBlocked && !ButtonHeld(emoteAction)) emoteBlocked = false;
             if (interactBlocked && !ButtonHeld(interact)) interactBlocked = false;
             bool blockJump = jumpBlocked, blockDrop = dropBlocked, blockLights = lightsBlocked, blockHorn = hornBlocked;
             if (jumpBlocked && !ButtonHeld(jump)) jumpBlocked = false;
@@ -156,6 +168,7 @@ namespace TwoBirds
             if (giveUpBlocked && !ButtonHeld(giveUp)) giveUpBlocked = false;
             if (!SessionInputAvailable || InputSuppressed)
             {
+                EmoteWheel.Close();
 #if UNITY_INCLUDE_INSTRUMENTATION
                 if (AuthoringCharge && SessionInputAvailable) return;
 #endif
@@ -163,8 +176,10 @@ namespace TwoBirds
                 return;
             }
             movement = health.IsAlive ? Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f) : Vector2.zero;
-            if (health.IsAlive && !Carried && !blockJump && !seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
+            if (emote.Active && movement.sqrMagnitude > 0f) emote.Stop();
             Vector2 delta = look.ReadValue<Vector2>();
+            if (EmoteWheel.Open) { UpdateWheel(delta); return; }
+            if (health.IsAlive && !Carried && !blockJump && !seating.Seated && !seating.TransitionPending) jumpPending |= jump.WasPressedThisFrame();
             float sensitivity = look.activeControl?.device is Gamepad ?
                 session.ControllerSensitivity * Time.unscaledDeltaTime : session.MouseSensitivity;
             if (health.IsAlive && seating.Seated) seating.AddLook(delta.x * sensitivity);
@@ -172,13 +187,15 @@ namespace TwoBirds
             Pitch = Mathf.Clamp(Pitch - delta.y * sensitivity, -89f, 89f);
             if (!network.CanGameplayActions) return;
             if (Carried) { Clear(); return; }
-            if (!blockExit && exit.WasPressedThisFrame() && seating.Seated && !seating.TransitionPending)
+            if (!blockSecondary && secondaryInteract.WasPressedThisFrame() && seating.Seated && !seating.TransitionPending)
             {
                 suppressedInteractionFrame = Time.frameCount;
                 seating.RequestExit();
                 return;
             }
             if (seating.TransitionPending || seating.PlacementPending) return;
+            if (!blockEmote && emoteAction.WasPressedThisFrame() && WheelAvailable) { EmoteWheel.Begin(presentation.IsController); return; }
+            if (emote.Active && (jump.WasPressedThisFrame() || AnyPressed(emoteCancels))) emote.Stop();
             if (seating.IsDriver)
             {
                 if (!blockLights && lights.WasPressedThisFrame()) seating.Cart.ToggleLights();
@@ -199,6 +216,33 @@ namespace TwoBirds
             if (blocked) return;
             if (use.WasPressedThisFrame()) equipment.BeginUse();
             if (use.WasReleasedThisFrame()) equipment.EndUse();
+        }
+
+        private void UpdateWheel(Vector2 delta)
+        {
+            if (!WheelAvailable) { CloseWheel(); return; }
+            bool confirm = use.WasPressedThisFrame() || jump.WasPressedThisFrame() && jump.activeControl?.device is Gamepad;
+            if (confirm && EmoteWheel.Highlight >= 0 || !ButtonHeld(emoteAction)) { Pick(); return; }
+            EmoteWheel.Look(delta, look.activeControl?.device is Gamepad);
+        }
+
+        private void Pick()
+        {
+            int slot = EmoteWheel.Highlight;
+            CloseWheel();
+            if (slot >= 0 && movement == Vector2.zero) emote.Play((byte)slot);
+        }
+
+        private void CloseWheel()
+        {
+            EmoteWheel.Close();
+            useBlocked = UseButtonHeld(); jumpBlocked = ButtonHeld(jump); emoteBlocked = ButtonHeld(emoteAction);
+        }
+
+        private static bool AnyPressed(InputAction[] actions)
+        {
+            foreach (var action in actions) if (action.WasPressedThisFrame()) return true;
+            return false;
         }
 
         private bool UseButtonHeld()
@@ -230,10 +274,11 @@ namespace TwoBirds
             if (AutomatedInput != null) return AutomatedInput();
 #endif
             if (seating.Seated || seating.PlacementPending) return default;
+            float facing = emote && emote.Active ? emote.FacingYaw : Yaw;
             if (!gameplay || InputSuppressed || InventoryOpen || seating.TransitionPending)
-                return new MoveInput(Vector2.zero, Yaw, false);
+                return new MoveInput(Vector2.zero, facing, false);
             Vector3 direction = Quaternion.Euler(0f, Yaw, 0f) * new Vector3(movement.x, 0f, movement.y);
-            var result = new MoveInput(new Vector2(direction.x, direction.z), Yaw, jumpPending,
+            var result = new MoveInput(new Vector2(direction.x, direction.z), facing, jumpPending,
                 sprint != null && sprint.IsPressed() && movement.sqrMagnitude > 0.0001f);
             jumpPending = false;
             return result;
@@ -245,7 +290,8 @@ namespace TwoBirds
         {
             Clear();
             CancelUse();
-            exitBlocked = ButtonHeld(exit);
+            EmoteWheel?.Close();
+            emoteBlocked = ButtonHeld(emoteAction);
             interactBlocked = ButtonHeld(interact);
             directUseBlocked = ButtonHeld(directUse);
             secondaryInteractBlocked = ButtonHeld(secondaryInteract);

@@ -398,3 +398,9 @@
 }
 .revive-wheel { width: 84px; height: 84px; align-items: center; justify-content: center; }
 .revive-wheel > Label { font-size: 26px; color: var(--text-primary); }
+.emote-overlay { display: none; position: absolute; left: 0; top: 0; right: 0; bottom: 0; align-items: center; justify-content: center; }
+.emote-wheel { width: 420px; height: 420px; }
+.emote-wheel-slot { position: absolute; width: 110px; align-items: center; }
+.emote-wheel-slot > Image { width: 44px; height: 44px; margin-bottom: 4px; }
+.emote-wheel-slot > Label { font-size: 15px; color: var(--text-secondary); -unity-text-align: middle-center; white-space: normal; }
+.emote-wheel-slot.highlighted > Label { color: var(--text-primary); -unity-font-style: bold; }

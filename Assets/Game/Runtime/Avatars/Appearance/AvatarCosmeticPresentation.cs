@@ -18,6 +18,7 @@ namespace TwoBirds
         private DecalProjector[] projectors = Array.Empty<DecalProjector>();
         private Material[] materials = Array.Empty<Material>();
         private AvatarAppearance appearance;
+        private bool visible = true;
         public AvatarCosmeticPresentation(AvatarBinding binding, HatCatalog hats, TattooCatalog tattoos, bool firstPerson = false)
         {
             this.binding = binding; this.hats = hats; this.tattoos = tattoos; this.firstPerson = firstPerson;
@@ -44,6 +45,7 @@ namespace TwoBirds
                         var visual = UnityEngine.Object.Instantiate(definition.Visual, hat.transform);
                         definition.Fit.Apply(visual.transform);
                         SetLayer(hat, binding.Animator.gameObject.layer);
+                        hat.SetActive(visible);
                     }
                 }
                 projectors = new DecalProjector[value.Tattoos.Length]; materials = new Material[projectors.Length];
@@ -84,7 +86,14 @@ namespace TwoBirds
             projector.size = new Vector3(size * aspect, size / aspect, Mathf.Max(0.003f, region.Dimensions.magnitude * 0.025f));
             projector.pivot = Vector3.zero;
             materials[index].SetColor(Ink, value.Ink);
+            projector.enabled = visible;
             projector.gameObject.SetActive(true);
+        }
+        internal void SetVisible(bool value)
+        {
+            visible = value;
+            if (hat) hat.SetActive(value);
+            foreach (var projector in projectors) if (projector) projector.enabled = value;
         }
         internal static void SetLayer(GameObject root, int layer)
         { foreach (var node in root.GetComponentsInChildren<Transform>(true)) node.gameObject.layer = layer; }

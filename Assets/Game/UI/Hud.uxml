@@ -15,6 +15,7 @@
         <ui:VisualElement name="revive-overlay" class="revive-overlay" picking-mode="Ignore">
             <ui:Label text="Reviving" picking-mode="Ignore" />
         </ui:VisualElement>
+        <ui:VisualElement name="emote-overlay" class="emote-overlay" picking-mode="Ignore" />
         <ui:VisualElement name="crosshair" class="crosshair" picking-mode="Ignore" />
         <ui:VisualElement name="charge-track" class="charge-track" picking-mode="Ignore">
             <ui:VisualElement name="charge-fill" class="charge-fill" picking-mode="Ignore" />

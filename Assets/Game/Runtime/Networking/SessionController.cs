@@ -27,6 +27,7 @@ namespace TwoBirds
         [SerializeField] private AvatarRegistry avatarRegistry;
         [SerializeField] private HatCatalog hatCatalog;
         [SerializeField] private TattooCatalog tattooCatalog;
+        [SerializeField] private EmoteCatalog emoteCatalog;
         [SerializeField] private AvatarEditorController avatarEditorPrefab;
         public AvatarRegistry Avatars => avatarRegistry;
         public string GameplayScene { get; private set; } = "Game";
@@ -55,6 +56,7 @@ namespace TwoBirds
 #endif
         public HatCatalog Hats => hatCatalog;
         public TattooCatalog Tattoos => tattooCatalog;
+        public EmoteCatalog Emotes => emoteCatalog;
         public AvatarAppearanceStore Appearance { get; private set; }
         public CosmeticUnlockService Unlocks { get; private set; }
         public AvatarEditorController AvatarEditor { get; private set; }

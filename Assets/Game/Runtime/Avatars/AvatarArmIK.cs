@@ -26,21 +26,22 @@ namespace TwoBirds
             left = Bind(false); right = Bind(true);
         }
 
-        internal void Solve(AvatarHandTargets targets, float dt)
+        internal void Solve(AvatarHandTargets targets, float dt, float weight = 1f)
         {
             Pose body = binding.Body;
             var pose = targets.Arms;
-            if (pose.Pitch != 0f)
+            float pitchAngle = pose.Pitch * weight;
+            if (pitchAngle != 0f)
             {
-                Quaternion pitch = Quaternion.AngleAxis(pose.Pitch, body.rotation * Vector3.right);
+                Quaternion pitch = Quaternion.AngleAxis(pitchAngle, body.rotation * Vector3.right);
                 right.Upper.rotation = pitch * right.Upper.rotation;
                 if (pose.ChargeClass && pose.ChargeClass.Mode != ItemHoldMode.OneHand) left.Upper.rotation = pitch * left.Upper.rotation;
             }
             var leftTarget = targets.Resolve(AvatarIKGoal.LeftHand);
             var rightTarget = targets.Resolve(AvatarIKGoal.RightHand);
             // A held-item claim still blends out the free hand while the arm layer blends in.
-            if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), null, targets.Body, body, 0f, dt);
-            if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), null, targets.Body, body, 0f, dt);
+            if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), null, targets.Body, body, 0f, dt, weight);
+            if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), null, targets.Body, body, 0f, dt, weight);
             binding.AnchoredItem = null;
             Pose? leftGrip = null, rightGrip = null;
             var anchor = targets.Anchor;
@@ -56,8 +57,8 @@ namespace TwoBirds
                     leftGrip = new Pose(frame.position - half, leftPalm.rotation);
                 }
             }
-            Solve(left, false, leftTarget, leftGrip, targets.Body, body, Swivel(targets, 0), dt);
-            Solve(right, true, rightTarget, rightGrip, targets.Body, body, Swivel(targets, 1), dt);
+            Solve(left, false, leftTarget, leftGrip, targets.Body, body, Swivel(targets, 0), dt, weight);
+            Solve(right, true, rightTarget, rightGrip, targets.Body, body, Swivel(targets, 1), dt, weight);
         }
 
         private static float Swivel(AvatarHandTargets targets, int index)
@@ -77,7 +78,7 @@ namespace TwoBirds
             return start + range * (1f - Mathf.Exp(-(distance - start) / range));
         }
 
-        private void Solve(Arm arm, bool rightHand, AvatarHandTargets.Target target, Pose? grip, Pose prepared, Pose body, float swivel, float dt)
+        private void Solve(Arm arm, bool rightHand, AvatarHandTargets.Target target, Pose? grip, Pose prepared, Pose body, float swivel, float dt, float weight)
         {
             if (!target.Transform) return;
             var data = binding.Measurements;
@@ -100,7 +101,7 @@ namespace TwoBirds
             arm.Seeded = true;
             float cap = length * reach, distance = delta.magnitude;
             if (distance > cap * 0.85f) delta *= SoftReach(distance, cap) / distance;
-            float positionWeight = target.Position * arm.Weight, rotationWeight = target.Rotation * arm.Weight;
+            float positionWeight = target.Position * arm.Weight * weight, rotationWeight = target.Rotation * arm.Weight * weight;
             if (positionWeight <= 0f && rotationWeight <= 0f) return;
             Vector3 end = Vector3.Lerp(arm.Hand.position, root + delta, positionWeight);
             Quaternion rotation = Quaternion.Slerp(arm.Hand.rotation, wrist, rotationWeight);
