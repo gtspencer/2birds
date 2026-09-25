@@ -253,6 +253,7 @@ MonoBehaviour:
   avatarRegistry: {fileID: 11400000, guid: 7222d0b0317f85c48b6038db110ed635, type: 2}
   hatCatalog: {fileID: 11400000, guid: 18231ca113c53eb4dbf683e54b843994, type: 2}
   tattooCatalog: {fileID: 11400000, guid: 004b963f3977b6a43ae8db9bd57b7584, type: 2}
+  emoteCatalog: {fileID: 11400000, guid: 78a139bd89a8d0f43b3fe4b1e99c8248, type: 2}
   avatarEditorPrefab: {fileID: 7619871091454586792, guid: 904f518b6d73a0e488ea0f372d016771, type: 3}
   multipass: {fileID: -1955571057096831927}
   localTransport: {fileID: 432730836199715234}
