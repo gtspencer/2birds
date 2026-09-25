@@ -346,7 +346,7 @@ namespace TwoBirds
         {
             if (!world.IsHost || !simulating) playerContact.SamplePlayerContact(player, Frame);
         }
-        private void ReportImpact(PlayerItemHitbox player, Vector3 velocity, Vector3 playerVelocity, Vector3 normal, Vector3 point) =>
+        private void ReportImpact(PlayerItemHitbox player, Vector3 velocity, Vector3 playerVelocity, Vector3 normal, Vector3 point, bool presented) =>
             playerContact.Damage(player, definition.PebbleDamage, Vector3.zero);
 
         private void StopPhysics()

@@ -42,7 +42,7 @@ namespace TwoBirds
         private bool rebaseContactPose;
         private readonly WorldItemRegistry registry;
         private readonly RigidbodyMotionState motion;
-        private readonly Action<PlayerItemHitbox, Vector3, Vector3, Vector3, Vector3> report;
+        private readonly Action<PlayerItemHitbox, Vector3, Vector3, Vector3, Vector3, bool> report;
         private readonly Func<ItemMotion, Vector3> spherePosition;
         private ItemContactFrame current;
         private Vector3 physicsStartSphere;
@@ -58,14 +58,14 @@ namespace TwoBirds
         internal bool Rebase { get => rebaseContactPose; set => rebaseContactPose = value; }
 
         internal ItemPlayerContact(WorldItemRegistry owner, RigidbodyMotionState state,
-            Func<ItemMotion, Vector3> center, Action<PlayerItemHitbox, Vector3, Vector3, Vector3, Vector3> impact)
+            Func<ItemMotion, Vector3> center, Action<PlayerItemHitbox, Vector3, Vector3, Vector3, Vector3, bool> impact)
         { registry = owner; motion = state; spherePosition = center; report = impact; }
 
         private ItemMotion PresentedMotionAt(double tick, out Vector3 velocity) =>
             motion.Sample(tick, false, sphereRadius, registry.EnvironmentMask, registry.TickDelta, out velocity);
         private Vector3 SphereAt(double tick) => spherePosition(PresentedMotionAt(tick, out _));
         private void ReportImpact(PlayerItemHitbox player, Vector3 velocity, Vector3 playerVelocity, Vector3 normal, Vector3 point) =>
-            report(player, velocity, playerVelocity, normal, point);
+            report(player, velocity, playerVelocity, normal, point, true);
 
         internal void BeforePhysics(in ItemContactFrame frame, bool sample)
         {
@@ -111,7 +111,7 @@ namespace TwoBirds
         {
             if (!registry.IsHost || !frame.Simulating || !frame.Eligible || !player || !player.Motor.IsOwner ||
                 frame.IgnoredPlayer == player.Collider) return;
-            report(player, incoming, player.IncomingVelocity, normal, point);
+            report(player, incoming, player.IncomingVelocity, normal, point, false);
         }
 
         internal void Reset()

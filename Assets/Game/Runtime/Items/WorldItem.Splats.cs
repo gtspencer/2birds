@@ -13,11 +13,10 @@ namespace TwoBirds
             Record = record;
         }
 
-        internal void SampleSplatRemoval(PlayerItemHitbox player, Vector3 point, Vector3 normal)
+        internal void SampleSplatRemoval(PlayerItemHitbox player, Vector3 point, Vector3 normal, Vector3 velocity)
         {
             if (Simulating) return;
             UpdateIgnore();
-            Vector3 velocity = incomingSampled ? incomingVelocity : Record.Motion.Velocity;
             playerContact.SampleTerminalContact(player, ContactFrame, point + normal * sphereRadius, velocity);
         }
 
@@ -27,7 +26,7 @@ namespace TwoBirds
             UpdateIgnore();
             if (collision.collider == ignoredPlayer) return;
             var contact = collision.GetContact(0);
-            registry.QueueSplat(this, collision.collider, contact.point, contact.normal);
+            registry.QueueSplat(this, collision.collider, contact.point, contact.normal, incomingVelocity);
         }
     }
 }

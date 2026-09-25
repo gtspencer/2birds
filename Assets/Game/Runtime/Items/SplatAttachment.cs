@@ -33,7 +33,7 @@ namespace TwoBirds
             for (int i = 0; i < node.childCount; i++) Cache(node.GetChild(i), path + "/" + i);
         }
 
-        internal void Capture(uint source, Collider collider, Vector3 point, Vector3 normal,
+        internal void Capture(uint source, Collider collider, Vector3 point, Vector3 normal, bool presented,
             out SplatTarget target, out Vector3 localPoint, out Quaternion localRotation)
         {
             target = default; localPoint = default; localRotation = Quaternion.identity;
@@ -48,8 +48,17 @@ namespace TwoBirds
             if (playerId < 0 && parentPlayer) playerId = parentPlayer.ObjectId;
             if (playerId >= 0 && registry.TryGetPlayer(playerId, out var player))
             {
-                var binding = player.GetComponent<PlayerAvatarPresentation>().Presentation.Binding;
+                var avatar = player.GetComponent<PlayerAvatarPresentation>();
+                var binding = avatar.Presentation.Binding;
                 if (binding == null) return;
+                if (!presented)
+                {
+                    var physical = player.Effects.Motor.Body;
+                    var placement = avatar.CurrentPlacement.Facing;
+                    var rotation = placement.rotation * Quaternion.Inverse(physical.rotation);
+                    point = placement.position + rotation * (point - physical.position);
+                    normal = rotation * normal;
+                }
                 float closest = float.PositiveInfinity;
                 foreach (var bone in Bones)
                 {

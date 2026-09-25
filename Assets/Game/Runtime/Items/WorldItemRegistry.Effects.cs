@@ -104,6 +104,7 @@ namespace TwoBirds
                 {
                     existing.HasSplat = true; existing.Target = report.Target;
                     existing.SplatPoint = report.SplatPoint; existing.SplatRotation = report.SplatRotation;
+                    existing.SplatVelocity = report.SplatVelocity;
                 }
                 report = existing;
             }
@@ -131,20 +132,20 @@ namespace TwoBirds
         private bool AcceptContact(ItemContact report)
         {
             if (report.Epoch != epoch) return false;
-            if (acceptedSplats.ContainsKey(ContactKey(report))) return true;
+            bool acceptedSplat = acceptedSplats.ContainsKey(ContactKey(report));
             if (!records.TryGetValue(report.Item, out var item) || item.State != WorldItemState.World ||
-                item.Operation != report.Operation || item.Releaser != report.Releaser || item.Motion.Revision < report.Revision) return false;
+                item.Operation != report.Operation || item.Releaser != report.Releaser || item.Motion.Revision < report.Revision) return acceptedSplat;
             if (report.Cauldron >= 0 && GetDefinition(item.DefinitionId).CanBeIngredient &&
                 cauldrons.TryGetValue(report.Cauldron, out var cauldron) && cauldron.Accepting)
             {
                 var visual = items[report.Item];
                 Admit(item, cauldron, item.Releaser, item.Operation, visual.PresentedRootPosition, visual.PresentedRotation);
-                return false;
+                return acceptedSplat;
             }
             var definition = GetDefinition(item.DefinitionId);
-            bool splat = report.HasSplat && item.SplatArmed && definition.CanSpawnSplat;
+            bool splat = !acceptedSplat && report.HasSplat && item.SplatArmed && definition.CanSpawnSplat;
             bool potion = report.Impact && item.Armed && definition is PotionDefinition;
-            if (!splat && !potion) return false;
+            if (!splat && !potion) return acceptedSplat;
             var transition = new CraftingTransition { HasSplat = splat, HasActivation = potion };
             if (splat)
             {
@@ -154,7 +155,7 @@ namespace TwoBirds
             if (potion) transition.Activation = BuildActivation(item, item.Releaser, item.Operation, report.Position, report.Cart, report.CartLifetime);
             if (potion || splat && definition.DestroyOnSplat) transition.Items = new() { Tombstone(item) };
             CommitFeature(transition);
-            return splat;
+            return splat || acceptedSplat;
         }
         internal bool UsePotion(ItemRecord item, PlayerInventory player, uint operation, Vector3 position)
         {

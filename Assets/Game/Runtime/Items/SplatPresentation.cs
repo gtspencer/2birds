@@ -10,10 +10,11 @@ namespace TwoBirds
         private SplatTargetLifetime owner;
         private int pop = -1, delay = -1, shrink = -1;
         private bool disposed;
+        internal bool IsDisposed => disposed;
         internal SplatEvent Event { get; private set; }
         internal event System.Action<SplatPresentation> Disposed;
 
-        internal void Initialize(SplatDefinition style)
+        internal void Initialize(SplatDefinition style, float age)
         {
             definition = style;
             projector = gameObject.AddComponent<DecalProjector>();
@@ -21,14 +22,22 @@ namespace TwoBirds
             projector.scaleMode = DecalScaleMode.ScaleInvariant;
             projector.pivot = Vector3.zero;
             projector.enabled = false;
-            SetSize(style.PopDuration > 0f ? 0.0001f : style.SplatSize);
+            SetSize(PopSize(Mathf.Min(age, style.LifetimeBeforeShrinking)));
             gameObject.SetActive(true);
-            if (style.PopDuration > 0f)
+            if (age >= style.LifetimeBeforeShrinking)
+            {
+                Shrink(age - style.LifetimeBeforeShrinking);
+                return;
+            }
+            if (age < style.PopDuration)
                 pop = LeanTween.value(gameObject, 0.0001f, style.SplatSize, style.PopDuration)
-                    .setEase(LeanTweenType.easeOutElastic).setOnUpdate(SetSize).id;
-            if (style.LifetimeBeforeShrinking <= 0f) Shrink();
-            else delay = LeanTween.delayedCall(gameObject, style.LifetimeBeforeShrinking, Shrink).id;
+                    .setEase(LeanTweenType.easeOutElastic).setPassed(age).setOnUpdate(SetSize).id;
+            delay = LeanTween.delayedCall(gameObject, style.LifetimeBeforeShrinking - age, Shrink).id;
         }
+
+        private float PopSize(float age) => definition.PopDuration > 0f
+            ? LeanTween.easeOutElastic(0.0001f, definition.SplatSize, Mathf.Clamp01(age / definition.PopDuration))
+            : definition.SplatSize;
 
         internal void Place(SplatEvent value, SplatTargetLifetime lifetime, Transform target)
         {
@@ -58,14 +67,18 @@ namespace TwoBirds
             if (!disposed) projector.size = new Vector3(Mathf.Max(0.0001f, size), Mathf.Max(0.0001f, size), 0.05f);
         }
 
-        private void Shrink()
+        private void Shrink() => Shrink(0f);
+
+        private void Shrink(float elapsed)
         {
             delay = -1;
             if (disposed) return;
             if (pop >= 0) { LeanTween.cancel(pop); pop = -1; }
             if (definition.ShrinkDuration <= 0f) { Dispose(); return; }
-            shrink = LeanTween.value(gameObject, projector.size.x, 0f, definition.ShrinkDuration)
-                .setEase(LeanTweenType.easeInOutQuad).setOnUpdate(SetSize).setOnComplete(Dispose).id;
+            float size = projector.size.x;
+            SetSize(LeanTween.easeInOutQuad(size, 0f, Mathf.Clamp01(elapsed / definition.ShrinkDuration)));
+            shrink = LeanTween.value(gameObject, size, 0f, definition.ShrinkDuration)
+                .setEase(LeanTweenType.easeInOutQuad).setPassed(elapsed).setOnUpdate(SetSize).setOnComplete(Dispose).id;
         }
 
         internal void Dispose()

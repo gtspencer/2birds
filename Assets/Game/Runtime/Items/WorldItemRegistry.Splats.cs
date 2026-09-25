@@ -7,7 +7,7 @@ namespace TwoBirds
     public sealed partial class WorldItemRegistry
     {
         private readonly Dictionary<(uint Epoch, uint Item, int Releaser, uint Operation), SplatEvent> acceptedSplats = new();
-        private readonly Dictionary<(uint Epoch, uint Item, int Releaser, uint Operation), SplatPresentation> predictedSplats = new();
+        private readonly Dictionary<(uint Epoch, uint Item, int Releaser, uint Operation), (SplatPresentation Presentation, double StartedAt)> predictedSplats = new();
         private readonly HashSet<(uint Epoch, uint Item, int Releaser, uint Operation)> reportedSplats = new();
         private readonly HashSet<SplatPresentation> splatPresentations = new();
         private readonly HashSet<SplatTargetLifetime> splatOwners = new();
@@ -27,7 +27,7 @@ namespace TwoBirds
             return record;
         }
 
-        internal void QueueSplat(WorldItem item, Collider collider, Vector3 point, Vector3 normal)
+        internal void QueueSplat(WorldItem item, Collider collider, Vector3 point, Vector3 normal, Vector3 velocity, bool presented = false)
         {
             if (Replaying || samplingAcceptedContact || !item.ReleaseAvailable || !item.Record.SplatArmed || !item.Definition.CanSpawnSplat) return;
             var key = SplatKey(item.Record);
@@ -36,7 +36,8 @@ namespace TwoBirds
             if (!report.HasSplat)
             {
                 report.HasSplat = true;
-                splatAttachment.Capture(report.Item, collider, point, normal, out report.Target, out report.SplatPoint, out report.SplatRotation);
+                report.SplatVelocity = velocity;
+                splatAttachment.Capture(report.Item, collider, point, normal, presented, out report.Target, out report.SplatPoint, out report.SplatRotation);
             }
             if (item.Record.Armed && !report.Impact)
             {
@@ -53,7 +54,8 @@ namespace TwoBirds
         private SplatEvent BuildSplat(ItemContact report, byte definition) => new()
         {
             Epoch = report.Epoch, Item = report.Item, Releaser = report.Releaser, Operation = report.Operation,
-            Definition = definition, Target = report.Target, Point = report.SplatPoint, Rotation = report.SplatRotation
+            Definition = definition, Target = report.Target, Point = report.SplatPoint, Rotation = report.SplatRotation,
+            Velocity = report.SplatVelocity
         };
 
         private void PredictSplat(ItemContact report)
@@ -62,13 +64,14 @@ namespace TwoBirds
             if (!report.HasSplat || report.Cauldron >= 0 || acceptedSplats.ContainsKey(key) || predictedSplats.ContainsKey(key) ||
                 !items.TryGetValue(report.Item, out var item)) return;
             var predicted = PresentSplat(BuildSplat(report, item.Record.DefinitionId));
-            if (predicted) predictedSplats[key] = predicted;
+            predictedSplats[key] = (predicted, Time.timeAsDouble);
         }
 
-        private SplatPresentation PresentSplat(SplatEvent value)
+        private SplatPresentation PresentSplat(SplatEvent value, float age = 0f)
         {
             var definition = GetDefinition(value.Definition);
             if (!definition || !definition.CanSpawnSplat ||
+                age >= definition.SplatDefinition.LifetimeBeforeShrinking + definition.SplatDefinition.ShrinkDuration ||
                 !splatAttachment.Resolve(value.Target, out var target, out var owner)) return null;
             TrackSplatOwner(owner);
             var root = new GameObject("Splat");
@@ -77,7 +80,7 @@ namespace TwoBirds
             var splat = root.AddComponent<SplatPresentation>();
             splatPresentations.Add(splat);
             splat.Disposed += SplatDisposed;
-            splat.Initialize(definition.SplatDefinition);
+            splat.Initialize(definition.SplatDefinition, age);
             splat.Place(value, owner, target);
             return splat;
         }
@@ -99,9 +102,14 @@ namespace TwoBirds
                 records[value.Item] = record;
             }
             if (items.TryGetValue(value.Item, out var item) && SplatKey(item.Record) == key) item.ConsumeSplat();
-            if (predictedSplats.Remove(key, out var predicted))
+            if (predictedSplats.Remove(key, out var prediction))
             {
-                if (!predicted) return;
+                var predicted = prediction.Presentation;
+                if (!predicted || predicted.IsDisposed)
+                {
+                    PresentSplat(value, (float)(Time.timeAsDouble - prediction.StartedAt));
+                    return;
+                }
                 if (splatAttachment.Resolve(value.Target, out var target, out var owner))
                 {
                     TrackSplatOwner(owner);
@@ -115,7 +123,7 @@ namespace TwoBirds
         private void RejectSplat((uint Epoch, uint Item, int Releaser, uint Operation) key)
         {
             if (acceptedSplats.ContainsKey(key)) return;
-            if (predictedSplats.Remove(key, out var splat) && splat) splat.Dispose();
+            if (predictedSplats.Remove(key, out var prediction) && prediction.Presentation) prediction.Presentation.Dispose();
         }
 
         internal void CancelItemContacts(uint item)

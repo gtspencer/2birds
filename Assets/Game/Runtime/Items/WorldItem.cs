@@ -770,9 +770,9 @@ namespace TwoBirds
             releaseOperation = 0;
         }
 
-        private void ReportImpact(PlayerItemHitbox player, Vector3 rockVelocity, Vector3 playerVelocity, Vector3 intoPlayer, Vector3 point)
+        private void ReportImpact(PlayerItemHitbox player, Vector3 rockVelocity, Vector3 playerVelocity, Vector3 intoPlayer, Vector3 point, bool presented)
         {
-            registry.QueueSplat(this, player.Collider, point, -intoPlayer);
+            registry.QueueSplat(this, player.Collider, point, -intoPlayer, rockVelocity, presented);
             float speed = Mathf.Max(0f, Vector3.Dot(rockVelocity - playerVelocity, intoPlayer));
             float incoming = Vector3.Dot(rockVelocity, intoPlayer);
             bool qualifies = incoming >= Definition.MinimumImpactSpeed && speed >= Definition.MinimumImpactSpeed;

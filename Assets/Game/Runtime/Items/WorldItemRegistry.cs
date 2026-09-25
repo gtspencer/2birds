@@ -239,7 +239,6 @@ namespace TwoBirds
                 if (records.TryGetValue(id, out var previous) && !Newer(record.Motion, previous.Motion)) continue;
                 records[id] = record;
                 pendingCartContacts.Remove(id);
-                if (record.State == WorldItemState.Held) { ClearPredictedClouds(id); CancelItemContacts(id); }
                 if (record.State == WorldItemState.Removed)
                 {
                     Pool(id);
@@ -251,6 +250,7 @@ namespace TwoBirds
                     if (LocalInventory == null || record.Operation != operation || record.Releaser != LocalInventory.ObjectId) continue;
                     pendingReleases.Remove(id);
                 }
+                if (record.State == WorldItemState.Held) { ClearPredictedClouds(id); CancelItemContacts(id); }
                 if (!items.TryGetValue(id, out var item))
                 {
                     item = Rent(record.DefinitionId);

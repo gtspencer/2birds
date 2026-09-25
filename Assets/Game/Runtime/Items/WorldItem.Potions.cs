@@ -17,7 +17,7 @@ namespace TwoBirds
             Vector3 point = receiver.Collider.ClosestPoint(BodySpherePosition);
             Vector3 normal = BodySpherePosition - point;
             if (normal.sqrMagnitude == 0f) normal = BodySpherePosition - receiver.Collider.bounds.center;
-            registry.QueueSplat(this, receiver.Collider, point, normal);
+            registry.QueueSplat(this, receiver.Collider, point, normal, incomingVelocity);
             registry.QueueItemImpact(this, point);
         }
         private void PotionCollision(Collision collision)

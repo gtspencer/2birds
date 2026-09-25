@@ -20,7 +20,7 @@ namespace TwoBirds
         public int Releaser;
         public byte Definition;
         public SplatTarget Target;
-        public Vector3 Point;
+        public Vector3 Point, Velocity;
         public Quaternion Rotation;
     }
 
@@ -76,13 +76,15 @@ namespace TwoBirds
             writer.WriteUInt32(value.Epoch); writer.WriteUInt32(value.Item); writer.WriteInt32(value.Releaser);
             writer.WriteUInt32(value.Operation); writer.WriteUInt8Unpacked(value.Definition);
             writer.WriteSplatTarget(value.Target); writer.WriteVector3(value.Point); writer.WriteQuaternion32(value.Rotation);
+            writer.WriteVector3(value.Velocity);
         }
 
         public static SplatEvent ReadSplatEvent(this Reader reader) => new()
         {
             Epoch = reader.ReadUInt32(), Item = reader.ReadUInt32(), Releaser = reader.ReadInt32(),
             Operation = reader.ReadUInt32(), Definition = reader.ReadUInt8Unpacked(),
-            Target = reader.ReadSplatTarget(), Point = reader.ReadVector3(), Rotation = reader.ReadQuaternion32()
+            Target = reader.ReadSplatTarget(), Point = reader.ReadVector3(), Rotation = reader.ReadQuaternion32(),
+            Velocity = reader.ReadVector3()
         };
 
         public static void WriteItemContact(this Writer writer, ItemContact value)
@@ -97,6 +99,7 @@ namespace TwoBirds
             if (value.HasSplat)
             {
                 writer.WriteSplatTarget(value.Target); writer.WriteVector3(value.SplatPoint); writer.WriteQuaternion32(value.SplatRotation);
+                writer.WriteVector3(value.SplatVelocity);
             }
         }
 
@@ -113,6 +116,7 @@ namespace TwoBirds
             if (value.HasSplat)
             {
                 value.Target = reader.ReadSplatTarget(); value.SplatPoint = reader.ReadVector3(); value.SplatRotation = reader.ReadQuaternion32();
+                value.SplatVelocity = reader.ReadVector3();
             }
             return value;
         }

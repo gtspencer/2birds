@@ -56,7 +56,7 @@ namespace TwoBirds
         public int Releaser, Cauldron, Cart;
         public bool Impact, HasSplat;
         public SplatTarget Target;
-        public Vector3 SplatPoint;
+        public Vector3 SplatPoint, SplatVelocity;
         public Quaternion SplatRotation;
         public Vector3 Position;
     }

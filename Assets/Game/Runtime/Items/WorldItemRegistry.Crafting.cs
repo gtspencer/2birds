@@ -157,7 +157,7 @@ namespace TwoBirds
                     {
                         TrackSplatOwner(owner);
                         if (target) source.SampleSplatRemoval(LocalInventory.Hitbox, target.TransformPoint(transition.Splat.Point),
-                            target.rotation * transition.Splat.Rotation * Vector3.back);
+                            target.rotation * transition.Splat.Rotation * Vector3.back, transition.Splat.Velocity);
                     }
                 }
                 finally { samplingAcceptedContact = false; }
