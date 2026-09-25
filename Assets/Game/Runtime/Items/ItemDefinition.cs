@@ -4,8 +4,6 @@ using UnityEngine.Serialization;
 
 namespace TwoBirds
 {
-    public enum ItemHoldMode { OneHand = 0, TwoHand = 1, Slingshot = 2 }
-
     public struct ItemStack
     {
         public byte ItemId;
@@ -47,22 +45,13 @@ namespace TwoBirds
         [Min(0.01f)] public float ThrowChargeTime = 1f;
 
         [Header("Held Item Grip")]
-        [Tooltip("Required.")]
-        public HoldClass HoldClass;
-        [Tooltip("Item root in the grip frame: metres and Euler degrees.")]
-        public GripOffset ThirdPersonGrip, FirstPersonGrip;
-        public List<AvatarGripOffset> AvatarGrips = new();
+        [Tooltip("Required."), FormerlySerializedAs("HoldClass")] public HoldSlot HoldSlot;
+        [Min(0f), Tooltip("Visual Hold → Charge time in seconds, independent of Throw Charge Time. The slingshot uses Throw Charge Time instead.")]
+        public float ChargePoseDuration = 0.35f;
+        public GripPoseTable GripPoses = new();
+        public List<AvatarGripPoses> AvatarGripPoses = new();
         public AnimationClip GripFingers;
-        public ItemHoldMode HoldMode => HoldClass ? HoldClass.Mode : ItemHoldMode.OneHand;
-
-        internal Pose Grip(AvatarId avatar, bool firstPerson)
-        {
-            var offset = (firstPerson ? FirstPersonGrip : ThirdPersonGrip).Pose;
-            foreach (var entry in AvatarGrips)
-                if (entry.Avatar == avatar)
-                    return HeldItemPoseCalculation.Compose((firstPerson ? entry.FirstPerson : entry.ThirdPerson).Pose, offset);
-            return offset;
-        }
+        public HoldSlotMode HoldMode => HoldSlot ? HoldSlot.Mode : HoldSlotMode.Hand;
 
         [Header("Player Impacts")]
         [Tooltip("When true, the item bounces off players without shoving them.")]
@@ -118,6 +107,7 @@ namespace TwoBirds
             MinThrowSpeed = Mathf.Max(0f, MinThrowSpeed);
             MaxThrowSpeed = Mathf.Max(MinThrowSpeed, MaxThrowSpeed);
             ThrowChargeTime = Mathf.Max(0.01f, ThrowChargeTime);
+            ChargePoseDuration = Mathf.Max(0f, ChargePoseDuration);
             MinimumImpactSpeed = Mathf.Max(0f, MinimumImpactSpeed);
             ImpulseMultiplier = Mathf.Max(0f, ImpulseMultiplier);
             CollisionDamage = Mathf.Max(0, CollisionDamage);

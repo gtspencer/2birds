@@ -134,10 +134,23 @@ namespace TwoBirds
                 player.inventory.Hitbox.SetSuspended(true);
                 player.presentation.SetSeated(true);
                 player.Input.ClearContext();
-                player.PresentationContextChanged?.Invoke();
+                player.RaiseContextChanged();
             }
             if (!unresolved.TryGetValue(state.Player, out var old) || state.ControlRevision >= old.state.ControlRevision)
                 unresolved[state.Player] = (state, impulse);
+        }
+
+        private PlayerHandPresentation hands;
+        private void RaiseContextChanged()
+        {
+            if (!hands) hands = GetComponent<PlayerAvatarPresentation>().Hands;
+            bool driving = IsDriver && !TransitionPending && !AwaitingReference && !PlacementPending;
+            if (hands)
+            {
+                if (driving) hands.BeginInteraction(Cart.Presentation.LeftHandContact, Cart.Presentation.RightHandContact);
+                else hands.EndInteraction();
+            }
+            PresentationContextChanged?.Invoke();
         }
 
         internal static void ForgetCart(int id)
@@ -165,7 +178,7 @@ namespace TwoBirds
             TransitionPending = true;
             Input.ClearContext();
             inventory.ApplyControlPermissions();
-            PresentationContextChanged?.Invoke();
+            RaiseContextChanged();
             if (IsServerInitialized) cart.Request(this, ++requestId, Revision, Motor.ControlRevision, cart.StateRevision, cart.Epoch, destination, partner, partnerRevision);
             else ServerRequest(++requestId, Revision, Motor.ControlRevision, cart.ObjectId, cart.StateRevision, cart.Epoch, destination, partner, partnerRevision);
         }
@@ -189,7 +202,7 @@ namespace TwoBirds
             TransitionPending = false;
             Input.ClearContext();
             inventory.ApplyControlPermissions();
-            PresentationContextChanged?.Invoke();
+            RaiseContextChanged();
             requestFeedback = result switch
             {
                 SeatRequestResult.NoPairSeat => "No seat for carried player.",
@@ -255,7 +268,7 @@ namespace TwoBirds
             }
             if (impulse && Health.IsAlive && !Seated && !PlacementPending && state.Ejection != Vector3.zero && IsOwner)
                 Motor.SubmitWorldImpact(state.Ejection, 0.2f);
-            PresentationContextChanged?.Invoke();
+            RaiseContextChanged();
             if (Carry) Carry.CompleteControlRelease(carryRelease);
         }
 

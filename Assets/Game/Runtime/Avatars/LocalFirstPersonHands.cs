@@ -10,14 +10,12 @@ namespace TwoBirds
         private Animator animator;
         private PlayableGraph graph;
         private AvatarFingerLayers fingers;
-        private AvatarArmLayers poses;
         private AvatarArmIK arms;
         private AvatarHandTargets targets;
         private Renderer[] renderers;
         private bool[] rendererStates;
         private Vector3 shoulderCenter;
         internal AvatarBinding Binding { get; private set; }
-        internal float PoseWeight(bool right) => poses.Weight(right);
         internal HeldItemBodyFrame BodyFrame => new(Binding.GetBone(HumanBodyBones.RightUpperArm).position,
             transform.rotation, Binding.Measurements, Binding.Scale,
             leftShoulder: Binding.GetBone(HumanBodyBones.LeftUpperArm).position);
@@ -42,7 +40,7 @@ namespace TwoBirds
             graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
             var basis = AnimationClipPlayable.Create(graph, clips.Idle);
             basis.SetSpeed(0); basis.SetTime(0); basis.SetApplyPlayableIK(false); basis.SetApplyFootIK(false);
-            poses = new AvatarArmLayers(graph, basis, true); fingers = new AvatarFingerLayers(graph, poses.Output);
+            fingers = new AvatarFingerLayers(graph, basis);
             var output = AnimationPlayableOutput.Create(graph, "Hands", animator);
             output.SetSourcePlayable(fingers.Output);
             graph.Play(); graph.Evaluate(0f);
@@ -56,24 +54,20 @@ namespace TwoBirds
             Binding.RefreshMeasurements(); transform.localScale = Vector3.one * Binding.Scale;
         }
 
-        internal void Place(Pose frame, Vector3 offset, float heavyWeight = 0f)
+        internal void Place(Pose frame, Vector3 offset, float bodyWeight = 0f)
         {
             transform.SetPositionAndRotation(frame.position + frame.rotation *
-                (offset + Binding.Settings.FirstPersonPlacementOffset * (1f - heavyWeight) - shoulderCenter * Binding.Scale), frame.rotation);
+                (offset + Binding.Settings.FirstPersonPlacementOffset * (1f - bodyWeight) - shoulderCenter * Binding.Scale), frame.rotation);
         }
 
         internal void Evaluate(float dt, AvatarAnimationSet clips)
         {
-            poses.Set(targets.Arms);
             var left = targets.Resolve(AvatarIKGoal.LeftHand); var right = targets.Resolve(AvatarIKGoal.RightHand);
             fingers.Select(false, left.Fingers ? left.Fingers : clips.RelaxedFingers, clips.OpenFingers, left.OpenWeight);
             fingers.Select(true, right.Fingers ? right.Fingers : clips.RelaxedFingers, clips.OpenFingers, right.OpenWeight);
             fingers.Advance(dt);
             graph.Evaluate(0f);
             arms.Solve(targets, dt);
-#if UNITY_INCLUDE_INSTRUMENTATION
-            if (targets.RoundTripMuscles) Binding.RoundTripMuscles();
-#endif
         }
 
         internal void SetVisible(bool visible)
@@ -82,7 +76,7 @@ namespace TwoBirds
         }
         private void OnDestroy()
         {
-            fingers?.Dispose(); poses?.Dispose(); Binding?.Dispose();
+            fingers?.Dispose();
             if (graph.IsValid()) graph.Destroy();
         }
     }

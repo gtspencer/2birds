@@ -125,7 +125,6 @@ namespace TwoBirds
             var clips = host.Registry.Animations;
             var targets = host.BodyTargets;
             float free = 1f - host.State.EmoteWeight;
-            graph.Arms.Set(targets.Arms, free);
             var leftHand = targets.Resolve(AvatarIKGoal.LeftHand); var rightHand = targets.Resolve(AvatarIKGoal.RightHand);
             graph.Fingers.Select(false, leftHand.Fingers ? leftHand.Fingers : clips.RelaxedFingers, clips.OpenFingers, leftHand.OpenWeight);
             graph.Fingers.Select(true, rightHand.Fingers ? rightHand.Fingers : clips.RelaxedFingers, clips.OpenFingers, rightHand.OpenWeight);
@@ -136,10 +135,8 @@ namespace TwoBirds
             ik.DeltaTime = dt;
             try { graph.Evaluate(host.State); }
             finally { evaluating = false; }
+            host.PoseHands(Binding);
             using (AvatarPresentationSystem.IkMarker.Auto()) arms.Solve(targets, dt, free);
-#if UNITY_INCLUDE_INSTRUMENTATION
-            if (targets.RoundTripMuscles) Binding.RoundTripMuscles();
-#endif
             if (host.EditorPreview && host.HeadLookEnabled) ApplyEditorHeadLook();
             using (AvatarPresentationSystem.VrmMarker.Auto())
             {
@@ -219,7 +216,6 @@ namespace TwoBirds
             released = true;
             graph?.Dispose(); graph = null;
             editorPoseHandler?.Dispose(); editorPoseHandler = null;
-            Binding?.Dispose();
             if (animator) animator.enabled = false;
             if (vrm) { vrm.enabled = false; vrm.DisposeRuntime(); }
             runtime = null; ik = null; springsRegistered = false;

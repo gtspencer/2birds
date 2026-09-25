@@ -26,10 +26,6 @@ namespace TwoBirds
         public bool OverrideDriverSeatedOffset;
         [Tooltip("Additional driver body offset in seat-relative metres: X right, Y up, Z forward. Added to Seated Pelvis Offset.")]
         public Vector3 DriverSeatedOffset = AvatarDriverPose.DefaultSeatedOffset;
-        [Tooltip("Use this avatar's steering hand offset instead of the shared Avatar Driver Settings default.")]
-        public bool OverrideDriverHandOffset;
-        [Tooltip("Offset both steering palm targets in seat-relative metres: X right, Y up, negative Z toward the driver.")]
-        public Vector3 DriverHandOffset = AvatarDriverPose.DefaultHandOffset;
         public float YawOffset;
         [Range(0.5f, 2f)] public float PlaybackMultiplier = 1f;
         public float LeftSoleAdjustment, RightSoleAdjustment;
@@ -92,14 +88,10 @@ namespace TwoBirds
     public static class AvatarDriverPose
     {
         public static readonly Vector3 DefaultSeatedOffset = new(0f, 0f, 0.08f);
-        public static readonly Vector3 DefaultHandOffset = new(0f, 0.04f, -0.04f);
 
         internal static Vector3 SeatedOffset(AvatarSettings settings, AvatarRegistry registry, bool driver) =>
             settings.SeatedPelvisOffset + (driver ? settings.OverrideDriverSeatedOffset
                 ? settings.DriverSeatedOffset : registry.Driver.DriverSeatedOffset : Vector3.zero);
-
-        internal static Vector3 HandOffset(AvatarSettings settings, AvatarRegistry registry) =>
-            settings && settings.OverrideDriverHandOffset ? settings.DriverHandOffset : registry.Driver.DriverHandOffset;
     }
 
     public sealed class AvatarBonePathAttribute : PropertyAttribute { }
@@ -135,7 +127,7 @@ namespace TwoBirds
                 !Finite(settings.RightPalmCorrection.Position) || !Finite(settings.RightPalmCorrection.Euler) ||
                 !Finite(settings.FirstPersonPlacementOffset) || !Finite(settings.FirstPersonReachOffset) ||
                 !Finite(settings.StandingOffset) || !Finite(settings.SeatedPelvisOffset) || !Finite(settings.CarriedOffset) ||
-                !Finite(settings.DriverSeatedOffset) || !Finite(settings.DriverHandOffset) ||
+                !Finite(settings.DriverSeatedOffset) ||
                 !float.IsFinite(settings.YawOffset) || !float.IsFinite(settings.NamePanelOffset) || !Positive(settings.PlaybackMultiplier) ||
                 !float.IsFinite(settings.LeftSoleAdjustment) || !float.IsFinite(settings.RightSoleAdjustment) ||
                 !float.IsFinite(settings.FootCorrection) || !float.IsFinite(settings.PelvisCorrection) ||

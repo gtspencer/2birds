@@ -8,14 +8,7 @@ using UnityEngine;
 namespace TwoBirds
 {
     public enum GripAuthoringPhase { Live, Hold, Charged }
-
-    public struct GripPoseCapture
-    {
-        public HoldClass Class;
-        public bool FirstPerson, Charged;
-        public float[] Muscles;
-        public float Spread;
-    }
+    public enum GripAuthoringMode { HeldItem, WorldContact }
 
     [DefaultExecutionOrder(250)]
     public sealed class GripAuthoringScene : MonoBehaviour
@@ -23,6 +16,11 @@ namespace TwoBirds
         public const string SceneName = "AvatarPresentationDemo";
         public const string ScenePath = "Assets/Scenes/AvatarPresentationDemo.unity";
         private const float ObserverOffset = 1.2f, StripSpacing = 0.9f, ReequipDelay = 1f;
+        private static readonly GripTarget[] SlotTargets =
+        {
+            GripTarget.HoldPose, GripTarget.ChargePose, GripTarget.RightHand, GripTarget.LeftHand, GripTarget.PouchDraw,
+            GripTarget.RightElbowHold, GripTarget.RightElbowCharge, GripTarget.LeftElbowHold, GripTarget.LeftElbowCharge
+        };
         public static GripAuthoringScene Instance { get; private set; }
         public static event Action SceneChanged;
         [SerializeField] private GripObserverPreview observer;
@@ -33,14 +31,14 @@ namespace TwoBirds
         private PlayerAvatarPresentation avatar;
         private PlayerHeldItemPresentation held;
         private PlayerNetworkState network;
+        private PlayerSeating seating;
+        private GolfCartNetwork cart;
         private Camera viewCamera;
         private int viewMask;
         private readonly HashSet<uint> supplied = new();
         private readonly Dictionary<Transform, int> originalLayers = new();
         private readonly List<GripObserverPreview> strip = new();
-        private HeldItemPresentationState editState;
-        private AvatarBinding editBinding;
-        private bool editFirstPerson, dragRight;
+        private readonly List<GripTarget> phaseTargets = new();
         private byte selectedItem, pendingItem;
         private bool attached, attaching, choosing, cleaning;
         private Coroutine throwing, reequipping;
@@ -49,12 +47,19 @@ namespace TwoBirds
         public AvatarId SelectedAvatar { get; private set; }
         public ItemDefinition SelectedDefinition => attached ? WorldItemRegistry.Instance.GetDefinition(selectedItem) : null;
         public GripAuthoringPhase Phase { get; private set; }
+        public GripAuthoringMode Mode { get; private set; }
+        public bool FirstPerson { get; private set; }
+        public HoldSlotMode SlotMode => SelectedDefinition ? SelectedDefinition.HoldMode : HoldSlotMode.Hand;
         public bool AutoReequip { get; set; } = true;
         public bool Walking => input && !input.AuthoringFocus;
-        public bool Dragging => editState != null;
         public string Message { get; private set; } = "";
         public string ActionPhase => network ? network.ItemAction.State.ToString() : "Waiting for Solo";
         public Camera ViewCamera => viewCamera;
+        public bool HasCart => cart;
+        public bool Seated => seating && seating.IsDriver;
+        public AvatarHandContact LeftContact => cart ? cart.Presentation.LeftHandContact : null;
+        public AvatarHandContact RightContact => cart ? cart.Presentation.RightHandContact : null;
+        private HeldItemPresentationState EditedState => !attached ? null : FirstPerson ? held.State : observer.State;
 
         private IEnumerator Start()
         {
@@ -82,6 +87,7 @@ namespace TwoBirds
             inventory = player.GetComponent<PlayerInventory>(); equipment = player.GetComponent<PlayerEquipment>();
             avatar = player.GetComponent<PlayerAvatarPresentation>(); held = player.GetComponent<PlayerHeldItemPresentation>();
             network = player.GetComponent<PlayerNetworkState>(); input = player.GetComponent<PlayerInputReader>();
+            seating = player.GetComponent<PlayerSeating>();
             var presentation = player.GetComponent<PlayerPresentation>();
             viewCamera = presentation.ViewCamera;
             viewMask = viewCamera.cullingMask;
@@ -113,7 +119,7 @@ namespace TwoBirds
         public void SelectAvatar(AvatarId id)
         {
             if (!attached || !id.IsValid) return;
-            Cancel(); EndEdit();
+            Cancel();
             SelectedAvatar = id; avatar.RequestAuthoringAvatar(id);
             RebuildStrip();
         }
@@ -130,6 +136,7 @@ namespace TwoBirds
                 root.AddComponent<AvatarPresentation>();
                 var preview = root.AddComponent<GripObserverPreview>();
                 preview.Initialize(avatar, session.Avatars, ObserverOffset + ++index * StripSpacing, entry.Id);
+                root.SetActive(Mode == GripAuthoringMode.HeldItem);
                 strip.Add(preview);
             }
             ApplyPhase();
@@ -137,136 +144,112 @@ namespace TwoBirds
         public void SelectItem(byte id)
         {
             if (!attached) return;
-            Cancel(); EndEdit();
+            Cancel();
             selectedItem = pendingItem = id;
-            Equip();
+            if (Mode == GripAuthoringMode.HeldItem) Equip();
+            ApplyPhase();
         }
 
         public void SetPhase(GripAuthoringPhase phase)
         {
             if (phase != GripAuthoringPhase.Live) Cancel();
-            EndEdit();
             Phase = phase;
             ApplyPhase();
         }
+
+        public void SetView(bool firstPerson)
+        {
+            FirstPerson = firstPerson;
+            ApplyPhase();
+        }
+
+        public void SetMode(GripAuthoringMode mode)
+        {
+            if (!attached || Mode == mode) return;
+            Cancel();
+            Mode = mode;
+            bool contact = mode == GripAuthoringMode.WorldContact;
+            if (contact)
+            {
+                inventory.SelectSlot(-1);
+                if (!cart) cart = FindFirstObjectByType<GolfCartNetwork>();
+                if (!cart) Message = "Add a GolfCart to the authoring scene to author world contacts.";
+            }
+            else
+            {
+                AvatarHandContact.LiveView = null;
+                ExitSeat();
+            }
+            observer.SetLateral(contact ? 0f : ObserverOffset);
+            observer.ContactSource = contact ? avatar.Hands : null;
+            foreach (var preview in strip) if (preview) preview.gameObject.SetActive(!contact);
+            ApplyPhase();
+            if (!contact) Equip();
+        }
+
+        public void EnterSeat() { if (attached && cart && !seating.Seated) seating.Request(cart, 0); }
+        public void ExitSeat() { if (attached && seating.Seated) seating.RequestExit(); }
+
         private void ApplyPhase()
         {
             if (!attached) return;
-            Apply(held.State); Apply(observer.State);
-            foreach (var preview in strip) if (preview) Apply(preview.State);
+            var edited = Mode == GripAuthoringMode.HeldItem ? EditedState : null;
+            Apply(held.State, edited); Apply(observer.State, edited);
+            foreach (var preview in strip) if (preview) Apply(preview.State, edited);
+            ApplyContacts();
         }
-        private void Apply(HeldItemPresentationState state)
+        private void Apply(HeldItemPresentationState state, HeldItemPresentationState edited)
         {
             if (state == null) return;
-            state.Authoring = Phase == GripAuthoringPhase.Live ? null :
-                new HeldItemPresentationState.AuthoringPose { Charged = Phase == GripAuthoringPhase.Charged };
+            state.AuthoringPhase = Phase;
+            state.AuthoringLocked = false;
+            state.ReapplyAuthored();
+            if (state == edited) state.AuthoringLocked = Phase != GripAuthoringPhase.Live;
+        }
+        private void ApplyContacts()
+        {
+            if (Mode != GripAuthoringMode.WorldContact || !cart) return;
+            AvatarHandContact.LiveView = FirstPerson;
+            if (LeftContact) LeftContact.ApplyAuthored(SelectedAvatar, FirstPerson);
+            if (RightContact) RightContact.ApplyAuthored(SelectedAvatar, FirstPerson);
         }
 
-        internal bool TryRig(bool firstPerson, out HeldItemPresentationState state, out AvatarBinding binding)
+        public IReadOnlyList<GripTarget> PhaseTargets()
         {
-            state = null; binding = null;
-            if (!attached) return false;
-            state = firstPerson ? held.State : observer.State;
-            binding = firstPerson ? avatar.Hands.LocalBinding : observer.Presentation.Binding;
-            return state != null && binding != null;
-        }
-        private bool Showing(bool firstPerson, out HeldItemPresentationState state, out AvatarBinding binding) =>
-            TryRig(firstPerson, out state, out binding) && state.CanShowHeldItem && state.committed.Item != 0;
-        public bool TryPalm(bool firstPerson, bool right, out Pose palm)
-        {
-            palm = default;
-            if (!TryRig(firstPerson, out _, out var binding)) return false;
-            palm = binding.Palm(right);
-            return true;
-        }
-        public bool TryGrip(bool firstPerson, out Pose grip, out AvatarId avatar)
-        {
-            grip = default; avatar = default;
-            if (!Showing(firstPerson, out var state, out var binding)) return false;
-            grip = state.GripFrame; avatar = binding.Id;
-            return true;
-        }
-        public bool TryItem(bool firstPerson, out Pose item)
-        {
-            item = default;
-            var definition = SelectedDefinition;
-            if (!definition || !Showing(firstPerson, out var state, out var binding)) return false;
-            item = HeldItemPoseCalculation.Compose(state.GripFrame, definition.Grip(binding.Id, firstPerson));
-            return true;
-        }
-        public bool TryPouch(bool firstPerson, out Vector3 pouch)
-        {
-            pouch = default;
-            if (SelectedDefinition is not SlingshotDefinition slingshot || !slingshot.HoldClass || !slingshot.HoldClass.View(firstPerson).Hold ||
-                !Showing(firstPerson, out _, out var binding)) return false;
-            var palm = binding.Palm(false);
-            pouch = palm.position + palm.rotation * slingshot.PouchOffset;
-            return true;
-        }
-        public bool TryRequestedPalm(bool firstPerson, bool right, out Pose requested, out Pose reached)
-        {
-            requested = reached = default;
-            if (!TryRig(firstPerson, out var state, out _)) return false;
-            var readout = state.Readout;
-            requested = right ? readout.RequestedRight : readout.RequestedLeft;
-            reached = right ? readout.EvaluatedRight : readout.EvaluatedLeft;
-            return true;
+            phaseTargets.Clear();
+            var mode = SlotMode;
+            if (Phase == GripAuthoringPhase.Live)
+            {
+                foreach (var target in SlotTargets) if (GripPoses.Uses(mode, target)) phaseTargets.Add(target);
+                return phaseTargets;
+            }
+            bool charged = Phase == GripAuthoringPhase.Charged;
+            phaseTargets.Add(charged ? GripTarget.ChargePose : GripTarget.HoldPose);
+            phaseTargets.Add(GripTarget.RightHand);
+            phaseTargets.Add(charged ? GripTarget.RightElbowCharge : GripTarget.RightElbowHold);
+            if (mode == HoldSlotMode.Heavy)
+            {
+                phaseTargets.Add(GripTarget.LeftHand);
+                phaseTargets.Add(charged ? GripTarget.LeftElbowCharge : GripTarget.LeftElbowHold);
+            }
+            else if (mode == HoldSlotMode.Slingshot && charged)
+            {
+                phaseTargets.Add(GripTarget.LeftHand); phaseTargets.Add(GripTarget.PouchDraw); phaseTargets.Add(GripTarget.LeftElbowCharge);
+            }
+            return phaseTargets;
         }
 
-        public bool BeginPalmDrag(bool firstPerson, bool right)
+        public bool TryTarget(GripTarget target, out Transform transform, out Pose stored, out GripLayer layer, out bool dirty)
         {
-            if (!BeginEdit(firstPerson)) return false;
-            dragRight = right;
-            Seed(right);
-            return true;
+            transform = null; stored = default; layer = GripLayer.None; dirty = false;
+            var state = EditedState;
+            return state != null && state.TryAuthored(target, out transform, out stored, out layer, out dirty);
         }
-        public void DragPalm(Pose world)
+
+        public void Reapply()
         {
-            if (editState?.Authoring == null) return;
-            var local = AvatarHandTargets.Rebase(world, editBinding.Body, Pose.identity);
-            if (dragRight) editState.Authoring.Right = local; else editState.Authoring.Left = local;
-        }
-        public void SetSwivel(bool firstPerson, bool right, float degrees)
-        {
-            if (editState == null && !BeginEdit(firstPerson)) return;
-            Seed(right);
-            if (right) editState.Authoring.RightSwivel = degrees; else editState.Authoring.LeftSwivel = degrees;
-        }
-        public bool EndPalmDrag(out GripPoseCapture capture)
-        {
-            capture = default;
-            if (editState == null) return false;
-            var authoring = editState.Authoring;
-            var definition = SelectedDefinition;
-            bool valid = authoring != null && definition && definition.HoldClass &&
-                TryRig(editFirstPerson, out _, out var current) && current == editBinding;
-            if (valid)
-                capture = new GripPoseCapture
-                {
-                    Class = definition.HoldClass, FirstPerson = editFirstPerson, Charged = authoring.Charged,
-                    Muscles = editBinding.CaptureMuscles(),
-                    Spread = Vector3.Distance(editBinding.Palm(true).position, editBinding.Palm(false).position)
-                };
-            EndEdit();
-            return valid;
-        }
-        private bool BeginEdit(bool firstPerson)
-        {
-            EndEdit();
-            if (Phase == GripAuthoringPhase.Live || !TryRig(firstPerson, out var state, out var binding) || state.Authoring == null) return false;
-            editState = state; editBinding = binding; editFirstPerson = firstPerson;
-            return true;
-        }
-        private void Seed(bool right)
-        {
-            var local = AvatarHandTargets.Rebase(editBinding.Palm(right), editBinding.Body, Pose.identity);
-            if (right) editState.Authoring.Right ??= local; else editState.Authoring.Left ??= local;
-        }
-        private void EndEdit()
-        {
-            var authoring = editState?.Authoring;
-            if (authoring != null) { authoring.Right = authoring.Left = null; authoring.RightSwivel = authoring.LeftSwivel = 0f; }
-            editState = null; editBinding = null;
+            EditedState?.ReapplyAuthored();
+            ApplyContacts();
         }
 
         public void Equip()
@@ -317,14 +300,15 @@ namespace TwoBirds
         }
         private void QueueReequip()
         {
-            if (!AutoReequip || reequipping != null || selectedItem == 0 || network.ItemAction.State != ItemActionState.Idle || Holds(selectedItem)) return;
+            if (!AutoReequip || Mode != GripAuthoringMode.HeldItem || reequipping != null || selectedItem == 0 ||
+                network.ItemAction.State != ItemActionState.Idle || Holds(selectedItem)) return;
             reequipping = StartCoroutine(Reequip());
         }
         private IEnumerator Reequip()
         {
             yield return new WaitForSecondsRealtime(ReequipDelay);
             reequipping = null;
-            if (AutoReequip && network.ItemAction.State == ItemActionState.Idle && !Holds(selectedItem)) Equip();
+            if (AutoReequip && Mode == GripAuthoringMode.HeldItem && network.ItemAction.State == ItemActionState.Idle && !Holds(selectedItem)) Equip();
         }
         private void Cleanup()
         {
@@ -358,7 +342,7 @@ namespace TwoBirds
             Cancel();
             var item = SelectedDefinition;
             if (!item) return;
-            throwing = StartCoroutine(ThrowAfter(Mathf.Max(item.ThrowChargeTime, item.HoldClass ? item.HoldClass.ChargePoseDuration : 0f)));
+            throwing = StartCoroutine(ThrowAfter(Mathf.Max(item.ThrowChargeTime, item.ChargePoseDuration)));
         });
         public void CancelAction() => Act(Cancel);
         public void Drop() => Act(() => { Cancel(); inventory.DropSelected(); });
@@ -377,6 +361,15 @@ namespace TwoBirds
             input.EndAuthoringUse(true); equipment.CancelUse();
         }
 
+        internal bool TryRig(bool firstPerson, out HeldItemPresentationState state, out AvatarBinding binding)
+        {
+            state = null; binding = null;
+            if (!attached) return false;
+            state = firstPerson ? held.State : observer.State;
+            binding = firstPerson ? avatar.Hands.LocalBinding : observer.Presentation.Binding;
+            return state != null && binding != null;
+        }
+
         public string Readout(bool firstPerson)
         {
             if (!TryRig(firstPerson, out var state, out _)) return "Waiting for presentation";
@@ -389,23 +382,25 @@ namespace TwoBirds
         }
         public string StripReadouts()
         {
-            var item = SelectedDefinition;
-            if (!item || item.HoldMode != ItemHoldMode.TwoHand) return "";
+            if (!SelectedDefinition) return "";
+            bool left = SlotMode != HoldSlotMode.Hand;
             var text = new StringBuilder();
-            Shortfall(text, observer);
-            foreach (var preview in strip) Shortfall(text, preview);
+            Shortfall(text, observer, left);
+            foreach (var preview in strip) Shortfall(text, preview, left);
             return text.ToString();
         }
-        private static void Shortfall(StringBuilder text, GripObserverPreview preview)
+        private static void Shortfall(StringBuilder text, GripObserverPreview preview, bool left)
         {
             if (!preview || preview.State == null) return;
             var readout = preview.State.Readout;
-            text.AppendLine($"{preview.DisplayName}: short R {readout.RightPositionError * 100f:F1} cm · L {readout.LeftPositionError * 100f:F1} cm");
+            string warning = readout.RightUnreachable || readout.LeftUnreachable ? " · unreachable" : "";
+            text.AppendLine($"{preview.DisplayName}: short R {readout.RightPositionError * 100f:F1} cm" +
+                (left ? $" · L {readout.LeftPositionError * 100f:F1} cm" : "") + warning);
         }
 
         private void OnDestroy()
         {
-            EndEdit();
+            AvatarHandContact.LiveView = null;
             foreach (var preview in strip) if (preview) Destroy(preview.gameObject);
             strip.Clear();
             if (session) session.Changed -= SessionChanged;

@@ -128,7 +128,6 @@ namespace TwoBirds
     {
         private PlayableGraph graph;
         internal AvatarFingerLayers Fingers { get; private set; }
-        internal AvatarArmLayers Arms { get; private set; }
         private readonly AnimationClipPlayable[] locomotion = new AnimationClipPlayable[8];
         private AnimationClipPlayable idle, jump, fall, seated, emote;
         private AnimationClip emoteClip;
@@ -158,7 +157,7 @@ namespace TwoBirds
                 states = AnimationMixerPlayable.Create(graph, (int)AvatarPose.Count);
                 graph.Connect(motion, 0, states, (int)AvatarPose.Locomotion); graph.Connect(jump, 0, states, (int)AvatarPose.Jump);
                 graph.Connect(fall, 0, states, (int)AvatarPose.Fall); graph.Connect(seated, 0, states, (int)AvatarPose.Seated);
-                Arms = new AvatarArmLayers(graph, states, false); Fingers = new AvatarFingerLayers(graph, Arms.Output);
+                Fingers = new AvatarFingerLayers(graph, states);
                 var output = AnimationPlayableOutput.Create(graph, "Humanoid", animator);
                 output.SetSourcePlayable(Fingers.Output);
                 graph.Play();
@@ -214,6 +213,6 @@ namespace TwoBirds
             graph.Connect(emote, 0, states, (int)AvatarPose.Emote);
         }
 
-        public void Dispose() { Fingers?.Dispose(); Arms?.Dispose(); if (graph.IsValid()) graph.Destroy(); }
+        public void Dispose() { Fingers?.Dispose(); if (graph.IsValid()) graph.Destroy(); }
     }
 }

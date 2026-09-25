@@ -79,7 +79,7 @@ namespace TwoBirds
         }
 #endif
 
-        internal HoldClass CarryHold => itemRegistry.CarryHold;
+        internal HoldSlot CarryHold => itemRegistry.CarryHold;
 
         private void NotifyPresentation(uint id, int previousHolder)
         {

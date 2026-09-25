@@ -4,29 +4,31 @@ namespace TwoBirds
 {
     internal readonly struct HeldItemPoseData
     {
-        internal readonly HoldClass Class;
+        internal readonly HoldSlot Slot;
+        internal readonly HoldSlotMode Mode;
         internal readonly AnimationClip Fingers;
-        internal readonly ItemHoldMode HoldMode;
-        internal readonly Vector3 PouchOffset;
         internal readonly ItemReleaseSphere Sphere;
-        internal readonly float ReleaseRadius;
-        internal bool TwoHand => HoldMode == ItemHoldMode.TwoHand;
+        internal readonly float ReleaseRadius, ChargeDuration, GrabSeconds, RecoverySeconds;
+        internal bool Heavy => Mode == HoldSlotMode.Heavy;
         internal HeldItemPoseData(ItemDefinition definition)
         {
-            Class = definition.HoldClass;
-            HoldMode = definition.HoldMode;
+            Slot = definition.HoldSlot;
+            Mode = definition.HoldMode;
             var geometry = definition.WorldPrefab.GetComponent<WorldItem>();
             if (geometry) geometry.CacheReleaseGeometry();
             Sphere = geometry ? geometry.ReleaseSphere : default;
             ReleaseRadius = geometry ? geometry.ReleaseRadius : 0f;
-            Fingers = definition.GripFingers;
-            PouchOffset = definition is SlingshotDefinition slingshot ? slingshot.PouchOffset : default;
+            Fingers = definition.GripFingers ? definition.GripFingers : Slot ? Slot.Fingers : null;
+            var slingshot = definition as SlingshotDefinition;
+            ChargeDuration = slingshot ? definition.ThrowChargeTime : definition.ChargePoseDuration;
+            GrabSeconds = slingshot ? slingshot.PouchGrabSeconds : 0f;
+            RecoverySeconds = slingshot ? slingshot.RecoverySeconds : 0f;
         }
     }
 
     internal readonly struct HeldItemBodyFrame
     {
-        internal readonly Vector3 Shoulder;
+        internal readonly Vector3 Shoulder, Hips;
         private readonly Vector3 leftShoulder;
         internal readonly Quaternion Rotation;
         internal readonly float ArmLength, Scale;
@@ -37,6 +39,7 @@ namespace TwoBirds
             Shoulder = shoulder; Rotation = rotation; Measurements = measurements; Scale = scale;
             this.leftShoulder = leftShoulder ?? shoulder + rotation * ((measurements.LeftShoulder - measurements.RightShoulder) * scale);
             ArmLength = (measurements.RightArm.x + measurements.RightArm.y) * scale;
+            Hips = (Shoulder + this.leftShoulder) * 0.5f;
         }
         internal HeldItemBodyFrame(AvatarSettings settings, AvatarRegistry registry, in AvatarPresentationInput input, Quaternion torso, float seatedWeight, bool heavy = false)
         {
@@ -50,6 +53,10 @@ namespace TwoBirds
                 AvatarDriverPose.SeatedOffset(settings, registry, input.Seated && input.Driver)
                 + Rotation * ((settings.Generated.RightShoulder - settings.Generated.Hips) * scale);
             Shoulder = Vector3.Lerp(standing, seated, seatedWeight);
+            Vector3 standingHips = input.SolePosition + torso * (settings.StandingOffset + (input.Carried ? settings.CarriedOffset : Vector3.zero))
+                + Rotation * ((settings.Generated.Hips - Vector3.up * settings.Generated.SolePlane) * scale);
+            Vector3 seatedHips = input.Facing.position + input.Facing.rotation * AvatarDriverPose.SeatedOffset(settings, registry, input.Seated && input.Driver);
+            Hips = Vector3.Lerp(standingHips, seatedHips, seatedWeight);
             leftShoulder = Shoulder + Rotation * ((Measurements.LeftShoulder - Measurements.RightShoulder) * scale);
         }
         internal Vector3 ToWorld(Vector3 position) => Shoulder + Rotation * (position * ArmLength);
@@ -67,8 +74,6 @@ namespace TwoBirds
 
     public static class HeldItemPoseCalculation
     {
-        private static readonly Vector3 FallbackPalm = new(0.15f, -0.40f, 0.50f), FallbackCenter = new(0f, -0.40f, 0.50f);
-
         public static Pose Compose(Pose frame, Pose offset) =>
             new(frame.position + frame.rotation * offset.position, frame.rotation * offset.rotation);
 
@@ -77,19 +82,5 @@ namespace TwoBirds
             Quaternion rotation = Quaternion.Inverse(pose.rotation);
             return new Pose(rotation * -pose.position, rotation);
         }
-
-        internal static Pose GripFrame(Pose right, Pose left, Quaternion body)
-        {
-            Vector3 x = right.position - left.position;
-            x = x.sqrMagnitude > 0.000001f ? x.normalized : body * Vector3.right;
-            Vector3 fingers = Vector3.ProjectOnPlane(right.rotation * Vector3.forward + left.rotation * Vector3.forward, x);
-            Vector3 z = Vector3.ProjectOnPlane(body * Vector3.forward, x).normalized;
-            // Fingers pointing at each other leave no usable direction; lean on the body's forward instead.
-            if (fingers.sqrMagnitude > 0.000001f) z = Vector3.Slerp(z, fingers.normalized, Mathf.InverseLerp(0.2f, 0.6f, fingers.magnitude));
-            return new Pose((right.position + left.position) * 0.5f, Quaternion.LookRotation(z, Vector3.Cross(z, x)));
-        }
-
-        internal static Pose FallbackFrame(in HeldItemBodyFrame body, in HeldItemPoseData data) =>
-            new(data.TwoHand ? body.CenterToWorld(FallbackCenter) : body.ToWorld(FallbackPalm), body.Rotation);
     }
 }

@@ -7,8 +7,7 @@ namespace TwoBirds
     {
         public override bool CanBeIngredient => false;
         [Header("Slingshot Pouch")]
-        [Tooltip("Pouch position in the left-palm frame, in metres.")]
-        public Vector3 PouchOffset;
+        [Min(0f)] public float PouchGrabSeconds = 0.15f;
 
         [Header("Pebble Settings")]
         [Min(0)] public int PebbleDamage = 10;

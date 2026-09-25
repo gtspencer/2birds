@@ -22,8 +22,7 @@ namespace TwoBirds
         internal bool CanShowHeldItem => State != null && State.CanShowHeldItem;
         internal bool ReadyForUse => State != null && State.ReadyForUse;
         internal Transform Attachment => State?.Attachment;
-        internal float HeavyFrameWeight => State?.HeavyFrameWeight ?? 0f;
-        internal float ArmWeight => State?.ArmWeight ?? 0f;
+        internal float HoldWeight => State?.HoldWeight ?? 0f;
         internal bool IsPendingRelease(uint id) => State != null && State.IsPendingRelease(id);
         internal bool MatchesPendingRelease(in ItemRecord record) => State != null && State.MatchesPendingRelease(record);
 
@@ -151,7 +150,7 @@ namespace TwoBirds
         {
             if (State == null) return;
             Sync(); State.Advance(); CompleteAtDeadline();
-            if (!inventory.IsOwner && !playerAvatar.Presentation.EvaluatesTargets) { PrepareHands(null, null); CommitHands(null); }
+            if (!inventory.IsOwner && !playerAvatar.Presentation.EvaluatesTargets) { PrepareHands(null, null); PoseHands(null); CommitHands(null); }
         }
         private void CompleteAtDeadline()
         {
@@ -160,6 +159,7 @@ namespace TwoBirds
             networkState.CompleteRecovery(action.WorldId, action.Operation);
         }
         internal void PrepareHands(AvatarBinding binding, HeldItemBodyFrame? body) { Sync(); State?.PrepareHands(binding, body); }
+        internal void PoseHands(AvatarBinding binding, Pose? frame = null) => State?.PoseHands(binding, frame);
         internal Vector3 CommitHands(AvatarBinding binding) => State?.CommitHands(binding) ?? Vector3.zero;
         internal void ReleaseSubmitted() => State?.ReleaseSubmitted();
         internal void RejectRelease(uint id, uint operation)

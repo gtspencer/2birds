@@ -11,7 +11,7 @@ namespace TwoBirds.Editor
         private const string DefinitionFolder = "Assets/Game/ScriptableObjects/Items";
         private const string RegistryPath = "Assets/Game/ScriptableObjects/ItemRegistry.asset";
         private const string IconFolder = "Assets/Game/UI/Icons";
-        private const string DefaultHoldClassPath = "Assets/Game/Settings/HoldClasses/Regular.asset";
+        private const string DefaultHoldSlotPath = "Assets/Game/Settings/HoldClasses/Regular.asset";
 
         private enum SetupMode { Item, Potion }
         private SetupMode mode;
@@ -56,11 +56,12 @@ namespace TwoBirds.Editor
 
             EditorGUILayout.Space(6);
             existingItem = (ItemDefinition)EditorGUILayout.ObjectField("Existing Item", existingItem, typeof(ItemDefinition), false);
-            using (new EditorGUI.DisabledScope(!existingItem || !existingItem.WorldPrefab || existingItem.HoldMode == ItemHoldMode.TwoHand))
-                if (GUILayout.Button("Recompute Held Offset"))
+            using (new EditorGUI.DisabledScope(!existingItem || !existingItem.WorldPrefab || existingItem.HoldMode == HoldSlotMode.Heavy))
+                if (GUILayout.Button("Recompute Right Hand"))
                 {
-                    Undo.RecordObject(existingItem, "Recompute Held Offset");
-                    if (GenerateHeldOffset(existingItem.WorldPrefab, existingItem)) AssetDatabase.SaveAssetIfDirty(existingItem);
+                    Undo.RecordObject(existingItem, "Recompute Right Hand");
+                    var palm = existingItem.GripPoses.TryGet(GripTarget.RightHand, false, out var current) ? current.rotation : Quaternion.identity;
+                    if (GenerateHeldOffset(existingItem.WorldPrefab, existingItem, palm)) AssetDatabase.SaveAssetIfDirty(existingItem);
                 }
         }
 
@@ -91,7 +92,7 @@ namespace TwoBirds.Editor
             definition.name = safeName;
             definition.ItemName = itemName;
             definition.ItemId = id;
-            definition.HoldClass = AssetDatabase.LoadAssetAtPath<HoldClass>(DefaultHoldClassPath);
+            definition.HoldSlot = AssetDatabase.LoadAssetAtPath<HoldSlot>(DefaultHoldSlotPath);
             AssetDatabase.CreateAsset(definition, definitionPath);
             EditorUtility.SetDirty(definition);
 
@@ -100,15 +101,14 @@ namespace TwoBirds.Editor
             if (potion)
             {
                 prefab = source;
-                GenerateHeldOffset(prefab, definition);
+                GenerateHeldOffset(prefab, definition, Quaternion.identity);
             }
             else
             {
                 var root = InstantiateSource(source);
                 root.name = safeName;
                 PrepareVisualRoot(root);
-                definition.ThirdPersonGrip.Euler = root.transform.localRotation.eulerAngles;
-                GenerateHeldOffset(root, definition);
+                GenerateHeldOffset(root, definition, Quaternion.Inverse(root.transform.localRotation));
                 AddComponents(root, definition, addThrowable);
                 root.hideFlags = HideFlags.None;
     
@@ -243,10 +243,9 @@ namespace TwoBirds.Editor
             EditorUtility.SetDirty(registry);
         }
 
-        public static bool GenerateHeldOffset(GameObject root, ItemDefinition definition)
+        public static bool GenerateHeldOffset(GameObject root, ItemDefinition definition, Quaternion palm)
         {
-            if (definition.HoldMode == ItemHoldMode.TwoHand) return false;
-            Quaternion palm = Quaternion.Inverse(definition.ThirdPersonGrip.Pose.rotation);
+            if (definition.HoldMode == HoldSlotMode.Heavy) return false;
             Matrix4x4 toPalm = Matrix4x4.TRS(Vector3.zero, Quaternion.Inverse(palm),
                 root.transform.localScale) * root.transform.worldToLocalMatrix;
             Bounds bounds = default;
@@ -273,12 +272,14 @@ namespace TwoBirds.Editor
                 return false;
             }
             Vector3 offset = palm * (bounds.center - Vector3.up * (bounds.extents.y + 0.006f));
-            Quaternion grip = Quaternion.Inverse(palm);
+            var poses = definition.GripPoses;
+            bool hasThird = poses.TryGet(GripTarget.RightHand, false, out var third);
             // FP is authored separately; keep it unless it still mirrors TP or was never set.
-            var firstPerson = definition.FirstPersonGrip;
-            bool linked = firstPerson.IsZero || firstPerson.Position == definition.ThirdPersonGrip.Position && firstPerson.Euler == definition.ThirdPersonGrip.Euler;
-            definition.ThirdPersonGrip = new GripOffset { Position = grip * -offset, Euler = grip.eulerAngles };
-            if (linked) definition.FirstPersonGrip = definition.ThirdPersonGrip;
+            bool linked = !poses.TryGet(GripTarget.RightHand, true, out var first) ||
+                hasThird && first.position == third.position && first.rotation == third.rotation;
+            var right = new Pose(offset, palm);
+            poses.Set(GripTarget.RightHand, false, right);
+            if (linked) poses.Set(GripTarget.RightHand, true, right);
             EditorUtility.SetDirty(definition);
             return true;
         }

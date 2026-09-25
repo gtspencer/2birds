@@ -17,7 +17,7 @@ namespace TwoBirds
         private double returnStart;
         private bool twoHanded;
 
-        internal static float Reach(HoldClass hold) => Mathf.Clamp(hold.FollowReachFraction, 0.01f, 0.85f);
+        internal static float Reach(HoldSlot hold) => Mathf.Clamp(hold.FollowReachFraction, 0.01f, 0.85f);
 
         internal void Hold(Pose left, Pose right)
         {
@@ -48,7 +48,7 @@ namespace TwoBirds
             returnStart = elapsed;
         }
 
-        internal float ReturnProgress(HoldClass hold, double elapsed)
+        internal float ReturnProgress(HoldSlot hold, double elapsed)
         {
             double pause = Mathf.Max(0f, hold.MaximumFollowDuration) + Mathf.Max(0f, hold.EndPosePauseDuration);
             double start = System.Math.Max(pause, returnStart);
@@ -56,11 +56,11 @@ namespace TwoBirds
             return elapsed < start ? 0f : end <= start ? 1f : Mathf.Clamp01((float)((elapsed - start) / (end - start)));
         }
 
-        internal float Frame(HoldClass hold, double elapsed, float destination) =>
+        internal float Frame(HoldSlot hold, double elapsed, float destination) =>
             Mathf.Lerp(startFrameWeight, destination, Mathf.SmoothStep(0f, 1f, ReturnProgress(hold, elapsed)));
 
         internal void Sample(Pose liveLeft, Pose liveRight, bool available, bool unavailable, in HeldItemBodyFrame body,
-            HoldClass hold, int environmentMask, double elapsed, Pose? destinationLeft, Pose? destinationRight,
+            HoldSlot hold, int environmentMask, double elapsed, Pose? destinationLeft, Pose? destinationRight,
             float destinationLeftWeight = 0f, float destinationRightWeight = 0f, float destinationFrameWeight = 0f)
         {
             double followEnd = Mathf.Max(0f, hold.MaximumFollowDuration);
@@ -108,13 +108,16 @@ namespace TwoBirds
             new(Vector3.Lerp(from.position, to.position, t), Quaternion.Slerp(from.rotation, to.rotation, t));
 
         internal static void Submit(AvatarHandTargets targets, AvatarHandSource source, Transform leftTarget, Transform rightTarget,
-            Pose left, Pose right, float leftWeight, float rightWeight, float reach, AnimationClip fingers, bool bodyRelative)
+            Pose left, Pose right, float leftWeight, float rightWeight, float reach, AnimationClip fingers, bool bodyRelative,
+            Transform leftHint = null, Transform rightHint = null, float leftHintWeight = 0f, float rightHintWeight = 0f)
         {
             leftTarget.SetPositionAndRotation(left.position, left.rotation);
             rightTarget.SetPositionAndRotation(right.position, right.rotation);
-            if (leftWeight > 0f) targets.Set(AvatarIKGoal.LeftHand, source, leftTarget, leftWeight, leftWeight, reach, fingers, bodyRelative: bodyRelative);
+            if (leftWeight > 0f) targets.Set(AvatarIKGoal.LeftHand, source, leftTarget, leftWeight, leftWeight, reach, fingers,
+                bodyRelative: bodyRelative, hint: leftHint, hintWeight: leftHintWeight);
             else targets.Clear(AvatarIKGoal.LeftHand, source);
-            if (rightWeight > 0f) targets.Set(AvatarIKGoal.RightHand, source, rightTarget, rightWeight, rightWeight, reach, fingers, bodyRelative: bodyRelative);
+            if (rightWeight > 0f) targets.Set(AvatarIKGoal.RightHand, source, rightTarget, rightWeight, rightWeight, reach, fingers,
+                bodyRelative: bodyRelative, hint: rightHint, hintWeight: rightHintWeight);
             else targets.Clear(AvatarIKGoal.RightHand, source);
         }
 

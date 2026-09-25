@@ -27,11 +27,11 @@ namespace TwoBirds
         private uint releaseRevision, releaseRequest;
         private int releasedPartner = -1;
         private double carryReleaseStart;
-        private HoldClass CarrySettings => items.CarryHold;
+        private HoldSlot CarrySettings => items.CarryHold;
         private bool CarryHolding => carry.IsCarrying && gripPartner && (outstretched || gripBinding != null && gripBinding.HasCarryGrips);
-        private float HeavyFrameWeight => carryHands.Releasing ? carryHands.Frame(CarrySettings,
-            Time.unscaledTimeAsDouble - carryReleaseStart, 0f) : CarryHolding ? 1f : held.HeavyFrameWeight;
-        private HeldItemBodyFrame HeavyBody(AvatarSettings settings)
+        private float CarryFrameWeight => carryHands.Releasing ? carryHands.Frame(CarrySettings,
+            Time.unscaledTimeAsDouble - carryReleaseStart, 0f) : CarryHolding ? 1f : 0f;
+        private HeldItemBodyFrame CarryBodyFrame(AvatarSettings settings)
         {
             bool remote = !owner.IsOwner && avatar.Binding != null;
             var input = remote ? avatar.Input : owner.CurrentPlacement;
@@ -50,11 +50,7 @@ namespace TwoBirds
         private AvatarRegistry.Entry pending;
         private AvatarHandContact leftContact, rightContact;
         private readonly Transform[] freeTargets = new Transform[2];
-        private readonly float[] contactWeights = new float[2];
-        private readonly float[] contactBlends = new float[2];
-        private readonly float[] contactReaches = new float[2];
-        private readonly AnimationClip[] contactFingers = new AnimationClip[2];
-        private readonly Transform[] contactTargets = new Transform[2];
+        private HandContactPresentation contacts;
         private AvatarPresentationInput movement;
         private Pose contactFrame = new(Vector3.zero, Quaternion.identity);
         private float placementWeight;
@@ -69,6 +65,11 @@ namespace TwoBirds
         private int advancedFrame = -1;
         internal event Action<AvatarBinding> LocalBound;
         internal AvatarBinding LocalBinding => active ? active.Binding : null;
+        internal AvatarHandContact LeftContact => leftContact;
+        internal AvatarHandContact RightContact => rightContact;
+
+        public void BeginInteraction(AvatarHandContact left, AvatarHandContact right) { leftContact = left; rightContact = right; }
+        public void EndInteraction() { leftContact = rightContact = null; }
 
         internal void Initialize(PlayerAvatarPresentation owner)
         {
@@ -89,6 +90,7 @@ namespace TwoBirds
             avatar.Registry.FirstPerson.ContentChanged += FirstPersonChanged;
             avatar.PreparingHands += PrepareRemote;
             avatar.HandsEvaluated += CommitRemote;
+            avatar.PosingHands += PoseRemote;
             seating.PresentationContextChanged += ContextChanged;
             carry.PresentationContextChanged += ContextChanged;
             carry.PreparingRelease += CaptureCarryRelease;
@@ -103,9 +105,8 @@ namespace TwoBirds
                 carryTargets[i].SetParent(transform, false);
                 freeTargets[i] = new GameObject(i == 0 ? "LeftFreePalm" : "RightFreePalm").transform;
                 freeTargets[i].SetParent(transform, false);
-                contactTargets[i] = new GameObject(i == 0 ? "LeftContactPalm" : "RightContactPalm").transform;
-                contactTargets[i].SetParent(transform, false);
             }
+            contacts = new HandContactPresentation(transform);
             IdentityResolved(avatar.Resolved);
             ContextChanged();
             emote = owner.Emote;
@@ -124,7 +125,7 @@ namespace TwoBirds
 
         private void IdentityResolved(AvatarRegistry.Entry entry)
         {
-            pending = entry; CacheContacts();
+            pending = entry;
             if (active && entry != null && active.Binding.Id == entry.Id) active.RefreshMeasurements();
             held.State?.InvalidateBinding();
         }
@@ -133,15 +134,6 @@ namespace TwoBirds
         private void ContextChanged()
         {
             seeded = false; falling = descent = landing = 0f;
-            bool driver = seating.IsDriver && !seating.TransitionPending && !seating.AwaitingReference && !seating.PlacementPending;
-            var cart = driver ? seating.Cart : null;
-            leftContact = rightContact = null;
-            if (cart)
-            {
-                BindContact(cart.Presentation.LeftHandContact);
-                BindContact(cart.Presentation.RightHandContact);
-            }
-            CacheContacts();
             movement = owner.CurrentPlacement;
             RefreshCarryContext();
         }
@@ -328,24 +320,6 @@ namespace TwoBirds
             carryLeft = binding.Palm(false); carryRight = binding.Palm(true);
         }
 
-        private void BindContact(AvatarHandContact contact)
-        {
-            if (!contact) return;
-            if (contact.Hand == AvatarIKGoal.LeftHand) leftContact = contact;
-            else if (contact.Hand == AvatarIKGoal.RightHand) rightContact = contact;
-        }
-
-        private void CacheContacts()
-        {
-            for (int i = 0; i < 2; i++)
-            {
-                var contact = i == 0 ? leftContact : rightContact;
-                if (!contact) continue;
-                contactBlends[i] = contact.BlendTime; contactReaches[i] = contact.MaximumReach;
-                contactFingers[i] = contact.Fingers ? contact.Fingers : avatar.Registry.Animations.GripFingers;
-            }
-        }
-
         private void Simulated(uint tick, Vector3 position)
         {
             var next = owner.CurrentPlacement;
@@ -363,37 +337,25 @@ namespace TwoBirds
             movement = next;
         }
 
-        private void Contacts(float dt, AvatarSettings settings)
-        {
-            Vector3 offset = (leftContact || rightContact) && seating.Cart
-                ? seating.Cart.GetSeat(0).VisualRider.rotation * AvatarDriverPose.HandOffset(settings, avatar.Registry) : Vector3.zero;
-            Set(leftContact, 0, AvatarIKGoal.LeftHand);
-            Set(rightContact, 1, AvatarIKGoal.RightHand);
-            void Set(AvatarHandContact contact, int index, AvatarIKGoal hand)
-            {
-                if (contact)
-                {
-                    contactTargets[index].SetPositionAndRotation(contact.transform.position + offset, contact.transform.rotation);
-                }
-                contactWeights[index] = contactBlends[index] <= 0f ? contact ? 1f : 0f :
-                    Mathf.MoveTowards(contactWeights[index], contact ? 1f : 0f, dt / contactBlends[index]);
-                if (contactWeights[index] <= 0f && !contact)
-                { avatar.HandTargets.Clear(hand, AvatarHandSource.Contact); return; }
-                avatar.HandTargets.Set(hand, AvatarHandSource.Contact, contactTargets[index], contactWeights[index], contactWeights[index],
-                    contactReaches[index], contactFingers[index]);
-            }
-        }
+        private void Contacts(float dt, AvatarBinding binding) =>
+            contacts.Submit(avatar.HandTargets, leftContact, rightContact, binding?.Id ?? avatar.Resolved?.Id ?? default,
+                owner.IsOwner, avatar.Registry.Animations.GripFingers, dt);
 
         private void PrepareRemote(AvatarBinding binding, float dt)
         {
             if (owner.IsOwner) return;
-            Contacts(dt, binding.Settings);
+            Contacts(dt, binding);
             var body = new HeldItemBodyFrame(binding.GetBone(HumanBodyBones.RightUpperArm).position,
                 binding.Animator.transform.rotation, binding.Measurements, binding.Scale,
                 leftShoulder: binding.GetBone(HumanBodyBones.LeftUpperArm).position);
             avatar.HandTargets.SetBody(binding.Body);
             if (avatar.Binding == null || binding == avatar.Binding) held.PrepareHands(binding, body);
             PrepareCarry(binding, body);
+        }
+        private void PoseRemote(AvatarBinding binding)
+        {
+            if (owner.IsOwner) return;
+            if (avatar.Binding == null || binding == avatar.Binding) held.PoseHands(binding);
         }
         private void CommitRemote(AvatarBinding binding)
         {
@@ -412,14 +374,26 @@ namespace TwoBirds
             Vector3 shoulder = aim.position + aim.rotation * (avatar.Registry.FirstPerson.ShoulderOffset +
                 settings.FirstPersonPlacementOffset + Vector3.right * ((data.RightShoulder.x - data.LeftShoulder.x) * settings.Scale * 0.5f));
             body = new HeldItemBodyFrame(shoulder, aim.rotation, data, settings.Scale);
-            float heavy = HeavyFrameWeight;
-            if (heavy > 0f)
+            float carried = CarryFrameWeight;
+            if (carried > 0f)
             {
-                var frame = HeavyBody(settings).WithMeasurements(data, settings.Scale);
-                body = new HeldItemBodyFrame(Vector3.Lerp(body.Shoulder, frame.Shoulder, heavy),
-                    Quaternion.Slerp(body.Rotation, frame.Rotation, heavy), data, settings.Scale);
+                var frame = CarryBodyFrame(settings).WithMeasurements(data, settings.Scale);
+                body = new HeldItemBodyFrame(Vector3.Lerp(body.Shoulder, frame.Shoulder, carried),
+                    Quaternion.Slerp(body.Rotation, frame.Rotation, carried), data, settings.Scale);
             }
             return true;
+        }
+
+        private Pose FirstPersonFrame()
+        {
+            if (active) return new Pose(active.transform.position, active.transform.rotation);
+            var camera = CameraPose;
+            var settings = avatar.Resolved?.Settings;
+            if (!settings) return camera;
+            var data = settings.FirstPersonGenerated;
+            Vector3 offset = avatar.Registry.FirstPerson.ShoulderOffset + settings.FirstPersonPlacementOffset -
+                (data.LeftShoulder + data.RightShoulder) * (0.5f * settings.Scale);
+            return new Pose(camera.position + camera.rotation * offset, camera.rotation);
         }
 
         private void LateUpdate()
@@ -448,8 +422,9 @@ namespace TwoBirds
                         candidate.Initialize(entry, avatar.Registry.Animations, avatar.HandTargets, ++generation);
                         AdvanceFreeHands(candidate, 0f); Place(candidate, 0f);
                         avatar.HandTargets.SetBody(candidate.Binding.Body);
-                        SubmitFreeHands(candidate); Contacts(0f, candidate.Binding.Settings);
+                        SubmitFreeHands(candidate); Contacts(0f, candidate.Binding);
                         held.PrepareHands(candidate.Binding, candidate.BodyFrame);
+                        held.PoseHands(candidate.Binding, new Pose(candidate.transform.position, candidate.transform.rotation));
                         PrepareCarry(candidate.Binding, candidate.BodyFrame);
                         candidate.Evaluate(0f, avatar.Registry.Animations);
                         var nextCosmetics = new AvatarCosmeticPresentation(candidate.Binding,
@@ -470,9 +445,10 @@ namespace TwoBirds
                     }
                 }
             }
-            Contacts(dt, active ? active.Binding.Settings : avatar.Resolved?.Settings);
+            Contacts(dt, active ? active.Binding : null);
             if (active) { AdvanceFreeHands(active, dt); Place(active, dt); SubmitFreeHands(active); avatar.HandTargets.SetBody(active.Binding.Body); }
             held.PrepareHands(active ? active.Binding : null, TryBody(out var body) ? body : null);
+            held.PoseHands(active ? active.Binding : null, FirstPersonFrame());
             if (TryBody(out var carryFrame)) PrepareCarry(active ? active.Binding : null, carryFrame);
             if (active) active.Evaluate(dt, avatar.Registry.Animations);
             TranslateRig(held.CommitHands(active ? active.Binding : null));
@@ -493,21 +469,21 @@ namespace TwoBirds
             Vector3 cameraPosition = camera.position + camera.rotation * tuning.ShoulderOffset;
             Pose frame = new(Vector3.Lerp(cameraPosition, contactFrame.position + contactFrame.rotation * bodyOffset, placementWeight),
                 Quaternion.Slerp(camera.rotation, contactFrame.rotation, placementWeight));
-            float heavy = HeavyFrameWeight;
-            if (heavy > 0f)
+            float carried = CarryFrameWeight;
+            if (carried > 0f)
             {
-                var body = HeavyBody(rig.Binding.Settings);
-                frame.position = Vector3.Lerp(frame.position, body.Center, heavy);
-                frame.rotation = Quaternion.Slerp(frame.rotation, body.Rotation, heavy);
+                var body = CarryBodyFrame(rig.Binding.Settings);
+                frame.position = Vector3.Lerp(frame.position, body.Center, carried);
+                frame.rotation = Quaternion.Slerp(frame.rotation, body.Rotation, carried);
             }
             placed = true;
             appliedBob = HoldBob(rig);
-            rig.Place(frame, appliedBob, heavy);
+            rig.Place(frame, appliedBob, carried);
         }
 
         private Vector3 HoldBob(LocalFirstPersonHands rig)
         {
-            float weight = held.ArmWeight;
+            float weight = held.HoldWeight;
             if (weight <= 0f || !freeInitialized[1]) return Vector3.zero;
             var data = rig.Binding.Measurements;
             Vector3 rest = Vector3.ClampMagnitude(avatar.Registry.FirstPerson.Right.RestPosition + rig.Binding.Settings.FirstPersonReachOffset, 0.85f);
@@ -539,7 +515,7 @@ namespace TwoBirds
                 Vector3 euler = Vector3.Lerp(Vector3.Lerp(hand.RestEuler, hand.RiseEuler, rise), hand.FallEuler, fall);
                 var occupied = avatar.HandTargets.Resolve(right ? AvatarIKGoal.RightHand : AvatarIKGoal.LeftHand);
                 bool owned = occupied.Transform && occupied.Transform != freeTargets[i];
-                freeWeights[i] = !freeInitialized[i] ? 1f : occupied.Source == AvatarHandSource.Item ? 1f - rig.PoseWeight(right) :
+                freeWeights[i] = !freeInitialized[i] ? 1f : occupied.Source == AvatarHandSource.Item ? 1f :
                     owned ? 0f : Mathf.MoveTowards(freeWeights[i], 1f, dt / tuning.BlendTime);
                 float blend = freeInitialized[i] ? AvatarPresentation.Smooth(dt, tuning.BlendTime) : 1f;
                 freePositions[i] = Vector3.Lerp(freePositions[i], Vector3.ClampMagnitude(local, 0.85f), blend);
@@ -573,6 +549,7 @@ namespace TwoBirds
             cosmetics?.Dispose(); cosmetics = null;
             avatar.Registry.FirstPerson.ContentChanged -= FirstPersonChanged;
             avatar.IdentityResolved -= IdentityResolved; avatar.PreparingHands -= PrepareRemote; avatar.HandsEvaluated -= CommitRemote;
+            avatar.PosingHands -= PoseRemote;
             seating.PresentationContextChanged -= ContextChanged; carry.PresentationContextChanged -= ContextChanged; motor.Simulated -= Simulated;
             carry.PreparingRelease -= CaptureCarryRelease;
             carry.ReleaseStarted -= StartCarryRelease;
@@ -581,11 +558,9 @@ namespace TwoBirds
             if (items) items.PresentationChanged -= CarryItemChanged;
             ClearCarry();
             foreach (var target in carryTargets) if (target) Destroy(target.gameObject);
-            foreach (var hand in new[] { AvatarIKGoal.LeftHand, AvatarIKGoal.RightHand })
-            { avatar.HandTargets.Clear(hand, AvatarHandSource.Contact); avatar.HandTargets.Clear(hand, AvatarHandSource.Free); }
+            foreach (var hand in new[] { AvatarIKGoal.LeftHand, AvatarIKGoal.RightHand }) avatar.HandTargets.Clear(hand, AvatarHandSource.Free);
             foreach (var target in freeTargets) if (target) Destroy(target.gameObject);
-            foreach (var target in contactTargets) if (target) Destroy(target.gameObject);
-            Array.Clear(contactWeights, 0, contactWeights.Length);
+            contacts.Clear(avatar.HandTargets); contacts.Dispose(); contacts = null;
             viewCamera = null;
             Array.Clear(freeInitialized, 0, freeInitialized.Length);
             if (active) Destroy(active.gameObject);

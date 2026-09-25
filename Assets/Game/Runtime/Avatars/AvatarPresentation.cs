@@ -54,20 +54,6 @@ namespace TwoBirds
         }
         internal Pose Body => new((GetBone(HumanBodyBones.LeftUpperArm).position + GetBone(HumanBodyBones.RightUpperArm).position) * 0.5f,
             Animator.transform.rotation);
-        internal Pose? AnchoredItem { get; set; }
-#if UNITY_INCLUDE_INSTRUMENTATION
-        private HumanPoseHandler poseHandler;
-        private HumanPose humanPose;
-        private HumanPoseHandler PoseHandler => poseHandler ??= new HumanPoseHandler(Animator.avatar, Animator.transform);
-        internal void RoundTripMuscles() { PoseHandler.GetHumanPose(ref humanPose); poseHandler.SetHumanPose(ref humanPose); }
-        internal float[] CaptureMuscles() { PoseHandler.GetHumanPose(ref humanPose); return (float[])humanPose.muscles.Clone(); }
-#endif
-        internal void Dispose()
-        {
-#if UNITY_INCLUDE_INSTRUMENTATION
-            poseHandler?.Dispose(); poseHandler = null;
-#endif
-        }
     }
 
     public sealed class AvatarPresentation : MonoBehaviour
@@ -83,6 +69,8 @@ namespace TwoBirds
         public event Action BeforeEvaluation;
         internal event Action<AvatarBinding, float> PreparingHands;
         internal event Action<AvatarBinding> HandsEvaluated;
+        internal event Action<AvatarBinding> PosingHands;
+        internal void PoseHands(AvatarBinding binding) => PosingHands?.Invoke(binding);
         internal bool EvaluatesTargets => !Physical && system && !Failed && Binding != null;
         internal void PrepareTargets() { if (!Physical) BeforeEvaluation?.Invoke(); }
         internal AvatarPresentation HandDependency { get; set; }

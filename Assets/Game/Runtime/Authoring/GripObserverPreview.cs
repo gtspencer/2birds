@@ -14,11 +14,14 @@ namespace TwoBirds
         private SlingshotPresentation slingshot;
         private AvatarCosmeticPresentation cosmetics;
         private float lateral;
-        private bool followsOwner;
+        private bool followsOwner, contactsActive;
+        private HandContactPresentation contacts;
+        internal PlayerHandPresentation ContactSource;
         private readonly HashSet<ulong> isolatedBindings = new();
         internal HeldItemPresentationState State { get; private set; }
         public AvatarPresentation Presentation => presentation;
         internal string DisplayName => presentation.Resolved?.Settings.DisplayName;
+        internal void SetLateral(float value) => lateral = value;
         internal void Initialize(PlayerAvatarPresentation owner, AvatarRegistry avatars, float lateral, AvatarId avatar = default)
         {
             this.owner = owner; this.lateral = lateral;
@@ -30,6 +33,8 @@ namespace TwoBirds
             State.CommitItem = pose => { if (visual) visual.transform.SetPositionAndRotation(pose.position, pose.rotation); };
             presentation.PreparingHands += Prepare;
             presentation.HandsEvaluated += Commit;
+            presentation.PosingHands += PoseHands;
+            contacts = new HandContactPresentation(transform);
             presentation.DidBind += Bound;
             presentation.WillUnbind += Unbound;
             followsOwner = !avatar.IsValid;
@@ -77,8 +82,19 @@ namespace TwoBirds
                 binding.Animator.transform.rotation, binding.Measurements, binding.Scale,
                 leftShoulder: binding.GetBone(HumanBodyBones.LeftUpperArm).position);
             presentation.HandTargets.SetBody(binding.Body);
+            if (ContactSource)
+            {
+                contacts.Submit(presentation.HandTargets, ContactSource.LeftContact, ContactSource.RightContact, binding.Id, false,
+                    presentation.Registry.Animations.GripFingers, dt);
+                contactsActive = true;
+            }
+            else if (contactsActive) { contacts.Clear(presentation.HandTargets); contactsActive = false; }
             if (presentation.Binding == null || presentation.Binding == binding) State.PrepareHands(binding, frame);
             if (visual) visual.SetActive(State.CanShowHeldItem);
+        }
+        private void PoseHands(AvatarBinding binding)
+        {
+            if (presentation.Binding == null || presentation.Binding == binding) State.PoseHands(binding);
         }
         private void Commit(AvatarBinding binding) => State.CommitHands(binding);
         private void OnDestroy()
@@ -86,11 +102,12 @@ namespace TwoBirds
             if (owner && followsOwner) owner.Presentation.IdentityResolved -= SelectedAvatar;
             if (presentation)
             {
-                presentation.PreparingHands -= Prepare; presentation.HandsEvaluated -= Commit;
+                presentation.PreparingHands -= Prepare; presentation.HandsEvaluated -= Commit; presentation.PosingHands -= PoseHands;
                 presentation.DidBind -= Bound; presentation.WillUnbind -= Unbound;
                 presentation.InputSource = null; presentation.SetVisual(false);
             }
             cosmetics?.Dispose(); State?.Dispose(); State = null;
+            contacts?.Dispose(); contacts = null;
             if (visual) Destroy(visual);
         }
     }
