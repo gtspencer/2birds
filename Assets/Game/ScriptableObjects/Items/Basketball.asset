@@ -21,34 +21,21 @@ MonoBehaviour:
   MinThrowSpeed: 3
   MaxThrowSpeed: 14
   ThrowChargeTime: 1
-  RightPalmContact:
-    Position: {x: 3.4570694e-08, y: -1.34177991e-06, z: -0.00388494297}
-    Euler: {x: -270.01978, y: 0, z: 0}
-  LeftPalmContact:
-    Position: {x: 0, y: 0, z: 0}
-    Euler: {x: 0, y: 0, z: 0}
-  OverrideHoldSettings: 0
-  OverrideFirstPersonPose: 1
-  FirstPersonPose:
-    HoldPosition: {x: 0.1, y: 0, z: 0.78}
-    HoldWristEuler: {x: 0, y: 0, z: 15}
-    ChargeControlPosition: {x: 0.05, y: -0.05, z: 0.72}
-    ChargedPosition: {x: 0.18, y: 0.12, z: 0.5}
-    ChargedWristEuler: {x: -35, y: 0, z: 100}
+  HoldClass: {fileID: 11400000, guid: 23988aa6cd0882d45adbe832cb24e8db, type: 2}
+  ThirdPersonGrip:
+    Position: {x: 0, y: 0.19425, z: 0}
+    Euler: {x: 270.02, y: 0, z: 0}
+  FirstPersonGrip:
+    Position: {x: 0, y: 0.19425, z: 0}
+    Euler: {x: 270.02, y: 0, z: 0}
+  AvatarGrips: []
   GripFingers: {fileID: 0}
-  HandPose:
-    HoldPosition: {x: 0.15, y: -0.4, z: 0.5}
-    HoldWristEuler: {x: 0, y: 0, z: 0}
-    ChargeControlPosition: {x: 0.35, y: 0.25, z: 0.45}
-    ChargedPosition: {x: 0.2, y: 0.65, z: -0.25}
-    ChargedWristEuler: {x: -70, y: 0, z: 195}
-    ChargePoseDuration: 0.35
-    FollowReachFraction: 0.85
-    MaximumFollowDuration: 0.2
-    EndPosePauseDuration: 0
-    ReturnBlendDuration: 0.2
+  DontPushPlayer: 0
+  UseSharedImpactThreshold: 0
   MinimumImpactSpeed: 1
   ImpulseMultiplier: 1
+  OverrideCollisionDamage: 0
+  CollisionDamage: 0
   SyncRotation: 0
   DropSpeed: 1.5
   VelocityInheritance: 1
@@ -60,4 +47,6 @@ MonoBehaviour:
   CollisionDetection: 2
   MaxSpeed: 50
   OverrideSleepThreshold: 1
+  CollideWhileSleeping: 0
+  SimulateOnReleasingClient: 0
   SleepThreshold: 0.1

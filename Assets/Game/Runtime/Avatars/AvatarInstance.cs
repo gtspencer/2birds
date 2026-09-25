@@ -134,6 +134,9 @@ namespace TwoBirds
             try { graph.Evaluate(host.State); }
             finally { evaluating = false; }
             using (AvatarPresentationSystem.IkMarker.Auto()) arms.Solve(host.HandTargets, dt);
+#if UNITY_INCLUDE_INSTRUMENTATION
+            if (host.HandTargets.RoundTripMuscles) Binding.RoundTripMuscles();
+#endif
             if (host.EditorPreview && host.HeadLookEnabled) ApplyEditorHeadLook();
             using (AvatarPresentationSystem.VrmMarker.Auto())
             {
@@ -203,6 +206,7 @@ namespace TwoBirds
             released = true;
             graph?.Dispose(); graph = null;
             editorPoseHandler?.Dispose(); editorPoseHandler = null;
+            Binding?.Dispose();
             if (animator) animator.enabled = false;
             if (vrm) { vrm.enabled = false; vrm.DisposeRuntime(); }
             runtime = null; ik = null; springsRegistered = false;

@@ -2,23 +2,30 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace TwoBirds
 {
-    public struct GripPoseCapture { public ItemHoldMode Mode; public bool FirstPerson, Charged; public float[] Muscles; }
+    public enum GripAuthoringPhase { Live, Hold, Charged }
+
+    public struct GripPoseCapture
+    {
+        public HoldClass Class;
+        public bool FirstPerson, Charged;
+        public float[] Muscles;
+        public float Spread;
+    }
 
     [DefaultExecutionOrder(250)]
     public sealed class GripAuthoringScene : MonoBehaviour
     {
+        public const string SceneName = "AvatarPresentationDemo";
+        public const string ScenePath = "Assets/Scenes/AvatarPresentationDemo.unity";
+        private const float ObserverOffset = 1.2f, StripSpacing = 0.9f, ReequipDelay = 1f;
         public static GripAuthoringScene Instance { get; private set; }
         public static event Action SceneChanged;
         [SerializeField] private GripObserverPreview observer;
-        [SerializeField] private Camera observerCamera;
-        [SerializeField] private UIDocument document;
-        [SerializeField] private Material ghostMaterial;
-        private static readonly string[] GhostPaths = { "RightPalmContact", "LeftPalmContact", "PullingPalmContact" };
         private SessionController session;
         private PlayerInventory inventory;
         private PlayerEquipment equipment;
@@ -26,22 +33,30 @@ namespace TwoBirds
         private PlayerAvatarPresentation avatar;
         private PlayerHeldItemPresentation held;
         private PlayerNetworkState network;
-        private GripAuthoringPanel panel;
+        private Camera viewCamera;
+        private int viewMask;
         private readonly HashSet<uint> supplied = new();
         private readonly Dictionary<Transform, int> originalLayers = new();
-        private readonly Dictionary<string, GripGhostHand> ghosts = new();
         private readonly List<GripObserverPreview> strip = new();
-        private HeldItemPresentationState poseState;
-        public ItemHoldMode PoseMode { get; private set; }
-        public int PoseSlot { get; private set; }
-        public bool PoseEditing => poseState?.Edit != null;
-        private byte pendingItem;
+        private HeldItemPresentationState editState;
+        private AvatarBinding editBinding;
+        private bool editFirstPerson, dragRight;
+        private byte selectedItem, pendingItem;
         private bool attached, attaching, choosing, cleaning;
-        private UnityEngine.InputSystem.InputAction editToggle;
-        public GripComparisonViews Views { get; private set; }
-        public GripAuthoringDrafts Drafts => GripAuthoringSession.Drafts;
-        public GripObserverPreview Observer => observer;
+        private Coroutine throwing, reequipping;
+        private UnityEngine.InputSystem.InputAction walkToggle;
+        public bool Attached => attached;
+        public byte SelectedItem => selectedItem;
+        public AvatarId SelectedAvatar { get; private set; }
+        public ItemDefinition SelectedDefinition => attached ? WorldItemRegistry.Instance.GetDefinition(selectedItem) : null;
+        public AvatarRegistry Avatars => session ? session.Avatars : null;
+        public GripAuthoringPhase Phase { get; private set; }
+        public bool AutoReequip { get; set; } = true;
+        public bool Walking => input && !input.AuthoringFocus;
+        public bool Dragging => editState != null;
+        public string Message { get; private set; } = "";
         public string ActionPhase => network ? network.ItemAction.State.ToString() : "Waiting for Solo";
+        public Camera ViewCamera => viewCamera;
 
         private IEnumerator Start()
         {
@@ -69,50 +84,39 @@ namespace TwoBirds
             inventory = player.GetComponent<PlayerInventory>(); equipment = player.GetComponent<PlayerEquipment>();
             avatar = player.GetComponent<PlayerAvatarPresentation>(); held = player.GetComponent<PlayerHeldItemPresentation>();
             network = player.GetComponent<PlayerNetworkState>(); input = player.GetComponent<PlayerInputReader>();
-            observer.Initialize(avatar, Drafts);
-            Views = new GripComparisonViews(player.GetComponent<PlayerPresentation>().ViewCamera, observerCamera);
-            avatar.Hands.LocalBound += OwnerBound;
-            if (avatar.Hands.LocalBinding != null) OwnerBound(avatar.Hands.LocalBinding);
-            AssignOwnerLayer(player.GetComponent<PlayerPresentation>().Graphics);
+            var presentation = player.GetComponent<PlayerPresentation>();
+            viewCamera = presentation.ViewCamera;
+            viewMask = viewCamera.cullingMask;
+            viewCamera.cullingMask &= ~LayerMask.GetMask(AvatarEditorPreview.LayerName);
+            observer.Initialize(avatar, session.Avatars, ObserverOffset);
+            AssignOwnerLayer(presentation.Graphics);
+            avatar.Presentation.DidBind += OwnerBound;
+            avatar.Hands.LocalBound += LocalBound;
             inventory.InventoryChanged += InventoryChanged; network.ActionChanged += ActionChanged;
-            panel = new GripAuthoringPanel(document.rootVisualElement, Drafts, this);
-#if UNITY_EDITOR
-            panel.Save = record => EditorSaveRequested?.Invoke(record);
-            panel.SavePose = capture => EditorPoseSaveRequested?.Invoke(capture);
-            panel.BeforeEdit = () => GripAuthoringSession.BeforeEditorEdit?.Invoke();
-#else
-            panel.Save = record => panel.ShowMessage(GripAuthoringExport.Save(Drafts, record));
-            panel.SavePose = _ => panel.ShowMessage("Pose clips save only in the editor.");
-            panel.ShowMessage(GripAuthoringExport.Folder);
-#endif
-            panel.OpenFolder = GripAuthoringExport.OpenFolder;
-            editToggle = new UnityEngine.InputSystem.InputAction("Grip editing", binding: "<Keyboard>/f2");
-            editToggle.performed += _ => SetEditing(!input.AuthoringFocus);
-            editToggle.Enable();
-            SetEditing(true); SelectAvatar(Drafts.SelectedAvatar); SelectItem(Drafts.SelectedItem);
+            walkToggle = new UnityEngine.InputSystem.InputAction("Grip walking", binding: "<Keyboard>/f2");
+            walkToggle.performed += _ => SetWalking(!Walking);
+            walkToggle.Enable();
+            SetWalking(false);
+            SelectedAvatar = avatar.Presentation.Resolved != null ? avatar.Presentation.Resolved.Id : session.Avatars.DefaultId;
+            RebuildStrip();
             SceneChanged?.Invoke();
         }
-#if UNITY_EDITOR
-        public static event Action<GripAuthoringDraft> EditorSaveRequested;
-        public static event Action<GripPoseCapture> EditorPoseSaveRequested;
-#endif
         private void OwnerBound(AvatarBinding binding) => AssignOwnerLayer(binding.Animator.transform);
+        private void LocalBound(AvatarBinding binding) => ApplyPhase();
         private void AssignOwnerLayer(Transform root)
         {
             int layer = LayerMask.NameToLayer("GripAuthoringOwner");
             foreach (var child in root.GetComponentsInChildren<Transform>(true))
             { if (!originalLayers.ContainsKey(child)) originalLayers.Add(child, child.gameObject.layer); child.gameObject.layer = layer; }
         }
-        public void SetEditing(bool editing)
-        {
-            if (!input) return;
-            input.AuthoringFocus = editing;
-        }
+
+        public void SetWalking(bool walking) { if (input) input.AuthoringFocus = !walking; }
+
         public void SelectAvatar(AvatarId id)
         {
-            if (!avatar) return;
-            EndPoseEdit();
-            Cancel(); Drafts.SelectedAvatar = id; avatar.RequestAuthoringAvatar(id); Drafts.SelectionChanged();
+            if (!attached || !id.IsValid) return;
+            Cancel(); EndEdit();
+            SelectedAvatar = id; avatar.RequestAuthoringAvatar(id);
             RebuildStrip();
         }
         private void RebuildStrip()
@@ -120,28 +124,162 @@ namespace TwoBirds
             foreach (var preview in strip) if (preview) Destroy(preview.gameObject);
             strip.Clear();
             int index = 0;
-            foreach (var entry in Drafts.Avatars.Entries)
+            foreach (var entry in session.Avatars.Entries)
             {
-                if (entry.Id == Drafts.SelectedAvatar) continue;
+                if (entry.Id == SelectedAvatar) continue;
                 var root = new GameObject($"Grip strip {entry.Id}");
                 root.transform.SetParent(observer.transform.parent, false);
                 root.AddComponent<AvatarPresentation>();
                 var preview = root.AddComponent<GripObserverPreview>();
-                preview.Initialize(avatar, Drafts, entry.Id, ++index * 0.9f);
+                preview.Initialize(avatar, session.Avatars, ObserverOffset + ++index * StripSpacing, entry.Id);
                 strip.Add(preview);
             }
+            ApplyPhase();
         }
         public void SelectItem(byte id)
         {
-            if (!inventory) return;
-            EndPoseEdit();
-            Cancel(); Drafts.SelectedItem = id; pendingItem = id;
-            Drafts.SelectionChanged(); Equip();
+            if (!attached) return;
+            Cancel(); EndEdit();
+            selectedItem = pendingItem = id;
+            Equip();
         }
+
+        public void SetPhase(GripAuthoringPhase phase)
+        {
+            if (phase != GripAuthoringPhase.Live) Cancel();
+            EndEdit();
+            Phase = phase;
+            ApplyPhase();
+        }
+        private void ApplyPhase()
+        {
+            if (!attached) return;
+            Apply(held.State); Apply(observer.State);
+            foreach (var preview in strip) if (preview) Apply(preview.State);
+        }
+        private void Apply(HeldItemPresentationState state)
+        {
+            if (state == null) return;
+            state.Authoring = Phase == GripAuthoringPhase.Live ? null :
+                new HeldItemPresentationState.AuthoringPose { Charged = Phase == GripAuthoringPhase.Charged };
+        }
+        public void ContentEdited()
+        {
+            if (!attached) return;
+            held.State?.RefreshContent(); observer.State?.RefreshContent();
+            foreach (var preview in strip) if (preview) preview.State?.RefreshContent();
+        }
+
+        internal bool TryRig(bool firstPerson, out HeldItemPresentationState state, out AvatarBinding binding)
+        {
+            state = null; binding = null;
+            if (!attached) return false;
+            state = firstPerson ? held.State : observer.State;
+            binding = firstPerson ? avatar.Hands.LocalBinding : observer.Presentation.Binding;
+            return state != null && binding != null;
+        }
+        private bool Showing(bool firstPerson, out HeldItemPresentationState state, out AvatarBinding binding) =>
+            TryRig(firstPerson, out state, out binding) && state.CanShowHeldItem && state.committed.Item != 0;
+        public bool TryPalm(bool firstPerson, bool right, out Pose palm)
+        {
+            palm = default;
+            if (!TryRig(firstPerson, out _, out var binding)) return false;
+            palm = binding.Palm(right);
+            return true;
+        }
+        public bool TryGrip(bool firstPerson, out Pose grip)
+        {
+            grip = default;
+            if (!Showing(firstPerson, out var state, out _)) return false;
+            grip = state.GripFrame;
+            return true;
+        }
+        public bool TryItem(bool firstPerson, out Pose item)
+        {
+            item = default;
+            var definition = SelectedDefinition;
+            if (!definition || !Showing(firstPerson, out var state, out var binding)) return false;
+            item = HeldItemPoseCalculation.Compose(state.GripFrame, definition.Grip(binding.Id, firstPerson));
+            return true;
+        }
+        public bool TryPouch(bool firstPerson, out Vector3 pouch)
+        {
+            pouch = default;
+            if (SelectedDefinition is not SlingshotDefinition slingshot || !Showing(firstPerson, out _, out var binding)) return false;
+            var palm = binding.Palm(false);
+            pouch = palm.position + palm.rotation * slingshot.PouchOffset;
+            return true;
+        }
+        public bool TryRequestedPalm(bool firstPerson, bool right, out Pose requested, out Pose reached)
+        {
+            requested = reached = default;
+            if (!TryRig(firstPerson, out var state, out _)) return false;
+            var readout = state.Readout;
+            requested = right ? readout.RequestedRight : readout.RequestedLeft;
+            reached = right ? readout.EvaluatedRight : readout.EvaluatedLeft;
+            return true;
+        }
+
+        public bool BeginPalmDrag(bool firstPerson, bool right)
+        {
+            if (!BeginEdit(firstPerson)) return false;
+            dragRight = right;
+            Seed(right);
+            return true;
+        }
+        public void DragPalm(Pose world)
+        {
+            if (editState?.Authoring == null) return;
+            var local = AvatarHandTargets.Rebase(world, editBinding.Body, Pose.identity);
+            if (dragRight) editState.Authoring.Right = local; else editState.Authoring.Left = local;
+        }
+        public void SetSwivel(bool firstPerson, bool right, float degrees)
+        {
+            if (editState == null && !BeginEdit(firstPerson)) return;
+            Seed(right);
+            if (right) editState.Authoring.RightSwivel = degrees; else editState.Authoring.LeftSwivel = degrees;
+        }
+        public bool EndPalmDrag(out GripPoseCapture capture)
+        {
+            capture = default;
+            if (editState == null) return false;
+            var authoring = editState.Authoring;
+            var definition = SelectedDefinition;
+            bool valid = authoring != null && definition && definition.HoldClass &&
+                TryRig(editFirstPerson, out _, out var current) && current == editBinding;
+            if (valid)
+                capture = new GripPoseCapture
+                {
+                    Class = definition.HoldClass, FirstPerson = editFirstPerson, Charged = authoring.Charged,
+                    Muscles = editBinding.CaptureMuscles(),
+                    Spread = Vector3.Distance(editBinding.Palm(true).position, editBinding.Palm(false).position)
+                };
+            EndEdit();
+            return valid;
+        }
+        private bool BeginEdit(bool firstPerson)
+        {
+            EndEdit();
+            if (Phase == GripAuthoringPhase.Live || !TryRig(firstPerson, out var state, out var binding) || state.Authoring == null) return false;
+            editState = state; editBinding = binding; editFirstPerson = firstPerson;
+            return true;
+        }
+        private void Seed(bool right)
+        {
+            var local = AvatarHandTargets.Rebase(editBinding.Palm(right), editBinding.Body, Pose.identity);
+            if (right) editState.Authoring.Right ??= local; else editState.Authoring.Left ??= local;
+        }
+        private void EndEdit()
+        {
+            var authoring = editState?.Authoring;
+            if (authoring != null) { authoring.Right = authoring.Left = null; authoring.RightSwivel = authoring.LeftSwivel = 0f; }
+            editState = null; editBinding = null;
+        }
+
         public void Equip()
         {
-            if (!inventory || choosing) return;
-            pendingItem = Drafts.SelectedItem;
+            if (!attached || choosing || selectedItem == 0) return;
+            pendingItem = selectedItem;
             if (network.ItemAction.State == ItemActionState.Recovering) return;
             choosing = true;
             try
@@ -149,7 +287,8 @@ namespace TwoBirds
                 Cleanup();
                 foreach (uint id in supplied)
                     if (WorldItemRegistry.Instance.TryGetRecord(id, out var retained) && retained.State == WorldItemState.Held && retained.DefinitionId != pendingItem)
-                    { panel?.ShowMessage("The previous supplied item is still held. Equip again when it can be dropped."); return; }
+                    { Message = "The previous supplied item is still held. Equip again when it can be dropped."; return; }
+                Message = "";
                 for (int slot = 0; slot < inventory.Count; slot++)
                 {
                     var stack = inventory.GetSlot(slot);
@@ -165,16 +304,34 @@ namespace TwoBirds
             finally { choosing = false; }
             InventoryChanged();
         }
+        private bool Holds(byte id)
+        {
+            for (int i = 0; i < inventory.Count; i++)
+                if (!inventory.GetSlot(i).IsEmpty && inventory.GetSlot(i).ItemId == id) return true;
+            return false;
+        }
         private void InventoryChanged()
         {
-            if (choosing || pendingItem == 0) return;
-            for (int i = 0; i < inventory.Count; i++)
-                if (!inventory.GetSlot(i).IsEmpty && inventory.GetSlot(i).ItemId == pendingItem) { Equip(); break; }
+            if (choosing) return;
+            if (pendingItem != 0) { if (Holds(pendingItem)) Equip(); return; }
+            QueueReequip();
         }
         private void ActionChanged()
         {
             if (network.ItemAction.State != ItemActionState.Idle) return;
-            Cleanup(); if (pendingItem != 0) Equip();
+            if (pendingItem != 0) { Cleanup(); Equip(); }
+            else QueueReequip();
+        }
+        private void QueueReequip()
+        {
+            if (!AutoReequip || reequipping != null || selectedItem == 0 || network.ItemAction.State != ItemActionState.Idle || Holds(selectedItem)) return;
+            reequipping = StartCoroutine(Reequip());
+        }
+        private IEnumerator Reequip()
+        {
+            yield return new WaitForSecondsRealtime(ReequipDelay);
+            reequipping = null;
+            if (AutoReequip && network.ItemAction.State == ItemActionState.Idle && !Holds(selectedItem)) Equip();
         }
         private void Cleanup()
         {
@@ -184,7 +341,7 @@ namespace TwoBirds
             foreach (uint id in supplied)
             {
                 if (!WorldItemRegistry.Instance.TryGetRecord(id, out var record)) { remove.Add(id); continue; }
-                if (record.DefinitionId == Drafts.SelectedItem && record.State == WorldItemState.Held) continue;
+                if (record.DefinitionId == selectedItem && record.State == WorldItemState.Held) continue;
                 if (record.State == WorldItemState.Held)
                     for (int slot = 0; slot < inventory.Count; slot++)
                     {
@@ -197,184 +354,83 @@ namespace TwoBirds
             foreach (uint id in remove) supplied.Remove(id);
             cleaning = false;
         }
-        public void Dequip() { Cancel(); if (inventory) inventory.SelectSlot(-1); }
-        public void BeginUse() { if (input) input.BeginAuthoringUse(); }
-        public void EndUse() { if (input) input.EndAuthoringUse(); }
-        public void Cancel() { if (input) { input.EndAuthoringUse(true); equipment.CancelUse(); } }
-        public void DirectUse() { Cancel(); if (equipment) equipment.DirectUse(); }
-        public void Drop() { Cancel(); if (inventory) inventory.DropSelected(); }
-        public void Exit() { Cancel(); session.Leave(); }
-        private void LateUpdate()
+
+        private void Act(Action action) { if (!attached) return; SetPhase(GripAuthoringPhase.Live); action(); }
+        public void EquipAction() => Act(Equip);
+        public void Dequip() => Act(() => { Cancel(); inventory.SelectSlot(-1); });
+        public void Hold() => Act(() => { Cancel(); input.BeginAuthoringUse(); });
+        public void Release() => Act(() => input.EndAuthoringUse());
+        public void Throw() => Act(() =>
         {
-            if (!attached) return;
-            Views.Follow(avatar.CurrentPlacement.SolePosition + Vector3.up * (avatar.Presentation.Resolved.Settings.VisualHeight * 0.6f));
-            UpdateGhosts();
-            panel?.UpdateReadouts();
+            Cancel();
+            var item = SelectedDefinition;
+            if (!item) return;
+            throwing = StartCoroutine(ThrowAfter(Mathf.Max(item.ThrowChargeTime, item.HoldClass ? item.HoldClass.ChargePoseDuration : 0f)));
+        });
+        public void CancelAction() => Act(Cancel);
+        public void Drop() => Act(() => { Cancel(); inventory.DropSelected(); });
+        public void Use() => Act(() => { Cancel(); equipment.DirectUse(); });
+        private IEnumerator ThrowAfter(float seconds)
+        {
+            input.BeginAuthoringUse();
+            yield return new WaitForSecondsRealtime(seconds);
+            throwing = null;
+            input.EndAuthoringUse();
         }
-        private void UpdateGhosts()
+        private void Cancel()
         {
-            var item = Drafts.Items.Get(Drafts.SelectedItem);
-            AvatarRegistry.Entry entry = null;
-            foreach (var candidate in Drafts.Avatars.Entries) if (candidate.Id == Drafts.SelectedAvatar) { entry = candidate; break; }
-            foreach (string path in GhostPaths)
-            {
-                ghosts.TryGetValue(path, out var ghost);
-                bool applies = Drafts.Context == GripAuthoringContext.Item && observer.ItemRoot && item && entry != null &&
-                    (path == "RightPalmContact" || path == "LeftPalmContact" && item.HoldMode == ItemHoldMode.TwoHand ||
-                        path == "PullingPalmContact" && item is SlingshotDefinition);
-                if (!applies || !TryHandle(path, out var handle)) { ghost?.SetVisible(false); continue; }
-                var fingers = path != "PullingPalmContact" && item.GripFingers ? item.GripFingers : Drafts.Avatars.Animations.GripFingers;
-                if (ghost == null || ghost.Avatar != entry.Id || ghost.Fingers != fingers)
-                {
-                    ghost?.Dispose();
-                    ghosts[path] = ghost = new GripGhostHand(entry, Drafts.Avatars.Animations, fingers, path == "RightPalmContact",
-                        LayerMask.NameToLayer(AvatarEditorPreview.LayerName), ghostMaterial);
-                }
-                ghost.SetVisible(true);
-                ghost.Place(handle.World);
-            }
+            if (!input) return;
+            if (throwing != null) { StopCoroutine(throwing); throwing = null; }
+            input.EndAuthoringUse(true); equipment.CancelUse();
         }
-        public string ReachText(bool firstPerson)
+
+        public string Readout(bool firstPerson)
         {
-            var state = firstPerson ? held?.State : observer.State;
-            if (state == null) return "Waiting for presentation";
+            if (!TryRig(firstPerson, out var state, out _)) return "Waiting for presentation";
             var value = state.Readout;
             string status = value.ActiveBlend ? "Active blend" : value.RightUnreachable || value.LeftUnreachable
-                ? $"Unreachable contact: {(value.LeftUnreachable ? "Left " : "")}{(value.RightUnreachable ? "Right" : "")}" : "Contact";
+                ? $"Unreachable palm: {(value.LeftUnreachable ? "Left " : "")}{(value.RightUnreachable ? "Right" : "")}" : "Contact";
             if (value.ClearanceAdjusted) status += " · clearance adjusted";
-            string text = $"{status}\nRight {value.RightPositionError:F4} m / {value.RightAngleError:F1}°" +
+            return $"{status}\nRight {value.RightPositionError:F4} m / {value.RightAngleError:F1}°" +
                 (value.HasLeft ? $" · Left {value.LeftPositionError:F4} m / {value.LeftAngleError:F1}°" : "");
-            var item = Drafts.Items.Get(Drafts.SelectedItem);
-            if (firstPerson || !item || item.HoldMode != ItemHoldMode.TwoHand) return text;
-            text += Shortfall(observer);
-            foreach (var preview in strip) if (preview && preview.State != null) text += Shortfall(preview);
-            return text;
         }
-        private static string Shortfall(GripObserverPreview preview)
+        public string StripReadouts()
         {
+            var item = SelectedDefinition;
+            if (!item || item.HoldMode != ItemHoldMode.TwoHand) return "";
+            var text = new StringBuilder();
+            Shortfall(text, observer);
+            foreach (var preview in strip) Shortfall(text, preview);
+            return text.ToString();
+        }
+        private static void Shortfall(StringBuilder text, GripObserverPreview preview)
+        {
+            if (!preview || preview.State == null) return;
             var readout = preview.State.Readout;
-            return $"\n{preview.DisplayName}: short R {readout.RightPositionError * 100f:F1} cm · L {readout.LeftPositionError * 100f:F1} cm";
+            text.AppendLine($"{preview.DisplayName}: short R {readout.RightPositionError * 100f:F1} cm · L {readout.LeftPositionError * 100f:F1} cm");
         }
-        public bool TryHandle(string path, out GripAuthoringHandle handle)
-        {
-            handle = default;
-            if (!attached || Drafts?.Current == null) return false;
-            bool firstPerson = path.StartsWith("FirstPerson");
-            var state = firstPerson ? held.State : observer.State;
-            var binding = firstPerson ? avatar.Hands.LocalBinding : observer.Presentation.Binding;
-            if (state == null || binding == null) return false;
-            var record = Drafts.Current;
-            Pose basis;
-            Vector3 scale = Vector3.one;
-            string position, euler;
-            if (path.EndsWith("Contact"))
-            {
-                var root = observer.ItemRoot;
-                if (!root) return false;
-                basis = new Pose(path == "PullingPalmContact" && observer.State.Slingshot ? observer.State.Slingshot.Center : root.position, root.rotation);
-                scale = ((ItemDefinition)record.Runtime).WorldPrefab.transform.localScale;
-                position = path + ".Position"; euler = path + ".Euler";
-            }
-            else if (path.EndsWith("Correction"))
-            {
-                bool right = path.StartsWith("Right");
-                var generated = binding.Settings.Generated;
-                var wrist = binding.GetBone(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
-                basis = new Pose(wrist.position + wrist.rotation * ((right ? generated.RightWristToPalmPosition : generated.LeftWristToPalmPosition) * binding.Scale),
-                    wrist.rotation * (right ? generated.RightWristToPalmRotation : generated.LeftWristToPalmRotation));
-                scale = Vector3.one * binding.Scale;
-                position = path + ".Position"; euler = path + ".Euler";
-            }
-            else return false;
-            var local = new Pose((Vector3)GripAuthoringFields.Get(record.Values, position),
-                euler == null ? Quaternion.identity : Quaternion.Euler((Vector3)GripAuthoringFields.Get(record.Values, euler)));
-            handle = new GripAuthoringHandle { Basis = basis, Scale = scale, PositionField = position, EulerField = euler, Local = local };
-            return true;
-        }
-        public bool TryPalmReadout(bool firstPerson, out Pose requestedRight, out Pose evaluatedRight, out Pose requestedLeft, out Pose evaluatedLeft, out bool hasLeft)
-        {
-            var state = firstPerson ? held?.State : observer.State;
-            var readout = state?.Readout ?? default;
-            requestedRight = readout.RequestedRight; evaluatedRight = readout.EvaluatedRight;
-            requestedLeft = readout.RequestedLeft; evaluatedLeft = readout.EvaluatedLeft; hasLeft = readout.HasLeft;
-            return state != null;
-        }
-        public void BeginPoseEdit(ItemHoldMode mode, int slot)
-        {
-            EndPoseEdit();
-            if (!attached) return;
-            poseState = slot >= 2 ? held.State : observer.State;
-            if (poseState == null) return;
-            poseState.Edit = new HeldItemPresentationState.PoseEdit { Mode = mode, Charged = slot % 2 == 1 };
-            PoseMode = mode; PoseSlot = slot;
-        }
-        public void EndPoseEdit()
-        {
-            if (poseState != null) poseState.Edit = null;
-            poseState = null;
-        }
-        public void ResetPoseEdit()
-        {
-            var edit = poseState?.Edit;
-            if (edit == null) return;
-            edit.Seeded = false; edit.RightSwivel = edit.LeftSwivel = 0f;
-        }
-        public void SetSwivel(bool right, float degrees)
-        {
-            var edit = poseState?.Edit;
-            if (edit == null) return;
-            if (right) edit.RightSwivel = degrees; else edit.LeftSwivel = degrees;
-        }
-        public float PoseSwivel(bool right)
-        {
-            var edit = poseState?.Edit;
-            return edit == null ? 0f : right ? edit.RightSwivel : edit.LeftSwivel;
-        }
-        private AvatarBinding PoseBinding => !PoseEditing ? null : PoseSlot >= 2 ? avatar.Hands.LocalBinding : observer.Presentation.Binding;
-        public bool TryPoseHandle(bool right, out Pose world)
-        {
-            world = default;
-            var binding = PoseBinding;
-            if (binding == null || !poseState.Edit.Seeded) return false;
-            world = AvatarHandTargets.Rebase(right ? poseState.Edit.Right : poseState.Edit.Left, Pose.identity, binding.Body);
-            return true;
-        }
-        public void SetPosePalm(bool right, Pose world)
-        {
-            var binding = PoseBinding;
-            if (binding == null) return;
-            var local = AvatarHandTargets.Rebase(world, binding.Body, Pose.identity);
-            if (right) poseState.Edit.Right = local; else poseState.Edit.Left = local;
-        }
-        public bool TryCapturePose(out GripPoseCapture capture)
-        {
-            capture = default;
-            var binding = PoseBinding;
-            if (binding == null) return false;
-            using var handler = new HumanPoseHandler(binding.Animator.avatar, binding.Animator.transform);
-            var pose = new HumanPose();
-            handler.GetHumanPose(ref pose);
-            capture = new GripPoseCapture { Mode = PoseMode, FirstPerson = PoseSlot >= 2, Charged = PoseSlot % 2 == 1, Muscles = (float[])pose.muscles.Clone() };
-            return true;
-        }
+
         private void OnDestroy()
         {
-            EndPoseEdit();
-            foreach (var ghost in ghosts.Values) ghost.Dispose();
-            ghosts.Clear();
+            EndEdit();
             foreach (var preview in strip) if (preview) Destroy(preview.gameObject);
             strip.Clear();
             if (session) session.Changed -= SessionChanged;
             if (attached)
             {
-                Cancel(); SetEditing(false);
+                Phase = GripAuthoringPhase.Live; ApplyPhase();
+                Cancel(); SetWalking(true);
                 if (inventory) inventory.InventoryChanged -= InventoryChanged;
                 if (network) network.ActionChanged -= ActionChanged;
-                if (avatar && avatar.Hands) avatar.Hands.LocalBound -= OwnerBound;
+                if (avatar)
+                {
+                    avatar.Presentation.DidBind -= OwnerBound;
+                    if (avatar.Hands) avatar.Hands.LocalBound -= LocalBound;
+                }
+                if (viewCamera) viewCamera.cullingMask = viewMask;
             }
             foreach (var entry in originalLayers) if (entry.Key) entry.Key.gameObject.layer = entry.Value;
-            panel?.Dispose(); Views?.Dispose();
-            editToggle?.Dispose();
+            walkToggle?.Dispose();
             if (Instance == this) Instance = null;
             SceneChanged?.Invoke();
         }

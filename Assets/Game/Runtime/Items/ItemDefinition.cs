@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -46,10 +47,21 @@ namespace TwoBirds
         [Min(0.01f)] public float ThrowChargeTime = 1f;
 
         [Header("Held Item Grip")]
-        public ItemHoldMode HoldMode;
-        [Tooltip("Palm contact in item-root metres before prefab scale, with Euler degrees.")]
-        public ItemPalmContact RightPalmContact, LeftPalmContact;
+        public HoldClass HoldClass;
+        [Tooltip("Item root in the grip frame: metres and Euler degrees.")]
+        public GripOffset ThirdPersonGrip, FirstPersonGrip;
+        public List<AvatarGripOffset> AvatarGrips = new();
         public AnimationClip GripFingers;
+        public ItemHoldMode HoldMode => HoldClass ? HoldClass.Mode : ItemHoldMode.OneHand;
+
+        internal Pose Grip(AvatarId avatar, bool firstPerson)
+        {
+            var offset = (firstPerson ? FirstPersonGrip : ThirdPersonGrip).Pose;
+            foreach (var entry in AvatarGrips)
+                if (entry.Avatar == avatar)
+                    return HeldItemPoseCalculation.Compose((firstPerson ? entry.FirstPerson : entry.ThirdPerson).Pose, offset);
+            return offset;
+        }
 
         [Header("Player Impacts")]
         [Tooltip("When true, the item bounces off players without shoving them.")]

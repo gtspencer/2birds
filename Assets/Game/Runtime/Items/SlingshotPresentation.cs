@@ -9,7 +9,7 @@ namespace TwoBirds
         public LineRenderer LeftBand, RightBand;
         private const int BandPoints = 9;
         private const float SettleSeconds = 0.35f;
-        private Vector3 left, right, rest, releaseLocal, loadedLocal;
+        private Vector3 left, right, rest, releaseLocal, loadedLocal, scale;
         private Vector3 bandDown, bandWave;
         private ItemActionState previous;
         private float slack, wavePhase, recoilDraw;
@@ -23,17 +23,18 @@ namespace TwoBirds
             left = transform.InverseTransformPoint(LeftFork.position);
             right = transform.InverseTransformPoint(RightFork.position);
             rest = transform.InverseTransformPoint(RestCenter.position);
+            scale = transform.lossyScale;
             LeftBand.useWorldSpace = RightBand.useWorldSpace = false;
             LeftBand.positionCount = RightBand.positionCount = BandPoints;
             ResetPose();
         }
 
         internal void Evaluate(Pose frame, ItemActionState state, double age, float draw, float attach, float recovery,
-            Pose? palm, ItemPalmContact contact, Vector3 scale)
+            Pose? palm, Vector3 pouchOffset)
         {
             Vector3 restWorld = frame.position + frame.rotation * Vector3.Scale(rest, scale);
             Vector3 held = palm.HasValue
-                ? Vector3.Lerp(restWorld, HeldItemPoseCalculation.ItemFromPalm(palm.Value, contact, scale).position, attach) : restWorld;
+                ? Vector3.Lerp(restWorld, palm.Value.position + palm.Value.rotation * pouchOffset, attach) : restWorld;
             if (state == ItemActionState.Recovering && previous != state)
             {
                 recoilDraw = draw;

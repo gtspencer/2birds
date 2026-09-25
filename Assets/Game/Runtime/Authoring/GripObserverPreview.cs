@@ -9,7 +9,6 @@ namespace TwoBirds
         private AvatarPresentation presentation;
         private PlayerAvatarPresentation owner;
         private PlayerHeldItemPresentation held;
-        private GripAuthoringDrafts drafts;
         private ItemDefinition definition;
         private GameObject visual;
         private SlingshotPresentation slingshot;
@@ -21,20 +20,19 @@ namespace TwoBirds
         public AvatarPresentation Presentation => presentation;
         public Transform ItemRoot => visual ? visual.transform : null;
         internal string DisplayName => presentation.Resolved?.Settings.DisplayName;
-        internal void Initialize(PlayerAvatarPresentation owner, GripAuthoringDrafts drafts, AvatarId avatar = default, float lateral = 0f)
+        internal void Initialize(PlayerAvatarPresentation owner, AvatarRegistry avatars, float lateral, AvatarId avatar = default)
         {
-            this.owner = owner; this.drafts = drafts; this.lateral = lateral;
+            this.owner = owner; this.lateral = lateral;
             held = owner.GetComponent<PlayerHeldItemPresentation>();
             presentation = GetComponent<AvatarPresentation>();
-            presentation.Configure(drafts.Avatars, true);
+            presentation.Configure(avatars, true);
             presentation.InputSource = () => Shifted(owner.CurrentPlacement);
-            State = new HeldItemPresentationState(presentation, transform, drafts.Held);
+            State = new HeldItemPresentationState(presentation, transform);
             State.CommitItem = pose => { if (visual) visual.transform.SetPositionAndRotation(pose.position, pose.rotation); };
             presentation.PreparingHands += Prepare;
             presentation.HandsEvaluated += Commit;
             presentation.DidBind += Bound;
             presentation.WillUnbind += Unbound;
-            drafts.ContentChanged += ContentChanged;
             followsOwner = !avatar.IsValid;
             if (!followsOwner) { presentation.RequestAvatar(avatar); return; }
             owner.Presentation.IdentityResolved += SelectedAvatar;
@@ -49,7 +47,6 @@ namespace TwoBirds
             return placement;
         }
         private void SelectedAvatar(AvatarRegistry.Entry entry) => presentation.RequestAvatar(entry.Id);
-        private void ContentChanged(GripAuthoringDraft record) => State.RefreshContent();
         private void Bound(AvatarBinding binding)
         {
             var session = SessionController.Instance;
@@ -67,11 +64,8 @@ namespace TwoBirds
                 foreach (var body in binding.Animator.GetComponentsInChildren<Rigidbody>(true)) { body.isKinematic = true; body.detectCollisions = false; }
             }
             var input = held.CaptureInput(false);
-            if (lateral != 0f)
-            {
-                Vector3 offset = Offset(input.Placement);
-                input.Placement = Shifted(input.Placement); input.Aim.position += offset; input.Projectile.position += offset;
-            }
+            Vector3 offset = Offset(input.Placement);
+            input.Placement = Shifted(input.Placement); input.Aim.position += offset; input.Projectile.position += offset;
             if (definition != input.SelectedDefinition)
             {
                 if (visual) Destroy(visual);
@@ -91,7 +85,6 @@ namespace TwoBirds
         private void OnDestroy()
         {
             if (owner && followsOwner) owner.Presentation.IdentityResolved -= SelectedAvatar;
-            if (drafts != null) drafts.ContentChanged -= ContentChanged;
             if (presentation)
             {
                 presentation.PreparingHands -= Prepare; presentation.HandsEvaluated -= Commit;

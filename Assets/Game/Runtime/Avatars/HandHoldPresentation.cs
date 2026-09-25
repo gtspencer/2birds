@@ -17,7 +17,7 @@ namespace TwoBirds
         private double returnStart;
         private bool twoHanded;
 
-        internal static float Reach(in HoldModePoses poses) => Mathf.Clamp(poses.FollowReachFraction, 0.01f, 0.85f);
+        internal static float Reach(HoldClass poses) => Mathf.Clamp(poses.FollowReachFraction, 0.01f, 0.85f);
 
         internal void Hold(Pose left, Pose right)
         {
@@ -48,7 +48,7 @@ namespace TwoBirds
             returnStart = elapsed;
         }
 
-        internal float ReturnProgress(in HoldModePoses poses, double elapsed)
+        internal float ReturnProgress(HoldClass poses, double elapsed)
         {
             double pause = Mathf.Max(0f, poses.MaximumFollowDuration) + Mathf.Max(0f, poses.EndPosePauseDuration);
             double start = System.Math.Max(pause, returnStart);
@@ -56,11 +56,11 @@ namespace TwoBirds
             return elapsed < start ? 0f : end <= start ? 1f : Mathf.Clamp01((float)((elapsed - start) / (end - start)));
         }
 
-        internal float Frame(in HoldModePoses poses, double elapsed, float destination) =>
+        internal float Frame(HoldClass poses, double elapsed, float destination) =>
             Mathf.Lerp(startFrameWeight, destination, Mathf.SmoothStep(0f, 1f, ReturnProgress(poses, elapsed)));
 
         internal void Sample(Pose liveLeft, Pose liveRight, bool available, bool unavailable, in HeldItemBodyFrame body,
-            in HoldModePoses settings, int environmentMask, double elapsed, Pose? destinationLeft, Pose? destinationRight,
+            HoldClass settings, int environmentMask, double elapsed, Pose? destinationLeft, Pose? destinationRight,
             float destinationLeftWeight = 0f, float destinationRightWeight = 0f, float destinationFrameWeight = 0f)
         {
             double followEnd = Mathf.Max(0f, settings.MaximumFollowDuration);

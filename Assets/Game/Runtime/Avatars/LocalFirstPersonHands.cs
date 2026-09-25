@@ -71,6 +71,9 @@ namespace TwoBirds
             fingers.Advance(dt);
             graph.Evaluate(0f);
             arms.Solve(targets, dt);
+#if UNITY_INCLUDE_INSTRUMENTATION
+            if (targets.RoundTripMuscles) Binding.RoundTripMuscles();
+#endif
         }
 
         internal void SetVisible(bool visible)
@@ -79,7 +82,7 @@ namespace TwoBirds
         }
         private void OnDestroy()
         {
-            fingers?.Dispose(); poses?.Dispose();
+            fingers?.Dispose(); poses?.Dispose(); Binding?.Dispose();
             if (graph.IsValid()) graph.Destroy();
         }
     }

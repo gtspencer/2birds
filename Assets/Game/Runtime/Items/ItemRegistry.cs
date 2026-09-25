@@ -8,7 +8,8 @@ namespace TwoBirds
         public event System.Action ContentChanged;
         public void NotifyContentChanged() => ContentChanged?.Invoke();
         private void OnValidate() => NotifyContentChanged();
-        public HeldItemSettings HeldItemDefaults;
+        [Tooltip("Supplies the player-carry release timing.")]
+        public HoldClass CarryHold;
         public ItemDefinition[] Items = System.Array.Empty<ItemDefinition>();
 
         public ItemDefinition Get(byte id)

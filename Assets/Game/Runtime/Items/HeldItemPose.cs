@@ -4,29 +4,23 @@ namespace TwoBirds
 {
     internal readonly struct HeldItemPoseData
     {
-        internal readonly HoldModePoses Poses;
-        internal readonly ItemPalmContact RightContact, LeftContact, PullingContact;
+        internal readonly HoldClass Class;
         internal readonly AnimationClip Fingers;
-        internal readonly Vector3 PrefabScale;
         internal readonly ItemHoldMode HoldMode;
-        internal readonly Quaternion PrefabRotation;
+        internal readonly Vector3 PouchOffset;
         internal readonly ItemReleaseSphere Sphere;
         internal readonly float ReleaseRadius;
         internal bool TwoHand => HoldMode == ItemHoldMode.TwoHand;
-        internal HeldItemPoseData(ItemDefinition definition, HeldItemSettings defaults)
+        internal HeldItemPoseData(ItemDefinition definition)
         {
+            Class = definition.HoldClass;
             HoldMode = definition.HoldMode;
-            PrefabRotation = definition.WorldPrefab.transform.localRotation;
             var geometry = definition.WorldPrefab.GetComponent<WorldItem>();
             if (geometry) geometry.CacheReleaseGeometry();
             Sphere = geometry ? geometry.ReleaseSphere : default;
             ReleaseRadius = geometry ? geometry.ReleaseRadius : 0f;
-            Poses = defaults.Poses(definition.HoldMode);
             Fingers = definition.GripFingers;
-            RightContact = definition.RightPalmContact;
-            LeftContact = definition.LeftPalmContact;
-            PullingContact = definition is SlingshotDefinition pulling ? pulling.PullingPalmContact : default;
-            PrefabScale = definition.WorldPrefab.transform.localScale;
+            PouchOffset = definition is SlingshotDefinition slingshot ? slingshot.PouchOffset : default;
         }
     }
 
@@ -71,35 +65,30 @@ namespace TwoBirds
             new(Center + Rotation * ((measurements.RightShoulder - measurements.LeftShoulder) * (scale * 0.5f)), Rotation, measurements, scale);
     }
 
-    internal static class HeldItemPoseCalculation
+    public static class HeldItemPoseCalculation
     {
         private static readonly Vector3 FallbackPalm = new(0.15f, -0.40f, 0.50f), FallbackCenter = new(0f, -0.40f, 0.50f);
 
-        internal static Pose PalmFromItem(Pose root, ItemPalmContact contact, Vector3 scale) =>
-            new(root.position + root.rotation * Vector3.Scale(scale, contact.Position), root.rotation * contact.Rotation);
+        public static Pose Compose(Pose frame, Pose offset) =>
+            new(frame.position + frame.rotation * offset.position, frame.rotation * offset.rotation);
 
-        internal static Pose ItemFromPalm(Pose palm, ItemPalmContact contact, Vector3 scale)
+        public static Pose Inverse(Pose pose)
         {
-            Quaternion rotation = palm.rotation * Quaternion.Inverse(contact.Rotation);
-            return new Pose(palm.position - rotation * Vector3.Scale(scale, contact.Position), rotation);
+            Quaternion rotation = Quaternion.Inverse(pose.rotation);
+            return new Pose(rotation * -pose.position, rotation);
         }
 
-        internal static Pose TwoHandAnchor(Pose rightPalm, Pose leftPalm, ItemPalmContact right, ItemPalmContact left, Vector3 scale)
+        internal static Pose GripFrame(Pose right, Pose left, Quaternion body)
         {
-            Quaternion rotation = Quaternion.Slerp(rightPalm.rotation * Quaternion.Inverse(right.Rotation),
-                leftPalm.rotation * Quaternion.Inverse(left.Rotation), 0.5f);
-            Vector3 rightGrip = Vector3.Scale(scale, right.Position), leftGrip = Vector3.Scale(scale, left.Position);
-            Vector3 gripAxis = rotation * (leftGrip - rightGrip), palmAxis = leftPalm.position - rightPalm.position;
-            if (gripAxis.sqrMagnitude > 0.000001f && palmAxis.sqrMagnitude > 0.000001f)
-                rotation = Quaternion.FromToRotation(gripAxis, palmAxis) * rotation;
-            return new Pose((rightPalm.position + leftPalm.position) * 0.5f - rotation * ((rightGrip + leftGrip) * 0.5f), rotation);
+            Vector3 x = right.position - left.position;
+            x = x.sqrMagnitude > 0.000001f ? x.normalized : body * Vector3.right;
+            Vector3 z = Vector3.ProjectOnPlane(right.rotation * Vector3.forward + left.rotation * Vector3.forward, x);
+            if (z.sqrMagnitude < 0.000001f) z = Vector3.ProjectOnPlane(body * Vector3.forward, x);
+            z.Normalize();
+            return new Pose((right.position + left.position) * 0.5f, Quaternion.LookRotation(z, Vector3.Cross(z, x)));
         }
 
-        internal static Pose Fallback(in HeldItemBodyFrame body, in HeldItemPoseData data)
-        {
-            if (!data.TwoHand) return ItemFromPalm(new Pose(body.ToWorld(FallbackPalm), body.Rotation), data.RightContact, data.PrefabScale);
-            Quaternion rotation = body.Rotation * data.PrefabRotation;
-            return new Pose(body.CenterToWorld(FallbackCenter) - rotation * data.Sphere.Center, rotation);
-        }
+        internal static Pose FallbackFrame(in HeldItemBodyFrame body, in HeldItemPoseData data) =>
+            new(data.TwoHand ? body.CenterToWorld(FallbackCenter) : body.ToWorld(FallbackPalm), body.Rotation);
     }
 }

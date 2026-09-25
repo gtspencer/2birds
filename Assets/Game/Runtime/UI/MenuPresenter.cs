@@ -66,11 +66,6 @@ namespace TwoBirds
             entryError = root.Q<Label>("entry-error");
             entryPanel.RegisterCallback<NavigationCancelEvent>(EntryBack, TrickleDown.TrickleDown);
             BuildEntry();
-#if UNITY_INCLUDE_INSTRUMENTATION
-            if (root.Q<Button>("grip-authoring") == null)
-                root.Q<Button>("solo").parent.Add(new Button { name = "grip-authoring", text = "Grip Authoring" });
-            Click("grip-authoring", session.StartGripAuthoring);
-#endif
             Click("solo", () => { session.MenuSelection = "solo"; session.StartSession(SessionMode.Solo); });
             Click("host", () => { session.MenuSelection = "host"; if (session.LocalNetworking) Show("host"); else session.StartSession(SessionMode.Host); });
             Click("join", () => { session.MenuSelection = "join"; Show("join"); if (!session.LocalNetworking && lobby) lobby.RefreshFriends(); });

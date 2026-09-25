@@ -14,18 +14,18 @@ namespace TwoBirds
             internal bool Contact, BodyRelative;
             internal AnimationClip Fingers;
         }
-        internal struct TwoHandAnchor { internal bool Active; internal ItemPalmContact Right, Left; internal Vector3 Scale; }
+        internal struct TwoHandAnchor { internal bool Active; internal float Spread; internal Pose Grip; }
         private readonly Target[,] candidates = new Target[2, 4];
         internal Pose Body { get; private set; } = Pose.identity;
         internal void SetBody(Pose body) => Body = body;
         internal AvatarArmPose Arms { get; private set; }
         internal TwoHandAnchor Anchor { get; private set; }
         internal void SetArms(in AvatarArmPose pose) => Arms = pose;
-        internal void SetAnchor(ItemPalmContact right, ItemPalmContact left, Vector3 scale) =>
-            Anchor = new TwoHandAnchor { Active = true, Right = right, Left = left, Scale = scale };
+        internal void SetAnchor(float spread, Pose grip) => Anchor = new TwoHandAnchor { Active = true, Spread = spread, Grip = grip };
         internal void ClearAnchor() => Anchor = default;
 #if UNITY_INCLUDE_INSTRUMENTATION
         internal readonly float[] Swivel = new float[2];
+        internal bool RoundTripMuscles;
 #endif
 
         public void Set(AvatarIKGoal hand, AvatarHandSource source, Transform target, float position = 1f,

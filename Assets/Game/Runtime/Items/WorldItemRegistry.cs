@@ -61,13 +61,6 @@ namespace TwoBirds
         public PlayerInventory LocalInventory { get; private set; }
         internal event System.Action<uint, int, int> PresentationChanged;
 
-        public ItemRegistry Catalog => itemRegistry;
-        public void BindCatalog(ItemRegistry catalog)
-        {
-            if (worldReady) throw new System.InvalidOperationException("Bind item content before BeginWorld.");
-            itemRegistry = catalog;
-        }
-
 #if UNITY_INCLUDE_INSTRUMENTATION
         internal WorldItem SupplyAuthoringItem(byte definition, Vector3 position)
         {
@@ -86,7 +79,7 @@ namespace TwoBirds
         }
 #endif
 
-        internal HeldItemSettings HeldDefaults => itemRegistry.HeldItemDefaults;
+        internal HoldClass CarryHold => itemRegistry.CarryHold;
 
         private void NotifyPresentation(uint id, int previousHolder)
         {

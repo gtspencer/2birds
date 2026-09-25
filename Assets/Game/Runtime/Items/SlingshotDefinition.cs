@@ -7,7 +7,8 @@ namespace TwoBirds
     {
         public override bool CanBeIngredient => false;
         [Header("Slingshot Pouch")]
-        public ItemPalmContact PullingPalmContact;
+        [Tooltip("Pouch position in the left-palm frame, in metres.")]
+        public Vector3 PouchOffset;
 
         [Header("Pebble Settings")]
         [Min(0)] public int PebbleDamage = 10;
@@ -19,7 +20,6 @@ namespace TwoBirds
         public override void NotifyContentChanged()
         {
             Stackable = false;
-            HoldMode = ItemHoldMode.Slingshot;
             MaxStack = 1;
             base.NotifyContentChanged();
         }

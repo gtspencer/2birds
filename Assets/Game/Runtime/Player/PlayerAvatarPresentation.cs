@@ -78,12 +78,12 @@ namespace TwoBirds
 
         internal void Initialize()
         {
-            presentation.Configure(SessionController.Instance.PresentationRegistry, false);
+            presentation.Configure(SessionController.Instance.Avatars, false);
             selected.Value = SessionController.Instance.Appearance.Resolve(new AvatarAppearance { Avatar = presentation.Registry.DefaultId });
         }
         public override void OnStartClient()
         {
-            presentation.Configure(SessionController.Instance.PresentationRegistry, !IsOwner || health.IsDowned, state.Snapshot.SpawnSlot / 8f);
+            presentation.Configure(SessionController.Instance.Avatars, !IsOwner || health.IsDowned, state.Snapshot.SpawnSlot / 8f);
             BindStore();
             if (!IsOwner) ResolveSelected(selected.Value);
             if (health.IsAlive) Hands.StartPresentation();

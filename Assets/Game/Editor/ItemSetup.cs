@@ -11,6 +11,7 @@ namespace TwoBirds.Editor
         private const string DefinitionFolder = "Assets/Game/ScriptableObjects/Items";
         private const string RegistryPath = "Assets/Game/ScriptableObjects/ItemRegistry.asset";
         private const string IconFolder = "Assets/Game/UI/Icons";
+        private const string DefaultHoldClassPath = "Assets/Game/Settings/HoldClasses/Regular.asset";
 
         private enum SetupMode { Item, Potion }
         private SetupMode mode;
@@ -90,6 +91,7 @@ namespace TwoBirds.Editor
             definition.name = safeName;
             definition.ItemName = itemName;
             definition.ItemId = id;
+            definition.HoldClass = AssetDatabase.LoadAssetAtPath<HoldClass>(DefaultHoldClassPath);
             AssetDatabase.CreateAsset(definition, definitionPath);
             EditorUtility.SetDirty(definition);
 
@@ -105,7 +107,7 @@ namespace TwoBirds.Editor
                 var root = InstantiateSource(source);
                 root.name = safeName;
                 PrepareVisualRoot(root);
-                definition.RightPalmContact.Euler = Quaternion.Inverse(root.transform.localRotation).eulerAngles;
+                definition.ThirdPersonGrip.Euler = root.transform.localRotation.eulerAngles;
                 GenerateHeldOffset(root, definition);
                 AddComponents(root, definition, addThrowable);
                 root.hideFlags = HideFlags.None;
@@ -244,7 +246,8 @@ namespace TwoBirds.Editor
         public static bool GenerateHeldOffset(GameObject root, ItemDefinition definition)
         {
             if (definition.HoldMode == ItemHoldMode.TwoHand) return false;
-            Matrix4x4 toPalm = Matrix4x4.TRS(Vector3.zero, Quaternion.Inverse(definition.RightPalmContact.Rotation),
+            Quaternion palm = Quaternion.Inverse(definition.ThirdPersonGrip.Pose.rotation);
+            Matrix4x4 toPalm = Matrix4x4.TRS(Vector3.zero, Quaternion.Inverse(palm),
                 root.transform.localScale) * root.transform.worldToLocalMatrix;
             Bounds bounds = default;
             bool found = false;
@@ -269,9 +272,9 @@ namespace TwoBirds.Editor
                 Debug.LogWarning($"No mesh bounds for '{root.name}'; held offset was kept.", definition);
                 return false;
             }
-            Vector3 offset = definition.RightPalmContact.Rotation * (bounds.center - Vector3.up * (bounds.extents.y + 0.006f));
-            Vector3 scale = root.transform.localScale;
-            definition.RightPalmContact.Position = new Vector3(offset.x / scale.x, offset.y / scale.y, offset.z / scale.z);
+            Vector3 offset = palm * (bounds.center - Vector3.up * (bounds.extents.y + 0.006f));
+            Quaternion grip = Quaternion.Inverse(palm);
+            definition.ThirdPersonGrip = definition.FirstPersonGrip = new GripOffset { Position = grip * -offset, Euler = grip.eulerAngles };
             EditorUtility.SetDirty(definition);
             return true;
         }

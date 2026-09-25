@@ -25,7 +25,6 @@ namespace TwoBirds
         internal float ArmWeight => State?.ArmWeight ?? 0f;
         internal bool IsPendingRelease(uint id) => State != null && State.IsPendingRelease(id);
         internal bool MatchesPendingRelease(in ItemRecord record) => State != null && State.MatchesPendingRelease(record);
-        internal HeldItemPoseData Grip(ItemDefinition definition) => State.Grip(definition);
 
         private void Awake()
         {
@@ -39,7 +38,7 @@ namespace TwoBirds
             if (State != null || !isActiveAndEnabled) return;
             registry = WorldItemRegistry.Instance;
             if (!registry) return;
-            State = new HeldItemPresentationState(playerAvatar.Presentation, transform, registry.HeldDefaults);
+            State = new HeldItemPresentationState(playerAvatar.Presentation, transform);
             State.CommitItem = pose => { if (selectedItem) selectedItem.CommitHeldPose(pose, inventory.ObjectId); };
             inventory.InventoryChanged += SelectionChanged;
             inventory.ControlPermissionsChanged += ContextChanged;
@@ -47,7 +46,6 @@ namespace TwoBirds
             seating.PresentationContextChanged += ContextChanged;
             carry.PresentationContextChanged += ContextChanged;
             registry.PresentationChanged += LifecycleChanged;
-            registry.HeldDefaults.ContentChanged += ContentChanged;
             playerAvatar.Presentation.WillUnbind += Unbind;
             playerAvatar.Presentation.DidBind += Bound;
             playerAvatar.Presentation.IdentityResolved += IdentityResolved;
@@ -64,14 +62,11 @@ namespace TwoBirds
             if (registry)
             {
                 registry.PresentationChanged -= LifecycleChanged;
-                registry.HeldDefaults.ContentChanged -= ContentChanged;
                 registry.DetachHolder(inventory);
             }
             playerAvatar.Presentation.WillUnbind -= Unbind;
             playerAvatar.Presentation.DidBind -= Bound;
             playerAvatar.Presentation.IdentityResolved -= IdentityResolved;
-            if (selected) selected.ContentChanged -= ContentChanged;
-            if (actionDefinition) actionDefinition.ContentChanged -= ContentChanged;
             selected = actionDefinition = null; selectedItem = null; slingshot = null; selectedId = 0;
             State.Dispose(); State = null;
             networkState.ResetItemAction();
@@ -105,9 +100,7 @@ namespace TwoBirds
             }
             if (id != selectedId || definition != selected)
             {
-                if (selected) selected.ContentChanged -= ContentChanged;
                 selected = definition; selectedId = id;
-                if (selected) selected.ContentChanged += ContentChanged;
                 if (id != 0 && playerAvatar.Hands) playerAvatar.Hands.ItemSelected();
                 registry.TryGetItem(id, out selectedItem);
                 slingshot = selectedItem ? selectedItem.GetComponent<SlingshotPresentation>() : null;
@@ -117,9 +110,7 @@ namespace TwoBirds
         private void ActionChanged()
         {
             if (State == null) return;
-            if (actionDefinition) actionDefinition.ContentChanged -= ContentChanged;
             actionDefinition = registry.GetDefinition(networkState.ItemAction.DefinitionId);
-            if (actionDefinition) actionDefinition.ContentChanged += ContentChanged;
             Sync(); registry.RefreshHolder(inventory);
         }
         private void LifecycleChanged(uint id, int previousHolder, int holder)

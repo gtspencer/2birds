@@ -7,11 +7,10 @@ namespace TwoBirds
 {
     internal struct AvatarArmPose
     {
-        internal HeldItemSettings Settings;
-        internal float OneHand, TwoHand, Slingshot, Charge, Pitch;
-        internal ItemHoldMode ChargeMode;
-        internal float Weight(ItemHoldMode mode) => mode switch
-        { ItemHoldMode.TwoHand => TwoHand, ItemHoldMode.Slingshot => Slingshot, _ => OneHand };
+        internal HoldClass A, B;
+        internal float WeightA, WeightB;
+        internal HoldClass ChargeClass;
+        internal float Charge, Pitch;
     }
 
     internal sealed class AvatarArmLayers : IDisposable
@@ -20,13 +19,13 @@ namespace TwoBirds
         {
             internal AvatarMask Mask;
             internal AnimationMixerPlayable Mixer;
-            internal readonly AnimationClip[] Clips = new AnimationClip[6];
-            internal readonly AnimationClipPlayable[] Nodes = new AnimationClipPlayable[6];
+            internal readonly AnimationClip[] Clips = new AnimationClip[4];
+            internal readonly AnimationClipPlayable[] Nodes = new AnimationClipPlayable[4];
         }
         private readonly PlayableGraph graph;
         private readonly bool firstPerson;
         private readonly Arm[] arms = new Arm[2];
-        private HeldItemSettings settings;
+        private readonly HoldClass[] classes = new HoldClass[2];
         internal AnimationLayerMixerPlayable Output { get; }
         internal float Weight(bool right) => Output.GetInputWeight(right ? 2 : 1);
 
@@ -38,7 +37,7 @@ namespace TwoBirds
             Output.SetInputWeight(0, 1f);
             for (int i = 0; i < 2; i++)
             {
-                var arm = arms[i] = new Arm { Mask = new AvatarMask(), Mixer = AnimationMixerPlayable.Create(graph, 6) };
+                var arm = arms[i] = new Arm { Mask = new AvatarMask(), Mixer = AnimationMixerPlayable.Create(graph, 4) };
                 for (int part = 0; part < (int)AvatarMaskBodyPart.LastBodyPart; part++)
                     arm.Mask.SetHumanoidBodyPartActive((AvatarMaskBodyPart)part,
                         part == (int)(i == 0 ? AvatarMaskBodyPart.LeftArm : AvatarMaskBodyPart.RightArm));
@@ -50,55 +49,65 @@ namespace TwoBirds
 
         internal void Set(in AvatarArmPose pose)
         {
-            if (pose.Settings && pose.Settings != settings)
-            {
-                if (settings) settings.ContentChanged -= Rebind;
-                settings = pose.Settings; settings.ContentChanged += Rebind;
-                Rebind();
-            }
+            Assign(0, pose.A); Assign(1, pose.B);
             for (int i = 0; i < 2; i++)
             {
                 var arm = arms[i];
                 float total = 0f;
-                for (int mode = 0; mode < 3; mode++)
-                    if (arm.Clips[mode * 2]) total += pose.Weight((ItemHoldMode)mode);
+                for (int slot = 0; slot < 2; slot++)
+                    if (arm.Clips[slot * 2]) total += Weight(pose, slot);
                 Output.SetInputWeight(i + 1, Mathf.Clamp01(total));
-                for (int mode = 0; mode < 3; mode++)
+                for (int slot = 0; slot < 2; slot++)
                 {
-                    float share = total > 0f && arm.Clips[mode * 2] ? pose.Weight((ItemHoldMode)mode) / total : 0f;
-                    float charge = arm.Clips[mode * 2 + 1] && (ItemHoldMode)mode == pose.ChargeMode ? Mathf.Clamp01(pose.Charge) : 0f;
-                    arm.Mixer.SetInputWeight(mode * 2, share * (1f - charge));
-                    arm.Mixer.SetInputWeight(mode * 2 + 1, share * charge);
+                    float share = total > 0f && arm.Clips[slot * 2] ? Weight(pose, slot) / total : 0f;
+                    float charge = arm.Clips[slot * 2 + 1] && classes[slot] == pose.ChargeClass ? Mathf.Clamp01(pose.Charge) : 0f;
+                    arm.Mixer.SetInputWeight(slot * 2, share * (1f - charge));
+                    arm.Mixer.SetInputWeight(slot * 2 + 1, share * charge);
                 }
             }
         }
 
-        private void Rebind()
+        private static float Weight(in AvatarArmPose pose, int slot) => slot == 0 ? pose.WeightA : pose.WeightB;
+
+        private void Assign(int slot, HoldClass value)
         {
-            for (int i = 0; i < 2; i++)
-                for (int mode = 0; mode < 3; mode++)
-                {
-                    bool used = i == 1 || mode != (int)ItemHoldMode.OneHand;
-                    var poses = settings.Poses((ItemHoldMode)mode);
-                    Bind(arms[i], mode * 2, used ? poses.Hold(firstPerson) : null);
-                    Bind(arms[i], mode * 2 + 1, used ? poses.Charged(firstPerson) : null);
-                }
+            var previous = classes[slot];
+            if (previous == value) return;
+            classes[slot] = value;
+            if (previous && previous != classes[1 - slot]) previous.ContentChanged -= Rebind;
+            if (value && value != classes[1 - slot]) value.ContentChanged += Rebind;
+            Bind(slot, false);
         }
 
-        private void Bind(Arm arm, int slot, AnimationClip clip)
+        private void Rebind() { Bind(0, true); Bind(1, true); }
+
+        private void Bind(int slot, bool force)
         {
-            if (arm.Clips[slot] == clip) return;
-            if (arm.Nodes[slot].IsValid()) { arm.Mixer.DisconnectInput(slot); graph.DestroyPlayable(arm.Nodes[slot]); }
-            arm.Clips[slot] = clip; arm.Nodes[slot] = default;
+            var owner = classes[slot];
+            var view = owner ? owner.View(firstPerson) : default;
+            for (int i = 0; i < 2; i++)
+            {
+                bool used = owner && (i == 1 || owner.Mode != ItemHoldMode.OneHand);
+                Bind(arms[i], slot * 2, used ? view.Hold : null, force);
+                Bind(arms[i], slot * 2 + 1, used ? view.Charged : null, force);
+            }
+        }
+
+        private void Bind(Arm arm, int input, AnimationClip clip, bool force)
+        {
+            if (!force && arm.Clips[input] == clip) return;
+            if (arm.Nodes[input].IsValid()) { arm.Mixer.DisconnectInput(input); graph.DestroyPlayable(arm.Nodes[input]); }
+            arm.Clips[input] = clip; arm.Nodes[input] = default;
             if (!clip) return;
-            var node = arm.Nodes[slot] = AnimationClipPlayable.Create(graph, clip);
+            var node = arm.Nodes[input] = AnimationClipPlayable.Create(graph, clip);
             node.SetApplyPlayableIK(false); node.SetApplyFootIK(false); node.SetSpeed(0); node.SetTime(0);
-            graph.Connect(node, 0, arm.Mixer, slot);
+            graph.Connect(node, 0, arm.Mixer, input);
         }
 
         public void Dispose()
         {
-            if (settings) settings.ContentChanged -= Rebind;
+            if (classes[0]) classes[0].ContentChanged -= Rebind;
+            if (classes[1] && classes[1] != classes[0]) classes[1].ContentChanged -= Rebind;
             foreach (var arm in arms) if (arm?.Mask) UnityEngine.Object.Destroy(arm.Mask);
         }
     }

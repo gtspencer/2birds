@@ -27,7 +27,7 @@ namespace TwoBirds
         private uint releaseRevision, releaseRequest;
         private int releasedPartner = -1;
         private double carryReleaseStart;
-        private HoldModePoses CarrySettings => items.HeldDefaults.TwoHand;
+        private HoldClass CarrySettings => items.CarryHold;
         private bool CarryHolding => carry.IsCarrying && gripPartner && (outstretched || gripBinding != null && gripBinding.HasCarryGrips);
         private float HeavyFrameWeight => carryHands.Releasing ? carryHands.Frame(CarrySettings,
             Time.unscaledTimeAsDouble - carryReleaseStart, 0f) : CarryHolding ? 1f : held.HeavyFrameWeight;

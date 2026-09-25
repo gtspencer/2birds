@@ -29,22 +29,19 @@ namespace TwoBirds
         [SerializeField] private TattooCatalog tattooCatalog;
         [SerializeField] private AvatarEditorController avatarEditorPrefab;
         public AvatarRegistry Avatars => avatarRegistry;
-        public AvatarRegistry PresentationRegistryOverride { get; set; }
-        public AvatarRegistry PresentationRegistry => PresentationRegistryOverride ? PresentationRegistryOverride : avatarRegistry;
         public string GameplayScene { get; private set; } = "Game";
 #if UNITY_INCLUDE_INSTRUMENTATION
         private bool startingAuthoring;
         public void StartGripAuthoring()
         {
             if (Phase != SessionPhase.Idle || !Network || startingAuthoring) return;
-            GripAuthoringSession.Begin(this);
-            GameplayScene = GripAuthoringSession.SceneName;
+            GameplayScene = GripAuthoringScene.SceneName;
             startingAuthoring = true;
             StartCoroutine(StartAuthoringSession());
         }
         private IEnumerator StartAuthoringSession()
         {
-            var existing = SceneManager.GetSceneByName(GripAuthoringSession.SceneName);
+            var existing = SceneManager.GetSceneByName(GripAuthoringScene.SceneName);
             if (existing.IsValid() && existing.isLoaded)
             {
                 var entry = SceneManager.CreateScene("GripAuthoringEntry");
@@ -53,7 +50,7 @@ namespace TwoBirds
             }
             try { StartSession(SessionMode.Solo); }
             finally { startingAuthoring = false; }
-            if (Phase == SessionPhase.Idle) { GripAuthoringSession.End(); GameplayScene = "Game"; }
+            if (Phase == SessionPhase.Idle) GameplayScene = "Game";
         }
 #endif
         public HatCatalog Hats => hatCatalog;
@@ -574,11 +571,7 @@ namespace TwoBirds
             clientAttempts.Clear();
             Roster = Array.Empty<LobbyMember>();
             wireSession = 0;
-#if UNITY_INCLUDE_INSTRUMENTATION
-            GripAuthoringSession.End();
-#endif
             GameplayScene = "Game";
-            PresentationRegistryOverride = null;
             yield return SceneManager.LoadSceneAsync("MainMenu", LoadSceneMode.Single);
             if (attempt != stoppingAttempt) yield break;
             PanelOpen = false;

@@ -34,23 +34,28 @@ namespace TwoBirds
             {
                 Quaternion pitch = Quaternion.AngleAxis(pose.Pitch, body.rotation * Vector3.right);
                 right.Upper.rotation = pitch * right.Upper.rotation;
-                if (pose.ChargeMode != ItemHoldMode.OneHand) left.Upper.rotation = pitch * left.Upper.rotation;
+                if (pose.ChargeClass && pose.ChargeClass.Mode != ItemHoldMode.OneHand) left.Upper.rotation = pitch * left.Upper.rotation;
+            }
+            binding.AnchoredItem = null;
+            Pose? leftGrip = null, rightGrip = null;
+            var anchor = targets.Anchor;
+            if (anchor.Active)
+            {
+                Pose rightPalm = binding.Palm(true), leftPalm = binding.Palm(false);
+                Pose frame = HeldItemPoseCalculation.GripFrame(rightPalm, leftPalm, body.rotation);
+                binding.AnchoredItem = HeldItemPoseCalculation.Compose(frame, anchor.Grip);
+                if (anchor.Spread > 0f)
+                {
+                    Vector3 half = frame.rotation * Vector3.right * (anchor.Spread * 0.5f);
+                    rightGrip = new Pose(frame.position + half, rightPalm.rotation);
+                    leftGrip = new Pose(frame.position - half, leftPalm.rotation);
+                }
             }
             var leftTarget = targets.Resolve(AvatarIKGoal.LeftHand);
             var rightTarget = targets.Resolve(AvatarIKGoal.RightHand);
             // A held-item claim still blends out the free hand while the arm layer blends in.
             if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), null, targets.Body, body, 0f, dt);
             if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), null, targets.Body, body, 0f, dt);
-            binding.AnchoredItem = null;
-            Pose? leftGrip = null, rightGrip = null;
-            var anchor = targets.Anchor;
-            if (anchor.Active)
-            {
-                Pose item = HeldItemPoseCalculation.TwoHandAnchor(binding.Palm(true), binding.Palm(false), anchor.Right, anchor.Left, anchor.Scale);
-                binding.AnchoredItem = item;
-                rightGrip = HeldItemPoseCalculation.PalmFromItem(item, anchor.Right, anchor.Scale);
-                leftGrip = HeldItemPoseCalculation.PalmFromItem(item, anchor.Left, anchor.Scale);
-            }
             Solve(left, false, leftTarget, leftGrip, targets.Body, body, Swivel(targets, 0), dt);
             Solve(right, true, rightTarget, rightGrip, targets.Body, body, Swivel(targets, 1), dt);
         }
