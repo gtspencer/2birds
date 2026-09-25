@@ -51,7 +51,7 @@ namespace TwoBirds
         private Transform graphics;
         private Vector3 capsuleSole;
         private AvatarLookSample serverSample, received, pending;
-        private bool hasServerSample, hasReceived, hasPending, smoothInitialized, contextDirty;
+        private bool hasServerSample, hasReceived, hasPending, smoothInitialized, contextDirty, emoteWasActive;
         private float nextSend, lastSend, pitch, relativeYaw;
         private ushort sequence, lastAngles;
         public AvatarPresentation Presentation => presentation;
@@ -123,7 +123,12 @@ namespace TwoBirds
             presentation.SetDormant(IsOwner && health.IsAlive && !Emote.Presenting);
             presentation.SetVisual(IsClientInitialized);
         }
-        private void EmoteChanged() { if (!Emote.Active) contextDirty = true; RefreshBody(); }
+        private void EmoteChanged()
+        {
+            if (emoteWasActive && !Emote.Active) contextDirty = true;
+            emoteWasActive = Emote.Active;
+            RefreshBody();
+        }
 
         private void IdentityChanged(AvatarAppearance oldValue, AvatarAppearance value, bool asServer)
         { if (IsClientInitialized && !IsOwner) ResolveSelected(value); }

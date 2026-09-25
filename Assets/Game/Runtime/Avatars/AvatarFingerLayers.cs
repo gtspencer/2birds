@@ -27,7 +27,6 @@ namespace TwoBirds
         }
         private readonly PlayableGraph graph;
         private readonly Hand[] hands = new Hand[2];
-        private float layerWeight = 1f;
         internal AnimationLayerMixerPlayable Output { get; }
 
         internal AvatarFingerLayers(PlayableGraph graph, Playable basis)
@@ -87,12 +86,11 @@ namespace TwoBirds
             hand.Active = index;
             foreach (var slot in hand.Clips) slot.StartWeight = initial ? 0f : slot.Weight;
             hand.Blend = initial ? 1f : 0f;
-            Output.SetInputWeight(right ? 2 : 1, layerWeight);
+            Output.SetInputWeight(right ? 2 : 1, 1f);
         }
 
         internal void SetWeight(float weight)
         {
-            layerWeight = weight;
             for (int i = 0; i < 2; i++) Output.SetInputWeight(i + 1, hands[i].Selected ? weight : 0f);
         }
 

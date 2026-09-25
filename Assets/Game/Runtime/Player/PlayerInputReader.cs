@@ -10,7 +10,7 @@ namespace TwoBirds
     public sealed class PlayerInputReader : NetworkBehaviour
     {
         private InputActionMap actions;
-        private InputAction move, look, jump, sprint, drop, use, interact, lights, horn, directUse, secondaryInteract, emoteAction;
+        private InputAction move, look, jump, sprint, drop, use, interact, lights, horn, directUse, secondaryInteract, emoteAction, scrollWheel;
         private InputAction[] emoteCancels;
         private PlayerEmote emote;
         private PlayerSeating seating;
@@ -103,6 +103,7 @@ namespace TwoBirds
             directUse = actions.FindAction("DirectUse");
             secondaryInteract = actions.FindAction("SecondaryInteract");
             emoteAction = actions.FindAction("Emote");
+            scrollWheel = InputSystem.actions.FindAction("UI/ScrollWheel");
             interact = actions.FindAction("Interact");
             lights = actions.FindAction("Lights");
             horn = actions.FindAction("Horn");
@@ -195,7 +196,7 @@ namespace TwoBirds
             }
             if (seating.TransitionPending || seating.PlacementPending) return;
             if (!blockEmote && emoteAction.WasPressedThisFrame() && WheelAvailable) { EmoteWheel.Begin(presentation.IsController); return; }
-            if (emote.Active && (jump.WasPressedThisFrame() || AnyPressed(emoteCancels))) emote.Stop();
+            if (emote.Active && (jump.WasPressedThisFrame() || AnyPressed(emoteCancels) || scrollWheel.ReadValue<Vector2>().y != 0f)) emote.Stop();
             if (seating.IsDriver)
             {
                 if (!blockLights && lights.WasPressedThisFrame()) seating.Cart.ToggleLights();

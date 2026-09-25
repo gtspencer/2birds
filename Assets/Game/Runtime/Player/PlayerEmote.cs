@@ -32,19 +32,17 @@ namespace TwoBirds
             seating = GetComponent<PlayerSeating>(); carry = GetComponent<PlayerCarry>();
             health = GetComponent<PlayerHealth>(); network = GetComponent<PlayerNetworkState>();
             catalog = SessionController.Instance.Emotes;
-            motor.Disturbed += Disturbed;
+            motor.Disturbed += Stop;
             enabled = false;
         }
 
         internal void Play(byte index)
         {
-            var definition = catalog ? catalog.Get(index) : null;
-            if (!owner.IsOwner || !definition || !CanStart) return;
-            Begin(definition);
+            Begin(catalog.Get(index));
             owner.SendEmote(index);
         }
 
-        internal void Stop() { if (owner.IsOwner) End(true); }
+        internal void Stop() => End(true);
 
         internal void Receive(byte id)
         {
@@ -107,8 +105,6 @@ namespace TwoBirds
         private int Disruption() =>
             (motor.Grounded ? 0 : 1) | (carry.IsCarried ? 2 : 0) | (seating.Seated ? 4 : 0) | (health.IsDowned ? 8 : 0);
 
-        private void Disturbed() { if (owner.IsOwner) Stop(); }
-
-        private void OnDestroy() { if (motor) motor.Disturbed -= Disturbed; }
+        private void OnDestroy() { if (motor) motor.Disturbed -= Stop; }
     }
 }

@@ -88,8 +88,8 @@ namespace TwoBirds
             if (!PlayerPrefs.HasKey(Preference)) return;
             try
             {
-                asset.LoadBindingOverridesFromJson(PlayerPrefs.GetString(Preference));
-                bool repaired = false;
+                string saved = PlayerPrefs.GetString(Preference);
+                asset.LoadBindingOverridesFromJson(saved);
                 foreach (var action in asset)
                 {
                     if (action.expectedControlType != "Vector2") continue;
@@ -99,12 +99,13 @@ namespace TwoBirds
                         if (binding.isComposite || binding.isPartOfComposite || string.IsNullOrEmpty(binding.overridePath)) continue;
                         string layout = InputControlPath.TryGetControlLayout(binding.overridePath);
                         if (string.IsNullOrEmpty(layout) || InputSystem.IsFirstLayoutBasedOnSecond(layout, "Vector2")) continue;
-                        action.RemoveBindingOverride(i); repaired = true;
+                        action.RemoveBindingOverride(i);
                     }
                 }
-                if (repaired)
+                string current = asset.SaveBindingOverridesAsJson();
+                if (current != saved)
                 {
-                    PlayerPrefs.SetString(Preference, asset.SaveBindingOverridesAsJson());
+                    PlayerPrefs.SetString(Preference, current);
                     PlayerPrefs.Save();
                 }
             }

@@ -95,9 +95,9 @@ namespace TwoBirds
             Vector3 root = arm.Upper.position;
             Vector3 delta = palm.position - wrist * ((rightHand ? data.RightWristToPalmPosition : data.LeftWristToPalmPosition) * scale) - root;
             float reach = target.MaximumReach > 0f ? Mathf.Min(target.MaximumReach, MaximumReach) : MaximumReach;
-            float weight = target.Contact ? 1f - Mathf.SmoothStep(0f, 1f,
+            float contact = target.Contact ? 1f - Mathf.SmoothStep(0f, 1f,
                 Mathf.InverseLerp(reach - 0.08f, reach, delta.magnitude / length)) : 1f;
-            arm.Weight = target.Contact && arm.Seeded ? Mathf.Lerp(arm.Weight, weight, AvatarPresentation.Smooth(dt, 0.08f)) : weight;
+            arm.Weight = target.Contact && arm.Seeded ? Mathf.Lerp(arm.Weight, contact, AvatarPresentation.Smooth(dt, 0.08f)) : contact;
             arm.Seeded = true;
             float cap = length * reach, distance = delta.magnitude;
             if (distance > cap * 0.85f) delta *= SoftReach(distance, cap) / distance;
