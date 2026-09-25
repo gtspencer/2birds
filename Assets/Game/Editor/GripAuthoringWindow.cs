@@ -32,6 +32,9 @@ namespace TwoBirds.Editor
         private VisualElement actions;
         private bool dragging, draggingRight;
         private static Pose gizmoStart;
+        private SceneView lookView;
+        private float lookFieldOfView, lookNearClip;
+        private bool lookDynamicClip, lookOrthographic;
 
         [MenuItem("Two Birds/Grip Authoring")]
         public static void Open() => GetWindow<GripAuthoringWindow>("Grip Authoring");
@@ -49,6 +52,7 @@ namespace TwoBirds.Editor
             GripAuthoringScene.SceneChanged += SceneChanged;
             GripAuthoringAssets.Changed += AssetsChanged;
             Undo.undoRedoPerformed += UndoRedo;
+            Undo.postprocessModifications += Modified;
             EditorApplication.playModeStateChanged += PlayModeChanged;
             SceneView.duringSceneGui += SceneGUI;
             AssetsChanged();
@@ -59,9 +63,10 @@ namespace TwoBirds.Editor
             GripAuthoringScene.SceneChanged -= SceneChanged;
             GripAuthoringAssets.Changed -= AssetsChanged;
             Undo.undoRedoPerformed -= UndoRedo;
+            Undo.postprocessModifications -= Modified;
             EditorApplication.playModeStateChanged -= PlayModeChanged;
             SceneView.duringSceneGui -= SceneGUI;
-            HideOwner(false); HideTools(false);
+            HideOwner(false); HideTools(false); EndLookThrough();
         }
 
         public void CreateGUI() => Rebuild();
@@ -87,7 +92,7 @@ namespace TwoBirds.Editor
                     if (EditorUtility.DisplayDialog("Grip Authoring", saveChangesMessage, "Save", "Revert")) GripAuthoringAssets.SaveAll();
                     else GripAuthoringAssets.RevertAll();
                 }
-                HideOwner(false); HideTools(false);
+                HideOwner(false); HideTools(false); EndLookThrough();
             }
             if (state is PlayModeStateChange.EnteredEditMode or PlayModeStateChange.EnteredPlayMode) Rebuild();
         }
@@ -118,14 +123,27 @@ namespace TwoBirds.Editor
             if (unsaved != null) unsaved.text = names.Length > 0 ? "Unsaved: " + string.Join(", ", names) : "No unsaved changes";
         }
 
+        // Undo can restore any item or class, including ones Save stopped tracking.
         private void UndoRedo()
         {
-            GripAuthoringAssets.Notify();
-            Scene?.ContentEdited();
+            if (!items) return;
+            var definitions = items.Items.Where(item => item).ToList();
+            foreach (var item in definitions) item.NotifyContentChanged();
+            foreach (var owner in definitions.Select(item => item.HoldClass).Where(owner => owner).Distinct()) owner.NotifyContentChanged();
+        }
+
+        // Runs before Inspector edits apply, so the snapshot holds the prior state.
+        private static UndoPropertyModification[] Modified(UndoPropertyModification[] modifications)
+        {
+            if (Scene)
+                foreach (var modification in modifications)
+                    if (modification.currentValue?.target is HoldClass or ItemDefinition or AvatarSettings)
+                        GripAuthoringAssets.Touch(modification.currentValue.target);
+            return modifications;
         }
 
         public override void SaveChanges() { GripAuthoringAssets.SaveAll(); base.SaveChanges(); }
-        public override void DiscardChanges() { GripAuthoringAssets.RevertAll(); Scene?.ContentEdited(); base.DiscardChanges(); }
+        public override void DiscardChanges() { GripAuthoringAssets.RevertAll(); base.DiscardChanges(); }
 
         private void Rebuild()
         {
@@ -143,7 +161,7 @@ namespace TwoBirds.Editor
             toolbar.Add(new ToolbarSpacer { flex = true });
             save = new ToolbarButton(() => GripAuthoringAssets.SaveAll());
             toolbar.Add(save);
-            toolbar.Add(new ToolbarButton(() => { GripAuthoringAssets.RevertAll(); Scene?.ContentEdited(); Rebuild(); }) { text = "Revert" });
+            toolbar.Add(new ToolbarButton(() => { GripAuthoringAssets.RevertAll(); Rebuild(); }) { text = "Revert" });
             root.Add(toolbar);
             var body = new ScrollView { style = { flexGrow = 1, paddingLeft = 4, paddingRight = 4 } };
             root.Add(body);
@@ -242,17 +260,15 @@ namespace TwoBirds.Editor
             buttons.Add(new Button(() => GripAuthoringAssets.CopyHoldToCharged(owner, firstPerson)) { text = "Copy Hold → Charged" });
             buttons.Add(new Button(() => GripAuthoringAssets.Clear(owner, firstPerson, phase == GripAuthoringPhase.Charged)) { text = "Clear pose" });
             panel.Add(buttons);
-            GripAuthoringAssets.Snapshot(owner);
-            var inspector = new InspectorElement(owner);
-            inspector.RegisterCallback<SerializedPropertyChangeEvent>(_ => GripAuthoringAssets.TouchIfModified(owner));
-            panel.Add(inspector);
+            panel.Add(new InspectorElement(owner));
         }
 
         private static string Name(AnimationClip clip) => clip ? clip.name : "not authored";
 
         private void Swivel(VisualElement panel, bool right)
         {
-            var slider = new Slider(right ? "Right elbow swivel °" : "Left elbow swivel °", -180f, 180f);
+            // Not focusable: keyboard edits have no pointer-up to bake on.
+            var slider = new Slider(right ? "Right elbow swivel °" : "Left elbow swivel °", -180f, 180f) { focusable = false };
             slider.RegisterValueChangedCallback(evt => Scene?.SetSwivel(firstPerson, right, evt.newValue));
             slider.RegisterCallback<PointerUpEvent>(_ => { BakeEdit(); slider.SetValueWithoutNotify(0f); }, TrickleDown.TrickleDown);
             panel.Add(slider);
@@ -330,13 +346,13 @@ namespace TwoBirds.Editor
             change();
             EditorUtility.SetDirty(item);
             item.NotifyContentChanged();
-            Scene?.ContentEdited();
         }
 
         private void Update()
         {
             var scene = Scene;
             if (scene && lookThrough && firstPerson) LookThrough(scene);
+            else EndLookThrough();
             if (rootVisualElement.panel != null) Refresh();
         }
 
@@ -354,11 +370,19 @@ namespace TwoBirds.Editor
                 $"First person\n{scene.Readout(true)}\n\nThird person\n{scene.Readout(false)}" + (strip.Length > 0 ? "\n\nStrip\n" + strip : "");
         }
 
-        private static void LookThrough(GripAuthoringScene scene)
+        private void LookThrough(GripAuthoringScene scene)
         {
             var camera = scene.ViewCamera;
             var view = SceneView.lastActiveSceneView;
             if (!camera || !view) return;
+            if (view != lookView)
+            {
+                EndLookThrough();
+                lookView = view;
+                var saved = view.cameraSettings;
+                lookFieldOfView = saved.fieldOfView; lookDynamicClip = saved.dynamicClip; lookNearClip = saved.nearClip;
+                lookOrthographic = view.orthographic;
+            }
             var pose = camera.transform;
             var settings = view.cameraSettings;
             settings.fieldOfView = camera.fieldOfView; settings.dynamicClip = false; settings.nearClip = camera.nearClipPlane;
@@ -367,6 +391,17 @@ namespace TwoBirds.Editor
             view.LookAtDirect(pose.position, pose.rotation, 1f);
             view.LookAtDirect(pose.position + pose.forward * view.cameraDistance, pose.rotation, 1f);
             view.Repaint();
+        }
+
+        private void EndLookThrough()
+        {
+            if (!lookView) return;
+            var settings = lookView.cameraSettings;
+            settings.fieldOfView = lookFieldOfView; settings.dynamicClip = lookDynamicClip; settings.nearClip = lookNearClip;
+            lookView.cameraSettings = settings;
+            lookView.orthographic = lookOrthographic;
+            lookView.Repaint();
+            lookView = null;
         }
 
         private void StartAuthoring()
@@ -421,7 +456,8 @@ namespace TwoBirds.Editor
         private void OffsetGizmos(GripAuthoringScene scene, ItemDefinition item)
         {
             bool avatarLayer = layer == EditLayer.AvatarOffset;
-            if (!scene.TryGrip(firstPerson, out var frame) || !scene.TryItem(firstPerson, out var pose)) return;
+            // The rig takes a moment to swap avatars; editing before then would use the wrong avatar's offset.
+            if (!scene.TryGrip(firstPerson, out var frame, out var rigAvatar) || rigAvatar != avatarId || !scene.TryItem(firstPerson, out var pose)) return;
             Handles.color = Color.white;
             Handles.Label(pose.position, avatarLayer ? "Avatar offset" : "Item offset");
             if (Gizmo(ref pose))

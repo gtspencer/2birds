@@ -18,7 +18,6 @@ namespace TwoBirds
         private readonly HashSet<ulong> isolatedBindings = new();
         internal HeldItemPresentationState State { get; private set; }
         public AvatarPresentation Presentation => presentation;
-        public Transform ItemRoot => visual ? visual.transform : null;
         internal string DisplayName => presentation.Resolved?.Settings.DisplayName;
         internal void Initialize(PlayerAvatarPresentation owner, AvatarRegistry avatars, float lateral, AvatarId avatar = default)
         {

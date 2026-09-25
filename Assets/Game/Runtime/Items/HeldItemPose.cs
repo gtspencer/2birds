@@ -82,9 +82,10 @@ namespace TwoBirds
         {
             Vector3 x = right.position - left.position;
             x = x.sqrMagnitude > 0.000001f ? x.normalized : body * Vector3.right;
-            Vector3 z = Vector3.ProjectOnPlane(right.rotation * Vector3.forward + left.rotation * Vector3.forward, x);
-            if (z.sqrMagnitude < 0.000001f) z = Vector3.ProjectOnPlane(body * Vector3.forward, x);
-            z.Normalize();
+            Vector3 fingers = Vector3.ProjectOnPlane(right.rotation * Vector3.forward + left.rotation * Vector3.forward, x);
+            Vector3 z = Vector3.ProjectOnPlane(body * Vector3.forward, x).normalized;
+            // Fingers pointing at each other leave no usable direction; lean on the body's forward instead.
+            if (fingers.sqrMagnitude > 0.000001f) z = Vector3.Slerp(z, fingers.normalized, Mathf.InverseLerp(0.2f, 0.6f, fingers.magnitude));
             return new Pose((right.position + left.position) * 0.5f, Quaternion.LookRotation(z, Vector3.Cross(z, x)));
         }
 

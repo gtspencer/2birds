@@ -19,6 +19,7 @@ namespace TwoBirds
         internal float Spread(bool firstPerson, float charge)
         {
             var view = View(firstPerson);
+            if (view.HoldSpread <= 0f) return 0f;
             float charged = view.Charged && view.ChargedSpread > 0f ? view.ChargedSpread : view.HoldSpread;
             return Mathf.Lerp(view.HoldSpread, charged, charge);
         }

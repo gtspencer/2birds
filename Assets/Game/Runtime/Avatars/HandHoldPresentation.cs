@@ -17,7 +17,7 @@ namespace TwoBirds
         private double returnStart;
         private bool twoHanded;
 
-        internal static float Reach(HoldClass poses) => Mathf.Clamp(poses.FollowReachFraction, 0.01f, 0.85f);
+        internal static float Reach(HoldClass hold) => Mathf.Clamp(hold.FollowReachFraction, 0.01f, 0.85f);
 
         internal void Hold(Pose left, Pose right)
         {
@@ -48,23 +48,23 @@ namespace TwoBirds
             returnStart = elapsed;
         }
 
-        internal float ReturnProgress(HoldClass poses, double elapsed)
+        internal float ReturnProgress(HoldClass hold, double elapsed)
         {
-            double pause = Mathf.Max(0f, poses.MaximumFollowDuration) + Mathf.Max(0f, poses.EndPosePauseDuration);
+            double pause = Mathf.Max(0f, hold.MaximumFollowDuration) + Mathf.Max(0f, hold.EndPosePauseDuration);
             double start = System.Math.Max(pause, returnStart);
-            double end = pause + Mathf.Max(0f, poses.ReturnBlendDuration);
+            double end = pause + Mathf.Max(0f, hold.ReturnBlendDuration);
             return elapsed < start ? 0f : end <= start ? 1f : Mathf.Clamp01((float)((elapsed - start) / (end - start)));
         }
 
-        internal float Frame(HoldClass poses, double elapsed, float destination) =>
-            Mathf.Lerp(startFrameWeight, destination, Mathf.SmoothStep(0f, 1f, ReturnProgress(poses, elapsed)));
+        internal float Frame(HoldClass hold, double elapsed, float destination) =>
+            Mathf.Lerp(startFrameWeight, destination, Mathf.SmoothStep(0f, 1f, ReturnProgress(hold, elapsed)));
 
         internal void Sample(Pose liveLeft, Pose liveRight, bool available, bool unavailable, in HeldItemBodyFrame body,
-            HoldClass settings, int environmentMask, double elapsed, Pose? destinationLeft, Pose? destinationRight,
+            HoldClass hold, int environmentMask, double elapsed, Pose? destinationLeft, Pose? destinationRight,
             float destinationLeftWeight = 0f, float destinationRightWeight = 0f, float destinationFrameWeight = 0f)
         {
-            double followEnd = Mathf.Max(0f, settings.MaximumFollowDuration);
-            double pauseEnd = followEnd + Mathf.Max(0f, settings.EndPosePauseDuration);
+            double followEnd = Mathf.Max(0f, hold.MaximumFollowDuration);
+            double pauseEnd = followEnd + Mathf.Max(0f, hold.EndPosePauseDuration);
             Left = body.CenterToWorld(retainedLeft);
             Right = body.CenterToWorld(retainedRight);
             if (Following && (unavailable || elapsed >= followEnd)) Following = false;
@@ -73,7 +73,7 @@ namespace TwoBirds
                 float t = LeanTween.easeOutSine(0f, 1f, Mathf.Clamp01((float)elapsed / 0.08f));
                 var left = Blend(body.CenterToWorld(startLeft), liveLeft, t);
                 var right = Blend(body.CenterToWorld(startRight), liveRight, t);
-                float reach = Reach(settings);
+                float reach = Reach(hold);
                 var data = body.Measurements;
                 Vector3 leftWrist = left.position - left.rotation * Quaternion.Inverse(data.LeftWristToPalmRotation) * (data.LeftWristToPalmPosition * body.Scale);
                 Vector3 rightWrist = right.position - right.rotation * Quaternion.Inverse(data.RightWristToPalmRotation) * (data.RightWristToPalmPosition * body.Scale);
@@ -91,7 +91,7 @@ namespace TwoBirds
                 }
             }
             Stage = elapsed < followEnd ? RecoveryStage.Follow : elapsed < pauseEnd ? RecoveryStage.Pause : RecoveryStage.Return;
-            float progress = ReturnProgress(settings, elapsed);
+            float progress = ReturnProgress(hold, elapsed);
             float blend = Mathf.SmoothStep(0f, 1f, progress);
             if (Stage == RecoveryStage.Return)
             {
@@ -101,7 +101,7 @@ namespace TwoBirds
             }
             LeftWeight = Mathf.Lerp(startLeftWeight, destinationLeftWeight, blend);
             RightWeight = Mathf.Lerp(startRightWeight, destinationRightWeight, blend);
-            frameWeight = Frame(settings, elapsed, destinationFrameWeight);
+            frameWeight = Frame(hold, elapsed, destinationFrameWeight);
         }
 
         private static Pose Blend(Pose from, Pose to, float t) =>

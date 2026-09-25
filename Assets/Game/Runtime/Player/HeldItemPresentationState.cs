@@ -30,8 +30,9 @@ namespace TwoBirds
         private HeldItemBodyFrame lastBody;
         private uint selectedId, preparedId;
         private readonly HandHoldPresentation hands = new();
-        private readonly HoldClass[] classes = new HoldClass[2];
-        private readonly float[] weights = new float[2], startWeights = new float[2];
+        private const int Slots = AvatarArmPose.Slots;
+        private readonly HoldClass[] classes = new HoldClass[Slots];
+        private readonly float[] weights = new float[Slots], startWeights = new float[Slots];
         private float charge, startCharge, releaseCharge, spread;
         private HoldClass chargeClass;
         private Pose preparedLeft, preparedRight, preparedItem;
@@ -41,12 +42,19 @@ namespace TwoBirds
         private bool releaseUnavailable;
         private int advancedFrame = -1;
         internal float HeavyFrameWeight => running && input.CanEquip ? ModeWeight(ItemHoldMode.TwoHand) : 0f;
-        internal float ArmWeight => running && input.CanEquip ? weights[0] + weights[1] : 0f;
+        internal float ArmWeight => running && input.CanEquip ? weights[0] + weights[1] + weights[2] : 0f;
         private static float Ease(float progress) => LeanTween.easeOutSine(0f, 1f, Mathf.Clamp01(progress));
-        private float ModeWeight(ItemHoldMode mode) =>
-            (classes[0] && classes[0].Mode == mode ? weights[0] : 0f) + (classes[1] && classes[1].Mode == mode ? weights[1] : 0f);
-        private float ClassWeight(HoldClass value) => !value ? 0f :
-            (classes[0] == value ? weights[0] : 0f) + (classes[1] == value ? weights[1] : 0f);
+        private float ModeWeight(ItemHoldMode mode)
+        {
+            float total = 0f;
+            for (int i = 0; i < Slots; i++) if (classes[i] && classes[i].Mode == mode) total += weights[i];
+            return total;
+        }
+        private float ClassWeight(HoldClass value)
+        {
+            int slot = !value ? -1 : System.Array.IndexOf(classes, value);
+            return slot >= 0 ? weights[slot] : 0f;
+        }
 
         internal HeldItemPresentationState(AvatarPresentation avatar, Transform host)
         {
@@ -92,8 +100,8 @@ namespace TwoBirds
         public void Dispose()
         {
             running = false; ClearTargets(); avatar.HandTargets.SetArms(default);
-            Watch(ref selectedDefinition, null); Watch(ref actionDefinition, null);
-            Watch(ref selectedClass, null); Watch(ref actionClass, null);
+            Watch(ref selectedDefinition, null, actionDefinition); Watch(ref actionDefinition, null, null);
+            Watch(ref selectedClass, null, actionClass); Watch(ref actionClass, null, null);
             if (slingshot) slingshot.ResetPose();
             UnityEngine.Object.Destroy(target.gameObject); UnityEngine.Object.Destroy(leftTarget.gameObject);
             UnityEngine.Object.Destroy(fallback.gameObject);
@@ -156,26 +164,27 @@ namespace TwoBirds
             RefreshGrips();
         }
 
-        private void Watch(ref ItemDefinition current, ItemDefinition next)
+        // One subscription per asset: other is the paired field, which keeps it when both hold the same asset.
+        private void Watch(ref ItemDefinition current, ItemDefinition next, ItemDefinition other)
         {
             if (current == next) return;
-            if (current) current.ContentChanged -= RefreshContent;
+            if (current && current != other) current.ContentChanged -= RefreshContent;
             current = next;
-            if (current) current.ContentChanged += RefreshContent;
+            if (current && current != other) current.ContentChanged += RefreshContent;
         }
 
-        private void Watch(ref HoldClass current, HoldClass next)
+        private void Watch(ref HoldClass current, HoldClass next, HoldClass other)
         {
             if (current == next) return;
-            if (current) current.ContentChanged -= RefreshContent;
+            if (current && current != other) current.ContentChanged -= RefreshContent;
             current = next;
-            if (current) current.ContentChanged += RefreshContent;
+            if (current && current != other) current.ContentChanged += RefreshContent;
         }
 
         private void WatchClasses()
         {
-            Watch(ref selectedClass, selectedDefinition ? selectedDefinition.HoldClass : null);
-            Watch(ref actionClass, actionDefinition ? actionDefinition.HoldClass : null);
+            Watch(ref selectedClass, selectedDefinition ? selectedDefinition.HoldClass : null, actionClass);
+            Watch(ref actionClass, actionDefinition ? actionDefinition.HoldClass : null, selectedClass);
         }
 
         private void RefreshGrips()
@@ -192,7 +201,7 @@ namespace TwoBirds
             var definition = input.SelectedDefinition;
             if (id == selectedId && definition == selectedDefinition) return;
             selectedId = id;
-            Watch(ref selectedDefinition, definition);
+            Watch(ref selectedDefinition, definition, actionDefinition);
             WatchClasses();
             if (definition) selectedData = new HeldItemPoseData(definition);
             RefreshGrips();
@@ -207,7 +216,7 @@ namespace TwoBirds
             if (selectedDefinition) selectedData = new HeldItemPoseData(selectedDefinition);
             if (actionDefinition) actionData = new HeldItemPoseData(actionDefinition);
             RefreshGrips();
-            committed = default; prepared = false;
+            prepared = false;
             if (hands.Stage == HandHoldPresentation.RecoveryStage.Return) BeginReturn();
         }
 
@@ -232,7 +241,7 @@ namespace TwoBirds
             tracking = false;
             releaseUnavailable = false;
             var previousDefinition = actionDefinition;
-            Watch(ref actionDefinition, input.ActionDefinition);
+            Watch(ref actionDefinition, input.ActionDefinition, selectedDefinition);
             WatchClasses();
             if (actionDefinition && (action.State != ItemActionState.Recovering || previousDefinition != actionDefinition))
             {
@@ -256,7 +265,7 @@ namespace TwoBirds
                 releaseCharge = charge = Ease(action.ReleaseArcProgress / 255f);
                 StartFollow();
                 int slot = Claim(actionData.Class);
-                for (int i = 0; i < 2; i++) startWeights[i] = i == slot ? 1f : 0f;
+                for (int i = 0; i < Slots; i++) startWeights[i] = i == slot ? 1f : 0f;
                 startCharge = charge; prepared = false;
                 FindProjectile();
             }
@@ -270,9 +279,10 @@ namespace TwoBirds
 
         private int Claim(HoldClass value)
         {
-            if (classes[0] == value) return 0;
-            if (classes[1] == value) return 1;
-            int slot = weights[0] <= weights[1] ? 0 : 1;
+            int slot = System.Array.IndexOf(classes, value);
+            if (slot >= 0) return slot;
+            slot = 0;
+            for (int i = 1; i < Slots; i++) if (weights[i] < weights[slot]) slot = i;
             classes[slot] = value; weights[slot] = startWeights[slot] = 0f;
             return slot;
         }
@@ -324,13 +334,13 @@ namespace TwoBirds
         private void BeginBlend(float duration)
         {
             blendDuration = Mathf.Max(0f, duration);
-            System.Array.Copy(weights, startWeights, 2); startCharge = charge;
+            System.Array.Copy(weights, startWeights, Slots); startCharge = charge;
             blendStart = Time.unscaledTimeAsDouble; blending = blendDuration > 0f;
         }
 
         private void BeginReturn()
         {
-            System.Array.Copy(weights, startWeights, 2); startCharge = charge;
+            System.Array.Copy(weights, startWeights, Slots); startCharge = charge;
             hands.Retarget(lastBody, age);
         }
 
@@ -358,7 +368,7 @@ namespace TwoBirds
             {
                 var held = selectedDefinition ? selectedData.Class : null;
                 int authored = held ? Claim(held) : -1;
-                for (int i = 0; i < 2; i++) weights[i] = startWeights[i] = i == authored ? 1f : 0f;
+                for (int i = 0; i < Slots; i++) weights[i] = startWeights[i] = i == authored ? 1f : 0f;
                 charge = startCharge = Authoring.Charged ? 1f : 0f; chargeClass = held;
                 blending = false;
                 return;
@@ -382,7 +392,7 @@ namespace TwoBirds
                     Mathf.Clamp01((float)(age / Mathf.Max(0.01f, ((SlingshotDefinition)actionDefinition).RecoverySeconds)))));
                 else charge = Mathf.Lerp(startCharge, 0f, t);
             }
-            for (int i = 0; i < 2; i++) weights[i] = Mathf.Lerp(startWeights[i], i == slot ? 1f : 0f, t);
+            for (int i = 0; i < Slots; i++) weights[i] = Mathf.Lerp(startWeights[i], i == slot ? 1f : 0f, t);
         }
 
         internal void PrepareHands(AvatarBinding binding, HeldItemBodyFrame? body)
@@ -411,7 +421,7 @@ namespace TwoBirds
             var placement = boundBinding != null ? avatar.Input : input.Placement;
             targets.SetArms(new AvatarArmPose
             {
-                A = classes[0], B = classes[1], WeightA = weights[0], WeightB = weights[1],
+                A = classes[0], B = classes[1], C = classes[2], WeightA = weights[0], WeightB = weights[1], WeightC = weights[2],
                 ChargeClass = chargeClass, Charge = charge,
                 Pitch = input.FirstPerson || authoring ? 0f : Mathf.Clamp(placement.LookPitch, -40f, 50f) * charge
             });

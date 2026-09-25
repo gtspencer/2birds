@@ -274,7 +274,11 @@ namespace TwoBirds.Editor
             }
             Vector3 offset = palm * (bounds.center - Vector3.up * (bounds.extents.y + 0.006f));
             Quaternion grip = Quaternion.Inverse(palm);
-            definition.ThirdPersonGrip = definition.FirstPersonGrip = new GripOffset { Position = grip * -offset, Euler = grip.eulerAngles };
+            // FP is authored separately; keep it unless it still mirrors TP or was never set.
+            var firstPerson = definition.FirstPersonGrip;
+            bool linked = firstPerson.IsZero || firstPerson.Position == definition.ThirdPersonGrip.Position && firstPerson.Euler == definition.ThirdPersonGrip.Euler;
+            definition.ThirdPersonGrip = new GripOffset { Position = grip * -offset, Euler = grip.eulerAngles };
+            if (linked) definition.FirstPersonGrip = definition.ThirdPersonGrip;
             EditorUtility.SetDirty(definition);
             return true;
         }

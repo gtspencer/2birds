@@ -47,6 +47,7 @@ namespace TwoBirds
         [Min(0.01f)] public float ThrowChargeTime = 1f;
 
         [Header("Held Item Grip")]
+        [Tooltip("Required.")]
         public HoldClass HoldClass;
         [Tooltip("Item root in the grip frame: metres and Euler degrees.")]
         public GripOffset ThirdPersonGrip, FirstPersonGrip;

@@ -46,10 +46,8 @@ namespace TwoBirds
         private Coroutine throwing, reequipping;
         private UnityEngine.InputSystem.InputAction walkToggle;
         public bool Attached => attached;
-        public byte SelectedItem => selectedItem;
         public AvatarId SelectedAvatar { get; private set; }
         public ItemDefinition SelectedDefinition => attached ? WorldItemRegistry.Instance.GetDefinition(selectedItem) : null;
-        public AvatarRegistry Avatars => session ? session.Avatars : null;
         public GripAuthoringPhase Phase { get; private set; }
         public bool AutoReequip { get; set; } = true;
         public bool Walking => input && !input.AuthoringFocus;
@@ -163,12 +161,6 @@ namespace TwoBirds
             state.Authoring = Phase == GripAuthoringPhase.Live ? null :
                 new HeldItemPresentationState.AuthoringPose { Charged = Phase == GripAuthoringPhase.Charged };
         }
-        public void ContentEdited()
-        {
-            if (!attached) return;
-            held.State?.RefreshContent(); observer.State?.RefreshContent();
-            foreach (var preview in strip) if (preview) preview.State?.RefreshContent();
-        }
 
         internal bool TryRig(bool firstPerson, out HeldItemPresentationState state, out AvatarBinding binding)
         {
@@ -187,11 +179,11 @@ namespace TwoBirds
             palm = binding.Palm(right);
             return true;
         }
-        public bool TryGrip(bool firstPerson, out Pose grip)
+        public bool TryGrip(bool firstPerson, out Pose grip, out AvatarId avatar)
         {
-            grip = default;
-            if (!Showing(firstPerson, out var state, out _)) return false;
-            grip = state.GripFrame;
+            grip = default; avatar = default;
+            if (!Showing(firstPerson, out var state, out var binding)) return false;
+            grip = state.GripFrame; avatar = binding.Id;
             return true;
         }
         public bool TryItem(bool firstPerson, out Pose item)
@@ -205,7 +197,8 @@ namespace TwoBirds
         public bool TryPouch(bool firstPerson, out Vector3 pouch)
         {
             pouch = default;
-            if (SelectedDefinition is not SlingshotDefinition slingshot || !Showing(firstPerson, out _, out var binding)) return false;
+            if (SelectedDefinition is not SlingshotDefinition slingshot || !slingshot.HoldClass || !slingshot.HoldClass.View(firstPerson).Hold ||
+                !Showing(firstPerson, out _, out var binding)) return false;
             var palm = binding.Palm(false);
             pouch = palm.position + palm.rotation * slingshot.PouchOffset;
             return true;

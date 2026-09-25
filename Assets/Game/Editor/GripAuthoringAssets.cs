@@ -92,7 +92,7 @@ namespace TwoBirds.Editor
             EditorUtility.SetDirty(owner);
         }
 
-        public static void Snapshot(Object asset)
+        private static void Snapshot(Object asset)
         {
             if (!asset || snapshots.ContainsKey(asset)) return;
             var copy = Object.Instantiate(asset);
@@ -107,18 +107,14 @@ namespace TwoBirds.Editor
             if (touched.Add(asset)) Changed?.Invoke();
         }
 
-        public static void TouchIfModified(Object asset)
-        {
-            if (!snapshots.TryGetValue(asset, out var snapshot) || JsonUtility.ToJson(snapshot) != JsonUtility.ToJson(asset)) Touch(asset);
-        }
-
-        public static void Notify()
+        private static void Notify()
         {
             foreach (var asset in touched)
                 switch (asset)
                 {
                     case HoldClass owner: owner.NotifyContentChanged(); break;
                     case ItemDefinition item: item.NotifyContentChanged(); break;
+                    case AvatarSettings settings: settings.NotifyContentChanged(); break;
                 }
         }
 

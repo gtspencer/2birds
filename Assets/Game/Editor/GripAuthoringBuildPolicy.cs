@@ -21,11 +21,15 @@ namespace TwoBirds.Editor
 
     public sealed class GripAuthoringBuildGuard : BuildPlayerProcessor
     {
+        private const string ItemRegistryPath = "Assets/Game/ScriptableObjects/ItemRegistry.asset";
         public override int callbackOrder => 0;
         public override void PrepareForBuild(BuildPlayerContext context)
         {
             if ((context.BuildPlayerOptions.scenes ?? Array.Empty<string>()).Contains(GripAuthoringBuildPolicy.ScenePath))
                 throw new BuildFailedException("Apply GripAuthoringBuildPolicy.Apply to BuildPlayerOptions before building: the grip authoring scene is editor-only.");
+            var items = AssetDatabase.LoadAssetAtPath<ItemRegistry>(ItemRegistryPath);
+            var missing = items ? items.Items.Where(item => item && !item.HoldClass).Select(item => item.name).ToArray() : Array.Empty<string>();
+            if (missing.Length > 0) throw new BuildFailedException("Items without a Hold Class: " + string.Join(", ", missing));
         }
     }
 }

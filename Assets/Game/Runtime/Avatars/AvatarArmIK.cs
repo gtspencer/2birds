@@ -36,6 +36,11 @@ namespace TwoBirds
                 right.Upper.rotation = pitch * right.Upper.rotation;
                 if (pose.ChargeClass && pose.ChargeClass.Mode != ItemHoldMode.OneHand) left.Upper.rotation = pitch * left.Upper.rotation;
             }
+            var leftTarget = targets.Resolve(AvatarIKGoal.LeftHand);
+            var rightTarget = targets.Resolve(AvatarIKGoal.RightHand);
+            // A held-item claim still blends out the free hand while the arm layer blends in.
+            if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), null, targets.Body, body, 0f, dt);
+            if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), null, targets.Body, body, 0f, dt);
             binding.AnchoredItem = null;
             Pose? leftGrip = null, rightGrip = null;
             var anchor = targets.Anchor;
@@ -51,11 +56,6 @@ namespace TwoBirds
                     leftGrip = new Pose(frame.position - half, leftPalm.rotation);
                 }
             }
-            var leftTarget = targets.Resolve(AvatarIKGoal.LeftHand);
-            var rightTarget = targets.Resolve(AvatarIKGoal.RightHand);
-            // A held-item claim still blends out the free hand while the arm layer blends in.
-            if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), null, targets.Body, body, 0f, dt);
-            if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), null, targets.Body, body, 0f, dt);
             Solve(left, false, leftTarget, leftGrip, targets.Body, body, Swivel(targets, 0), dt);
             Solve(right, true, rightTarget, rightGrip, targets.Body, body, Swivel(targets, 1), dt);
         }
