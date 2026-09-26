@@ -39,7 +39,8 @@ namespace TwoBirds
             Shoulder = shoulder; Rotation = rotation; Measurements = measurements; Scale = scale;
             this.leftShoulder = leftShoulder ?? shoulder + rotation * ((measurements.LeftShoulder - measurements.RightShoulder) * scale);
             ArmLength = (measurements.RightArm.x + measurements.RightArm.y) * scale;
-            Hips = (Shoulder + this.leftShoulder) * 0.5f;
+            Hips = (Shoulder + this.leftShoulder) * 0.5f +
+                rotation * ((measurements.Hips - (measurements.LeftShoulder + measurements.RightShoulder) * 0.5f) * scale);
         }
         internal HeldItemBodyFrame(AvatarSettings settings, AvatarRegistry registry, in AvatarPresentationInput input, Quaternion torso, float seatedWeight, bool heavy = false)
         {

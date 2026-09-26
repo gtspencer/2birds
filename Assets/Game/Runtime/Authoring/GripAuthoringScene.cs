@@ -153,8 +153,10 @@ namespace TwoBirds
         public void SetPhase(GripAuthoringPhase phase)
         {
             if (phase != GripAuthoringPhase.Live) Cancel();
+            // Hold and Charged share the locked transforms; only entering or leaving Live re-applies them.
+            bool reapply = Phase == GripAuthoringPhase.Live || phase == GripAuthoringPhase.Live;
             Phase = phase;
-            ApplyPhase();
+            ApplyPhase(reapply);
         }
 
         public void SetView(bool firstPerson)
@@ -190,18 +192,19 @@ namespace TwoBirds
         public void EnterSeat() { if (attached && cart && !seating.Seated) seating.Request(cart, 0); }
         public void ExitSeat() { if (attached && seating.Seated) seating.RequestExit(); }
 
-        private void ApplyPhase()
+        private void ApplyPhase(bool reapply = true)
         {
             if (!attached) return;
             var edited = Mode == GripAuthoringMode.HeldItem ? EditedState : null;
-            Apply(held.State, edited); Apply(observer.State, edited);
-            foreach (var preview in strip) if (preview) Apply(preview.State, edited);
-            ApplyContacts();
+            Apply(held.State, edited, reapply); Apply(observer.State, edited, reapply);
+            foreach (var preview in strip) if (preview) Apply(preview.State, edited, reapply);
+            if (reapply) ApplyContacts();
         }
-        private void Apply(HeldItemPresentationState state, HeldItemPresentationState edited)
+        private void Apply(HeldItemPresentationState state, HeldItemPresentationState edited, bool reapply)
         {
             if (state == null) return;
             state.AuthoringPhase = Phase;
+            if (!reapply) return;
             state.AuthoringLocked = false;
             state.ReapplyAuthored();
             if (state == edited) state.AuthoringLocked = Phase != GripAuthoringPhase.Live;
@@ -400,7 +403,6 @@ namespace TwoBirds
 
         private void OnDestroy()
         {
-            AvatarHandContact.LiveView = null;
             foreach (var preview in strip) if (preview) Destroy(preview.gameObject);
             strip.Clear();
             if (session) session.Changed -= SessionChanged;
@@ -417,6 +419,7 @@ namespace TwoBirds
                 }
                 if (viewCamera) viewCamera.cullingMask = viewMask;
             }
+            AvatarHandContact.LiveView = null;
             foreach (var entry in originalLayers) if (entry.Key) entry.Key.gameObject.layer = entry.Value;
             walkToggle?.Dispose();
             if (Instance == this) Instance = null;

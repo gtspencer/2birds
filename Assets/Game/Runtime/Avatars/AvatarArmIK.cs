@@ -34,10 +34,10 @@ namespace TwoBirds
             var leftTarget = targets.Resolve(AvatarIKGoal.LeftHand);
             var rightTarget = targets.Resolve(AvatarIKGoal.RightHand);
             // A held-item claim still blends out the free hand while the item target blends in.
-            if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), targets.Body, body, dt, weight);
-            if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), targets.Body, body, dt, weight);
-            Solve(left, false, leftTarget, targets.Body, body, dt, weight);
-            Solve(right, true, rightTarget, targets.Body, body, dt, weight);
+            if (leftTarget.Source == AvatarHandSource.Item) Solve(left, false, targets.Free(AvatarIKGoal.LeftHand), targets.Body, body, dt, weight, false);
+            if (rightTarget.Source == AvatarHandSource.Item) Solve(right, true, targets.Free(AvatarIKGoal.RightHand), targets.Body, body, dt, weight, false);
+            Solve(left, false, leftTarget, targets.Body, body, dt, weight, true);
+            Solve(right, true, rightTarget, targets.Body, body, dt, weight, true);
         }
 
         internal static float SoftReach(float distance, float reach)
@@ -51,7 +51,7 @@ namespace TwoBirds
         internal static Vector3 AutoHint(Vector3 shoulder, Vector3 hand, Quaternion body, bool right, float upperLength) =>
             (shoulder + hand) * 0.5f + body * new Vector3(right ? 0.6f : -0.6f, -1f, -0.3f).normalized * upperLength;
 
-        private void Solve(Arm arm, bool rightHand, AvatarHandTargets.Target target, Pose prepared, Pose body, float dt, float weight)
+        private void Solve(Arm arm, bool rightHand, AvatarHandTargets.Target target, Pose prepared, Pose body, float dt, float weight, bool clavicle)
         {
             if (!target.Transform) return;
             var data = binding.Measurements;
@@ -70,7 +70,7 @@ namespace TwoBirds
             arm.Seeded = true;
             float positionWeight = target.Position * arm.Weight * weight, rotationWeight = target.Rotation * arm.Weight * weight;
             if (positionWeight <= 0f && rotationWeight <= 0f) return;
-            if (arm.Clavicle && positionWeight > 0f)
+            if (clavicle && arm.Clavicle && positionWeight > 0f)
             {
                 Vector3 clavicle = arm.Clavicle.position;
                 float t = Mathf.InverseLerp(ClavicleStart, 1f, delta.magnitude / length) * positionWeight;

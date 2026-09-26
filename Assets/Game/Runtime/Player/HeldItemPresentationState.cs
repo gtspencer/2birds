@@ -33,15 +33,15 @@ namespace TwoBirds
         private HeldItemBodyFrame lastBody;
         private uint selectedId, preparedId, chargeItem;
         private readonly HandHoldPresentation hands = new();
-        private float charge, startCharge, releaseCharge, grab, startGrab, draw, startDraw, cancelDuration;
+        private float charge, startCharge, releaseCharge, releaseDraw, grab, startGrab, draw, startDraw, cancelDuration;
         private float holdWeight, leftWeight, startRightWeight, startLeftWeight, switchBlend = 1f;
         private float rightHintWeight, leftHintWeight, sourceRightHintWeight, sourceLeftHintWeight, followRightHintWeight, followLeftHintWeight;
-        private Pose sourceRight, sourceLeft;
+        private Pose sourceRight, sourceLeft, releasedLeft;
         private Vector3 sourceRightHint, sourceLeftHint, followRightHint, followLeftHint;
         private Pose preparedLeft, preparedRight;
         private double age, clock, blendStart;
         private float blendDuration;
-        private bool running = true, hasBody, blending, canceling, prepared, tracking, submitted, targetInstalled;
+        private bool running = true, hasBody, blending, canceling, prepared, tracking, submitted, targetInstalled, shown, holdRelease;
         private bool releaseUnavailable;
         private int advancedFrame = -1;
         internal float HoldWeight => running && input.CanEquip ? holdWeight : 0f;
@@ -234,6 +234,10 @@ namespace TwoBirds
                 prepared = blending = false;
                 chargeItem = action.WorldId;
                 releaseCharge = charge = Ease(action.ReleaseArcProgress / 255f);
+                releaseDraw = draw;
+                // The draw hand stays where it let go while the pouch snaps back.
+                holdRelease = previous.State == ItemActionState.Charging && previous.WorldId == action.WorldId;
+                if (holdRelease) releasedLeft = Local(rig.Frame, leftTarget);
                 hands.Reset();
             }
             else if (action.State == ItemActionState.Recovering)
@@ -241,9 +245,9 @@ namespace TwoBirds
                 submitted = !input.FirstPerson;
                 blending = false;
                 chargeItem = 0;
-                releaseCharge = charge = Ease(action.ReleaseArcProgress / 255f);
+                startRightWeight = holdWeight; startLeftWeight = leftWeight;
                 StartFollow();
-                startCharge = charge; prepared = false;
+                prepared = false;
                 FindProjectile();
             }
             else
@@ -317,6 +321,7 @@ namespace TwoBirds
 
         private void BeginReturn()
         {
+            startRightWeight = holdWeight; startLeftWeight = leftWeight;
             hands.Retarget(lastBody, age);
             CaptureFollowHints();
         }
@@ -373,20 +378,25 @@ namespace TwoBirds
                 float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((float)(age / Mathf.Max(0.01f, actionData.RecoverySeconds))));
                 charge = Mathf.Lerp(releaseCharge, 0f, t); grab = 1f - t; draw = 0f;
             }
-            else if (Following && actionDefinition)
-            {
-                charge = Mathf.Lerp(startCharge, 0f, Mathf.SmoothStep(0f, 1f, hands.ReturnProgress(actionData.Slot, age)));
-                grab = draw = 0f;
-            }
             else charge = grab = draw = 0f;
         }
 
         private void RefreshWeights()
         {
+            if (Following)
+            {
+                float r = actionData.Slot ? Mathf.SmoothStep(0f, 1f, hands.ReturnProgress(actionData.Slot, age)) : 1f;
+                bool returning = ReturnsToItem;
+                holdWeight = Mathf.Lerp(startRightWeight, returning ? 1f : 0f, r);
+                leftWeight = Mathf.Lerp(startLeftWeight, returning && selectedSlot.Mode == HoldSlotMode.Heavy ? 1f : 0f, r);
+                shown = false;
+                return;
+            }
+            bool show = selectedDefinition && CanShowHeldItem;
+            if (show != shown) { shown = show; BeginBlend(ReturnDuration(selectedData)); }
             float progress = blending && blendDuration > 0f ? Mathf.Clamp01((float)((Time.unscaledTimeAsDouble - blendStart) / blendDuration)) : 1f;
             if (progress >= 1f) blending = false;
             switchBlend = Mathf.SmoothStep(0f, 1f, progress);
-            bool show = selectedDefinition && CanShowHeldItem;
             float leftGoal = !show ? 0f : selectedData.Mode == HoldSlotMode.Heavy ? 1f :
                 selectedData.Mode == HoldSlotMode.Slingshot && ChargeActive ? grab : 0f;
             holdWeight = Mathf.Lerp(startRightWeight, show ? 1f : 0f, switchBlend);
@@ -473,7 +483,7 @@ namespace TwoBirds
             var frameTransform = rig.Frame;
             bool leftUsed = slot.Mode != HoldSlotMode.Hand;
             var right = World(rig.Target(slot, GripTarget.RightHand));
-            var left = World(rig.Target(slot, GripTarget.LeftHand));
+            var left = holdRelease && active && SlingshotRecovery ? ToWorld(frameTransform, releasedLeft) : World(rig.Target(slot, GripTarget.LeftHand));
             Vector3 leftPole = default;
             float leftPoleWeight = 0f;
             bool rightHinted = rig.Hint(slot, true, anchorCharge, pitch, pivot, out var rightPole, out float rightPoleWeight);
@@ -526,7 +536,7 @@ namespace TwoBirds
             Pose palm = binding != null ? binding.Palm(true) : requestedRight;
             Pose left = binding != null ? binding.Palm(false) : requestedLeft;
             bool resolve = showing && input.FirstPerson && !Frozen;
-            bool hasLeft = data.Mode != HoldSlotMode.Hand;
+            bool hasLeft = leftWeight > 0f;
             bool rightUnreachable = !Blending && showing && !InHandReach(requestedRight, true);
             bool leftUnreachable = !Blending && showing && hasLeft && !InHandReach(requestedLeft, false);
             Vector3 correction = Vector3.zero;
@@ -553,7 +563,7 @@ namespace TwoBirds
                 {
                     var state = selectedId == action.WorldId ? action.State : ItemActionState.Idle;
                     float recovery = actionDefinition is SlingshotDefinition sling ? sling.RecoverySeconds : 0.5f;
-                    float pull = state == ItemActionState.Recovering ? releaseCharge : ChargeActive ? draw : 0f;
+                    float pull = state == ItemActionState.Recovering ? releaseDraw : ChargeActive ? draw : 0f;
                     slingshot.Evaluate(item, state, age, pull, recovery, rig.For(HoldSlotMode.Slingshot).Pouch.position);
                 }
             }

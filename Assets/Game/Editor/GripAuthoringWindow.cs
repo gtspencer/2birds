@@ -79,7 +79,7 @@ namespace TwoBirds.Editor
                 scene.SelectAvatar(avatarId); scene.SelectItem((byte)itemId); scene.SetView(firstPerson);
                 scene.SetPhase(phase); scene.SetMode(mode);
             }
-            HideOwner(scene && Held);
+            HideOwner(scene);
             Rebuild();
         }
 
@@ -167,9 +167,9 @@ namespace TwoBirds.Editor
             var modeGroup = new RadioButtonGroup("Mode", new List<string> { "Held item", "World contact" }) { value = (int)mode };
             modeGroup.RegisterValueChangedCallback(evt =>
             {
+                if (!ConfirmDiscard()) { modeGroup.SetValueWithoutNotify(evt.previousValue); return; }
                 mode = (GripAuthoringMode)evt.newValue;
                 Scene?.SetMode(mode);
-                HideOwner(Scene && Held);
                 Rebuild();
             });
             body.Add(modeGroup);
@@ -182,7 +182,11 @@ namespace TwoBirds.Editor
                 body.Add(Stepper("Avatar", avatarList.Count, Mathf.Max(0, avatarList.FindIndex(entry => entry.Id == avatarId)),
                     index => avatarList[index].Settings.DisplayName, index => { avatarId = avatarList[index].Id; Scene?.SelectAvatar(avatarId); }));
             var view = new RadioButtonGroup("View", new List<string> { "Third person", "First person" }) { value = firstPerson ? 1 : 0 };
-            view.RegisterValueChangedCallback(evt => { firstPerson = evt.newValue == 1; Scene?.SetView(firstPerson); Rebuild(); });
+            view.RegisterValueChangedCallback(evt =>
+            {
+                if (!ConfirmDiscard()) { view.SetValueWithoutNotify(evt.previousValue); return; }
+                firstPerson = evt.newValue == 1; Scene?.SetView(firstPerson); Rebuild();
+            });
             body.Add(view);
             if (Held)
             {
@@ -229,11 +233,22 @@ namespace TwoBirds.Editor
         {
             var row = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center } };
             row.Add(new Label(label) { style = { width = 60 } });
-            void Step(int delta) { select((index + delta + count) % count); Rebuild(); }
+            void Step(int delta) { if (!ConfirmDiscard()) return; select((index + delta + count) % count); Rebuild(); }
             row.Add(new Button(() => Step(-1)) { text = "◀" });
             row.Add(new Label(name(index)) { style = { flexGrow = 1, unityTextAlign = TextAnchor.MiddleCenter } });
             row.Add(new Button(() => Step(1)) { text = "▶" });
             return row;
+        }
+
+        // Item, avatar, view and mode changes re-apply the edited rig, which drops unsaved drags.
+        private bool ConfirmDiscard()
+        {
+            var scene = Scene;
+            if (!scene) return true;
+            bool dirty = Held
+                ? Enum.GetValues(typeof(GripTarget)).Cast<GripTarget>().Any(target => scene.TryTarget(target, out _, out _, out _, out var changed) && changed)
+                : ContactRows.Any(row => Contact(row.right) && Contact(row.right).TryAuthored(row.target, out _, out _, out _, out var changed) && changed);
+            return !dirty || EditorUtility.DisplayDialog("Grip Authoring", "Discard unsaved target edits?", "Discard", "Cancel");
         }
 
         private void SetPhase(GripAuthoringPhase value)
@@ -306,6 +321,14 @@ namespace TwoBirds.Editor
             var scene = Scene;
             var item = Definition;
             if (!scene || !item || layer == GripLayer.Slot && !item.HoldSlot) return;
+            var shadowed = scene.PhaseTargets().Where(target =>
+                scene.TryTarget(target, out _, out _, out var source, out var changed) && changed && source > layer).ToArray();
+            if (shadowed.Length > 0)
+            {
+                EditorUtility.DisplayDialog("Grip Authoring", $"{string.Join(", ", shadowed)} resolve from a higher layer, which would " +
+                    $"keep overriding the {layer} layer. Save to that layer, or clear it first.", "OK");
+                return;
+            }
             foreach (var target in scene.PhaseTargets().ToArray())
             {
                 if (!scene.TryTarget(target, out _, out var stored, out _, out var changed) || !changed) continue;

@@ -36,7 +36,8 @@ namespace TwoBirds.Editor
 
         public static void SyncPairs()
         {
-            foreach (var (asset, live) in pairs) if (asset && live) live.CopyPoses(asset);
+            pairs.RemoveAll(pair => !pair.asset || !pair.live);
+            foreach (var (asset, live) in pairs) live.CopyPoses(asset);
         }
 
         private static void Snapshot(Object asset)
@@ -97,7 +98,7 @@ namespace TwoBirds.Editor
         private static void Reset()
         {
             foreach (var snapshot in snapshots.Values) if (snapshot) Object.DestroyImmediate(snapshot);
-            snapshots.Clear(); componentSnapshots.Clear(); touched.Clear(); pairs.Clear();
+            snapshots.Clear(); componentSnapshots.Clear(); touched.Clear();
             Changed?.Invoke();
         }
     }
