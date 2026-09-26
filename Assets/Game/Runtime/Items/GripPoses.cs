@@ -59,6 +59,7 @@ namespace TwoBirds
     {
         public AvatarId Avatar;
         public GripPoseTable Poses = new();
+        public AnimationClip Fingers;
     }
 
     public static class GripPoses
@@ -87,20 +88,37 @@ namespace TwoBirds
 
         public static bool Required(HoldSlotMode mode, GripTarget target) => Uses(mode, target) && !IsHint(target);
 
-        public static GripPoseTable Find(List<AvatarGripPoses> list, AvatarId avatar)
+        public static AvatarGripPoses FindEntry(List<AvatarGripPoses> list, AvatarId avatar)
         {
             if (list == null) return null;
-            foreach (var entry in list) if (entry != null && entry.Avatar == avatar) return entry.Poses;
+            foreach (var entry in list) if (entry != null && entry.Avatar == avatar) return entry;
             return null;
         }
 
-        public static GripPoseTable Ensure(List<AvatarGripPoses> list, AvatarId avatar)
+        public static GripPoseTable Find(List<AvatarGripPoses> list, AvatarId avatar) => FindEntry(list, avatar)?.Poses;
+
+        public static AvatarGripPoses EnsureEntry(List<AvatarGripPoses> list, AvatarId avatar)
         {
-            var table = Find(list, avatar);
-            if (table != null) return table;
-            var entry = new AvatarGripPoses { Avatar = avatar };
+            var entry = FindEntry(list, avatar);
+            if (entry != null) return entry;
+            entry = new AvatarGripPoses { Avatar = avatar };
             list.Add(entry);
-            return entry.Poses;
+            return entry;
+        }
+
+        public static GripPoseTable Ensure(List<AvatarGripPoses> list, AvatarId avatar) => EnsureEntry(list, avatar).Poses;
+
+        public static AnimationClip ResolveFingers(ItemDefinition item, AvatarId avatar, out GripLayer layer)
+        {
+            if (item)
+            {
+                var entry = FindEntry(item.AvatarGripPoses, avatar);
+                if (entry != null && entry.Fingers) { layer = GripLayer.Avatar; return entry.Fingers; }
+                if (item.GripFingers) { layer = GripLayer.Item; return item.GripFingers; }
+                if (item.HoldSlot && item.HoldSlot.Fingers) { layer = GripLayer.Slot; return item.HoldSlot.Fingers; }
+            }
+            layer = GripLayer.None;
+            return null;
         }
 
         public static bool TryResolve(HoldSlot slot, ItemDefinition item, AvatarId avatar, GripTarget target, bool firstPerson,

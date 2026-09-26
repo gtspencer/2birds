@@ -28,6 +28,7 @@ namespace TwoBirds
         private ItemDefinition selectedDefinition, actionDefinition;
         private HoldSlot selectedHold, actionHold;
         private HeldItemPoseData selectedData, actionData;
+        private AnimationClip selectedFingers;
         private Pose rightInItem, leftInItem;
         private ItemActionSnapshot action;
         private HeldItemBodyFrame lastBody;
@@ -166,6 +167,7 @@ namespace TwoBirds
         {
             resolvedSettings = avatar.Resolved?.Settings;
             if (!selectedDefinition) return;
+            selectedFingers = GripPoses.ResolveFingers(selectedDefinition, AvatarKey, out _);
             selectedSlot = rig.For(selectedData.Mode);
             rig.Apply(selectedSlot, selectedData.Slot, selectedDefinition, AvatarKey, input.FirstPerson, Scale, force);
         }
@@ -422,12 +424,12 @@ namespace TwoBirds
             if (holdWeight <= 0f && leftWeight <= 0f) { ClearTargets(); return; }
             var targets = avatar.HandTargets;
             var clips = avatar.Registry.Animations;
-            var fingers = selectedData.Fingers ? selectedData.Fingers : clips.GripFingers;
+            var fingers = selectedFingers ? selectedFingers : clips.GripFingers;
             targets.Set(AvatarIKGoal.RightHand, AvatarHandSource.Item, target, holdWeight, holdWeight, AvatarArmIK.MaximumReach, fingers,
                 hint: rightHint, hintWeight: rightHintWeight);
             if (leftWeight > 0f)
                 targets.Set(AvatarIKGoal.LeftHand, AvatarHandSource.Item, leftTarget, leftWeight, leftWeight, AvatarArmIK.MaximumReach,
-                    selectedData.Mode != HoldSlotMode.Slingshot ? fingers : SlingshotRecovery ? clips.OpenFingers : clips.GripFingers,
+                    SlingshotRecovery ? clips.OpenFingers : fingers,
                     hint: leftHint, hintWeight: leftHintWeight);
             else targets.Clear(AvatarIKGoal.LeftHand, AvatarHandSource.Item);
             targetInstalled = true;

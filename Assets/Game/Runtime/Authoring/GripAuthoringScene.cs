@@ -269,6 +269,8 @@ namespace TwoBirds
         public void Reapply()
         {
             EditedState?.ReapplyAuthored();
+            if (attached) (FirstPerson ? observer.State : held.State)?.ReapplyAuthored();
+            foreach (var preview in strip) if (preview) preview.State?.ReapplyAuthored();
             ApplyContacts();
         }
 

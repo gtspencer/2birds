@@ -6,7 +6,6 @@ namespace TwoBirds
     {
         internal readonly HoldSlot Slot;
         internal readonly HoldSlotMode Mode;
-        internal readonly AnimationClip Fingers;
         internal readonly ItemReleaseSphere Sphere;
         internal readonly float ReleaseRadius, ChargeDuration, GrabSeconds, RecoverySeconds;
         internal bool Heavy => Mode == HoldSlotMode.Heavy;
@@ -18,7 +17,6 @@ namespace TwoBirds
             if (geometry) geometry.CacheReleaseGeometry();
             Sphere = geometry ? geometry.ReleaseSphere : default;
             ReleaseRadius = geometry ? geometry.ReleaseRadius : 0f;
-            Fingers = definition.GripFingers ? definition.GripFingers : Slot ? Slot.Fingers : null;
             var slingshot = definition as SlingshotDefinition;
             ChargeDuration = slingshot ? definition.ThrowChargeTime : definition.ChargePoseDuration;
             GrabSeconds = slingshot ? slingshot.PouchGrabSeconds : 0f;

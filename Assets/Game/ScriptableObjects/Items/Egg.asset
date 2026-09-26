@@ -63,6 +63,37 @@ MonoBehaviour:
         FirstPerson: 0
         Position: {x: 0.25971928, y: 0.65489554, z: 0.16680247}
         Rotation: {x: -0.00090128055, y: 0.99404013, z: 0.10869921, w: 0.008242094}
+    Fingers: {fileID: 0}
+  - Avatar:
+      high: 1176343954
+      low: 4084229738
+    Poses:
+      Entries:
+      - Target: 0
+        FirstPerson: 0
+        Position: {x: 0.1981479, y: 0.096275255, z: 0.36718935}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 1
+        FirstPerson: 0
+        Position: {x: 0.25971928, y: 0.65489554, z: 0.16680247}
+        Rotation: {x: -0.00090128055, y: 0.99404013, z: 0.10869921, w: 0.008242094}
+      - Target: 2
+        FirstPerson: 0
+        Position: {x: 0.004, y: -0.024, z: -7.7103873e-10}
+        Rotation: {x: 0.00000003235627, y: 0.000000019443634, z: 0.01011556, w: 0.99994886}
+      - Target: 0
+        FirstPerson: 1
+        Position: {x: 0.2865868, y: 1.3008353, z: 0.3347244}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 1
+        FirstPerson: 1
+        Position: {x: 0.17463882, y: 1.5471208, z: 0.23732968}
+        Rotation: {x: 0.014087282, y: 0.9481564, z: 0.31464082, w: -0.04245142}
+      - Target: 2
+        FirstPerson: 1
+        Position: {x: 0.004, y: -0.024, z: -7.7103873e-10}
+        Rotation: {x: 0.00000003235627, y: 0.000000019443634, z: 0.01011556, w: 0.99994886}
+    Fingers: {fileID: 0}
   GripFingers: {fileID: 0}
   DontPushPlayer: 0
   UseSharedImpactThreshold: 0

@@ -1,6 +1,6 @@
 - I think we can get rid of the 3 save options (Save for Avatar, Save as item default, save as slot default), and replace it with "Save", which saves this hold position for this item for this avatar
 - if we want to extend to other items, we can use "Copy to items".  Then we can also add a "copy to avatars" section that acts the same, except copies this item to avatars.  then 1 last button, "Copy to items and avatars", which copies to all selected items for all selected avatars
-- add the ability to override finger animation pose
+- add the ability to override finger animation pose.  and ideally provide a new "FingerPoseGenerator" scene I can use to create new animation clip poses for the hand/finger
 - add a "copy to other pose" button, which copies the 'hold' phase position/rotation to the 'charged' phase position/rotation
 - "Copy to other view" doesn't seem to work (if i'm in first person, and click copy, third person doesn't update)
 - Change text: "Hold" to "Charge"
