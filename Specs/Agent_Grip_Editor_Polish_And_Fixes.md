@@ -1,0 +1,7 @@
+- symmetry when moving 2 hands (i.e. a checkbox that lets me move both right and left hands at the same time, but mirroed)
+- questions:
+    - what is the bottom part that says "Actions"?  Does it rely on a certain phase?  right now, release, throw, and use do nothing.
+    - The "Walk" checkbox does nothing
+    - What is the "Live" phase?  I understand changing phase to Hold or Charge allows me to change the item's hold and charge positions, but unsure about "Live"
+    - Can you add some descriptions for "Save for avatar", "Save as Item default", and "Save as slot default"?
+    - The "Clear" button next to the "Select" button never enables; its always greyed out, even when i select and move the item.  Same with Copy to other view

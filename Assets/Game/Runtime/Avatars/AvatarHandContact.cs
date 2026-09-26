@@ -108,6 +108,12 @@ namespace TwoBirds
             return false;
         }
 
+        public void ResetAuthored(GripTarget target)
+        {
+            if (target == GripTarget.ContactPalm) transform.SetLocalPositionAndRotation(appliedPalm.position, appliedPalm.rotation);
+            else if (target == GripTarget.ContactElbow) AuthoredHint.localPosition = appliedHint;
+        }
+
         public void CopyPoses(AvatarHandContact source)
         {
             Poses.CopyFrom(source.Poses);

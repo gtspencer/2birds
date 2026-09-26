@@ -21,14 +21,48 @@ MonoBehaviour:
   MinThrowSpeed: 3
   MaxThrowSpeed: 14
   ThrowChargeTime: 1
-  HoldClass: {fileID: 11400000, guid: 23988aa6cd0882d45adbe832cb24e8db, type: 2}
-  ThirdPersonGrip:
-    Position: {x: 0, y: 0.19425, z: 0}
-    Euler: {x: 270.02, y: 0, z: 0}
-  FirstPersonGrip:
-    Position: {x: 0, y: 0.19425, z: 0}
-    Euler: {x: 270.02, y: 0, z: 0}
-  AvatarGrips: []
+  HoldSlot: {fileID: 11400000, guid: 23988aa6cd0882d45adbe832cb24e8db, type: 2}
+  ChargePoseDuration: 0.35
+  GripPoses:
+    Entries: []
+  AvatarGripPoses:
+  - Avatar:
+      high: 1149333059
+      low: 2402174837
+    Poses:
+      Entries:
+      - Target: 0
+        FirstPerson: 1
+        Position: {x: 0.34815815, y: 1.3870353, z: 0.6033995}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 2
+        FirstPerson: 1
+        Position: {x: 0, y: -0.189, z: 0.006}
+        Rotation: {x: 0.17717755, y: 1.9222443e-10, z: 6.341713e-10, w: 0.98417896}
+      - Target: 1
+        FirstPerson: 1
+        Position: {x: 0.27763095, y: 1.7452688, z: 0.33248544}
+        Rotation: {x: -0.0010053936, y: 0.9979753, z: 0.06146551, w: 0.016323872}
+      - Target: 6
+        FirstPerson: 1
+        Position: {x: 0.29442316, y: 1.0668641, z: 0.38286203}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 0
+        FirstPerson: 0
+        Position: {x: 0.31905168, y: 0, z: 0.35711402}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 2
+        FirstPerson: 0
+        Position: {x: -0, y: -0.177, z: 0.028}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 1
+        FirstPerson: 0
+        Position: {x: 0.3392721, y: 0.76796305, z: 0.32228932}
+        Rotation: {x: -0, y: 1, z: -0, w: -0.00028993192}
+      - Target: 6
+        FirstPerson: 0
+        Position: {x: 0.32352963, y: 0.14843033, z: 0.07388566}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
   GripFingers: {fileID: 0}
   DontPushPlayer: 0
   UseSharedImpactThreshold: 0
@@ -36,6 +70,9 @@ MonoBehaviour:
   ImpulseMultiplier: 1
   OverrideCollisionDamage: 0
   CollisionDamage: 0
+  SpawnSplat: 0
+  DestroyOnSplat: 0
+  SplatDefinition: {fileID: 0}
   SyncRotation: 0
   DropSpeed: 1.5
   VelocityInheritance: 1

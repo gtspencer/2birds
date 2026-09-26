@@ -25,6 +25,8 @@ namespace TwoBirds.Editor
         [SerializeField] private int savedLayers;
         [SerializeField] private GripAuthoringPhase phase;
         [SerializeField] private GripAuthoringMode mode;
+        [SerializeField] private bool mirror, copyOpen;
+        [SerializeField] private List<int> copyItems = new();
         private ItemRegistry items;
         private AvatarRegistry avatars;
         private readonly List<Action> refreshers = new();
@@ -77,7 +79,7 @@ namespace TwoBirds.Editor
             if (scene)
             {
                 scene.SelectAvatar(avatarId); scene.SelectItem((byte)itemId); scene.SetView(firstPerson);
-                scene.SetPhase(phase); scene.SetMode(mode);
+                scene.SetPhase(phase); scene.SetMode(mode); scene.SetMirror(mirror);
             }
             HideOwner(scene);
             Rebuild();
@@ -202,23 +204,43 @@ namespace TwoBirds.Editor
             else ContactPanel(panel, scene);
 
             actions = new VisualElement { style = { flexDirection = FlexDirection.Row, flexWrap = Wrap.Wrap } };
-            void Action(string text, Action<GripAuthoringScene> action) => actions.Add(new Button(() => { if (Scene) action(Scene); }) { text = text });
+            Button Action(string text, string tooltip, Action<GripAuthoringScene> action)
+            {
+                var button = new Button(() => { if (Scene) action(Scene); }) { text = text, tooltip = tooltip };
+                actions.Add(button);
+                return button;
+            }
             if (Held)
             {
-                Action("Equip", s => s.EquipAction()); Action("Dequip", s => s.Dequip());
-                Action("Hold", s => s.Hold()); Action("Release", s => s.Release());
-                Action("Throw", s => s.Throw()); Action("Cancel", s => s.CancelAction());
-                Action("Drop", s => s.Drop()); Action("Use", s => s.Use());
-                var reequip = new Toggle("Auto re-equip") { value = !scene || scene.AutoReequip };
+                Action("Equip", "Supply and select the item.", s => s.EquipAction());
+                Action("Dequip", "Select no hotbar slot.", s => s.Dequip());
+                Action("Hold", "Begin a charge and keep holding.", s => s.Hold());
+                Action("Release", "End the charge (throw or fire).", s => s.Release());
+                Action("Throw", "Charge for the full charge time, then release.", s => s.Throw());
+                Action("Cancel", "Cancel the current charge.", s => s.CancelAction());
+                Action("Drop", "Drop the selected item.", s => s.Drop());
+                Action("Drink", "Drink the selected potion. Only potions have a direct use.", s => s.Use())
+                    .SetEnabled(Definition is PotionDefinition);
+                var reequip = new Toggle("Auto re-equip")
+                    { value = !scene || scene.AutoReequip, tooltip = "Re-supply the item 1 s after it leaves the inventory." };
                 reequip.RegisterValueChangedCallback(evt => { if (Scene) Scene.AutoReequip = evt.newValue; });
                 actions.Add(reequip);
             }
-            else { Action("Enter seat", s => s.EnterSeat()); Action("Exit seat", s => s.ExitSeat()); }
-            walk = new Toggle("Walk (F2)") { value = scene && scene.Walking };
-            walk.RegisterValueChangedCallback(evt => Scene?.SetWalking(evt.newValue));
+            else
+            {
+                Action("Enter seat", "Sit in the golf cart's driver seat.", s => s.EnterSeat());
+                Action("Exit seat", "Leave the golf cart.", s => s.ExitSeat());
+            }
+            walk = new Toggle("Walk (F2)")
+                { value = scene && scene.Walking, tooltip = "Walk with WASD in the Game view. F2 toggles while the Game view has focus." };
+            walk.RegisterValueChangedCallback(evt =>
+            {
+                Scene?.SetWalking(evt.newValue);
+                if (evt.newValue) EditorApplication.ExecuteMenuItem("Window/General/Game");
+            });
             actions.Add(walk);
             actions.SetEnabled(scene);
-            body.Add(new Label("Actions"));
+            body.Add(new Label("Actions") { tooltip = "Runs real gameplay on your player to preview grips in motion. Switches the phase to Live." });
             body.Add(actions);
 
             readouts = new Label { style = { marginTop = 6, whiteSpace = WhiteSpace.Normal } };
@@ -266,20 +288,112 @@ namespace TwoBirds.Editor
             if (!item.HoldSlot) { panel.Add(new Label("The item has no Hold Slot.")); return; }
             panel.Add(new Label($"{item.HoldSlot.name} · {item.HoldMode} · {(firstPerson ? "first" : "third")} person"));
             foreach (var target in scene.PhaseTargets().ToArray()) HeldRow(panel, item, target);
+            if (phase == GripAuthoringPhase.Live)
+            {
+                panel.Add(new Label("Preview only — switch to Hold or Charged to edit.") { style = { marginTop = 4 } });
+                return;
+            }
+            if (item.HoldMode == HoldSlotMode.Heavy)
+            {
+                var mirrorToggle = new Toggle("Mirror left/right")
+                {
+                    value = mirror, style = { marginTop = 4 },
+                    tooltip = "Dragging a hand or elbow moves its partner as a reflection: hands across the item's local X, elbows across the body midline."
+                };
+                mirrorToggle.RegisterValueChangedCallback(evt => { mirror = evt.newValue; Scene?.SetMirror(mirror); });
+                panel.Add(mirrorToggle);
+            }
+            const string saves = " Saves changed (●) targets of this phase for the current view.";
             var buttons = new VisualElement { style = { flexDirection = FlexDirection.Row, flexWrap = Wrap.Wrap, marginTop = 4 } };
-            buttons.Add(new Button(() => SaveHeld(GripLayer.Avatar)) { text = "Save for avatar" });
-            buttons.Add(new Button(() => SaveHeld(GripLayer.Item)) { text = "Save as item default" });
-            buttons.Add(new Button(() => SaveHeld(GripLayer.Slot)) { text = "Save as slot default" });
-            buttons.SetEnabled(phase != GripAuthoringPhase.Live);
+            buttons.Add(new Button(() => SaveHeld(GripLayer.Avatar))
+                { text = "Save for avatar", tooltip = "Override for this avatar and this item only. Highest priority." + saves });
+            buttons.Add(new Button(() => SaveHeld(GripLayer.Item))
+                { text = "Save as item default", tooltip = "This item, all avatars, unless an avatar has its own override." + saves });
+            buttons.Add(new Button(() => SaveHeld(GripLayer.Slot))
+            {
+                text = "Save as slot default",
+                tooltip = $"Fallback for every item using {item.HoldSlot.name} when neither the item nor the avatar defines it." + saves
+            });
             panel.Add(buttons);
+            CopyPanel(panel, item);
+        }
+
+        private void CopyPanel(VisualElement panel, ItemDefinition item)
+        {
+            var candidates = items.Items.Where(other => other && other != item && other.HoldSlot == item.HoldSlot).ToList();
+            if (candidates.Count == 0) return;
+            var foldout = new Foldout { value = copyOpen, style = { marginTop = 4 } };
+            foldout.RegisterValueChangedCallback(evt => { if (evt.target == foldout) copyOpen = evt.newValue; });
+            var toggles = new List<Toggle>();
+            var copy = new VisualElement { style = { flexDirection = FlexDirection.Row, flexWrap = Wrap.Wrap, marginTop = 4 } };
+            void Changed()
+            {
+                int count = candidates.Count(other => copyItems.Contains(other.ItemId));
+                foldout.text = $"Copy to items ({count} selected)";
+                copy.SetEnabled(count > 0);
+            }
+            var bulk = new VisualElement { style = { flexDirection = FlexDirection.Row } };
+            bulk.Add(new Button(() => { foreach (var toggle in toggles) toggle.value = true; }) { text = "All" });
+            bulk.Add(new Button(() => { foreach (var toggle in toggles) toggle.value = false; }) { text = "None" });
+            foldout.Add(bulk);
+            foreach (var other in candidates)
+            {
+                int id = other.ItemId;
+                var toggle = new Toggle { text = other.ItemName, value = copyItems.Contains(id) };
+                toggle.RegisterValueChangedCallback(evt =>
+                {
+                    copyItems.Remove(id);
+                    if (evt.newValue) copyItems.Add(id);
+                    Changed();
+                });
+                toggles.Add(toggle);
+                foldout.Add(toggle);
+            }
+            const string copies = " Copies every saved or changed target of this item for the current view, as shown. This item is not saved.";
+            copy.Add(new Button(() => CopyToItems(GripLayer.Avatar, candidates))
+                { text = "Copy for avatar", tooltip = "Write the selected items' overrides for this avatar." + copies });
+            copy.Add(new Button(() => CopyToItems(GripLayer.Item, candidates))
+                { text = "Copy as item default", tooltip = "Write the selected items' defaults for all avatars." + copies });
+            foldout.Add(copy);
+            Changed();
+            panel.Add(foldout);
+        }
+
+        private void CopyToItems(GripLayer layer, List<ItemDefinition> candidates)
+        {
+            var scene = Scene;
+            var item = Definition;
+            var selected = candidates.Where(other => other && copyItems.Contains(other.ItemId)).ToList();
+            if (!scene || !item || selected.Count == 0) return;
+            var poses = new List<(GripTarget target, Pose pose)>();
+            foreach (GripTarget target in Enum.GetValues(typeof(GripTarget)))
+                if (GripPoses.Uses(item.HoldMode, target) && scene.TryTarget(target, out _, out var stored, out var source, out var changed) &&
+                    (changed || source != GripLayer.None))
+                    poses.Add((target, stored));
+            if (poses.Count == 0) return;
+            if (layer == GripLayer.Item)
+            {
+                var shadowed = selected.Where(other => GripPoses.Find(other.AvatarGripPoses, avatarId) is { } table &&
+                    poses.Any(entry => table.TryGet(entry.target, firstPerson, out _))).Select(other => other.ItemName).ToArray();
+                if (shadowed.Length > 0 && !EditorUtility.DisplayDialog("Grip Authoring",
+                    $"{string.Join(", ", shadowed)} have overrides for this avatar that will keep winning over the item default. Copy anyway?",
+                    "Copy", "Cancel")) return;
+            }
+            foreach (var other in selected)
+                GripAuthoringAssets.Edit(other, "Copy grip to items", () =>
+                {
+                    var table = layer == GripLayer.Avatar ? GripPoses.Ensure(other.AvatarGripPoses, avatarId) : other.GripPoses;
+                    foreach (var (target, pose) in poses) table.Set(target, firstPerson, pose);
+                });
         }
 
         private void HeldRow(VisualElement panel, ItemDefinition item, GripTarget target)
         {
             var row = Row(panel, target.ToString(), out var source, out var dirty);
             var select = new Button(() => { if (Scene && Scene.TryTarget(target, out var transform, out _, out _, out _)) Selection.activeTransform = transform; }) { text = "Select" };
+            var reset = new Button(() => Scene?.ResetTarget(target)) { text = "Reset", tooltip = "Discard the unsaved drag on this target." };
             var clear = new Button(() => ClearHeld(item, target)) { text = "Clear" };
-            row.Add(select); row.Add(clear);
+            row.Add(select); row.Add(reset); row.Add(clear);
             Button copy = null;
             if (target is GripTarget.RightHand or GripTarget.LeftHand or GripTarget.PouchDraw)
                 row.Add(copy = new Button(() => CopyHeld(item, target)) { text = "Copy to other view" });
@@ -292,11 +406,23 @@ namespace TwoBirds.Editor
                 bool found = scene && scene.TryTarget(target, out transform, out _, out layer, out changed);
                 if (found && !listed.Contains(transform)) listed.Add(transform);
                 source.text = layer.ToString(); dirty.text = changed ? "●" : "";
-                clear.SetEnabled(found && layer != GripLayer.None && !(layer == GripLayer.Slot && !GripPoses.IsHint(target)));
-                copy?.SetEnabled(found && layer != GripLayer.None && !changed);
+                bool slotLocked = layer == GripLayer.Slot && !GripPoses.IsHint(target);
+                clear.SetEnabled(found && layer != GripLayer.None && !slotLocked);
+                clear.tooltip = ClearTooltip(layer, slotLocked);
+                if (copy != null)
+                {
+                    copy.SetEnabled(found && layer != GripLayer.None && !changed);
+                    copy.tooltip = layer == GripLayer.None ? "Save before copying." : changed ? "Save or reset before copying." :
+                        $"Copy the {layer} entry to the {(firstPerson ? "third" : "first")} person view.";
+                }
+                reset.SetEnabled(found && changed);
                 select.SetEnabled(found);
             });
         }
+
+        private static string ClearTooltip(GripLayer layer, bool slotLocked) =>
+            layer == GripLayer.None ? "Nothing saved to clear." :
+            slotLocked ? "Slot defaults for required targets can't be cleared." : $"Remove the {layer} entry for this view.";
 
         private static VisualElement Row(VisualElement panel, string name, out Label source, out Label dirty)
         {
@@ -373,8 +499,9 @@ namespace TwoBirds.Editor
             panel.Add(new Label($"Steering wheel · {(firstPerson ? "first" : "third")} person"));
             foreach (var (right, target) in ContactRows) ContactRow(panel, right, target);
             var buttons = new VisualElement { style = { flexDirection = FlexDirection.Row, flexWrap = Wrap.Wrap, marginTop = 4 } };
-            buttons.Add(new Button(() => SaveContacts(true)) { text = "Save for avatar" });
-            buttons.Add(new Button(() => SaveContacts(false)) { text = "Save as contact default" });
+            const string saves = " Saves changed (●) targets for the current view.";
+            buttons.Add(new Button(() => SaveContacts(true)) { text = "Save for avatar", tooltip = "Contact prefab override for this avatar." + saves });
+            buttons.Add(new Button(() => SaveContacts(false)) { text = "Save as contact default", tooltip = "Contact prefab default for all avatars." + saves });
             panel.Add(buttons);
         }
 
@@ -386,8 +513,10 @@ namespace TwoBirds.Editor
             string name = $"{(right ? "Right" : "Left")} {(target == GripTarget.ContactPalm ? "palm" : "elbow")}";
             var row = Row(panel, name, out var source, out var dirty);
             var select = new Button(() => { if (Contact(right) && Contact(right).TryAuthored(target, out var transform, out _, out _, out _)) Selection.activeTransform = transform; }) { text = "Select" };
+            var reset = new Button(() => { var contact = Contact(right); if (contact) contact.ResetAuthored(target); })
+                { text = "Reset", tooltip = "Discard the unsaved drag on this target." };
             var clear = new Button(() => ClearContact(right, target)) { text = "Clear" };
-            row.Add(select); row.Add(clear);
+            row.Add(select); row.Add(reset); row.Add(clear);
             refreshers.Add(() =>
             {
                 var contact = Contact(right);
@@ -398,6 +527,8 @@ namespace TwoBirds.Editor
                 if (found && !listed.Contains(transform)) listed.Add(transform);
                 source.text = layer.ToString(); dirty.text = changed ? "●" : "";
                 clear.SetEnabled(found && layer != GripLayer.None);
+                clear.tooltip = ClearTooltip(layer, false);
+                reset.SetEnabled(found && changed);
                 select.SetEnabled(found);
             });
         }

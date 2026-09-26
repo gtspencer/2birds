@@ -498,6 +498,10 @@ namespace TwoBirds
 
         private void InputInterrupted()
         {
+#if UNITY_INCLUDE_INSTRUMENTATION
+            // The authoring window takes Game view focus; keep gameplay input alive.
+            if (GripAuthoringScene.Instance && GripAuthoringScene.Instance.Attached) return;
+#endif
             if (localInput) localInput.ClearContext();
             if (EditorOpen) return;
             if (Phase == SessionPhase.InGame) SetPanel(true);

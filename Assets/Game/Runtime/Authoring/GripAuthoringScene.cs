@@ -49,6 +49,7 @@ namespace TwoBirds
         public GripAuthoringPhase Phase { get; private set; }
         public GripAuthoringMode Mode { get; private set; }
         public bool FirstPerson { get; private set; }
+        public bool Mirror { get; private set; }
         public HoldSlotMode SlotMode => SelectedDefinition ? SelectedDefinition.HoldMode : HoldSlotMode.Hand;
         public bool AutoReequip { get; set; } = true;
         public bool Walking => input && !input.AuthoringFocus;
@@ -159,6 +160,12 @@ namespace TwoBirds
             ApplyPhase(reapply);
         }
 
+        public void SetMirror(bool mirror)
+        {
+            Mirror = mirror;
+            ApplyPhase(false);
+        }
+
         public void SetView(bool firstPerson)
         {
             FirstPerson = firstPerson;
@@ -176,6 +183,7 @@ namespace TwoBirds
                 inventory.SelectSlot(-1);
                 if (!cart) cart = FindFirstObjectByType<GolfCartNetwork>();
                 if (!cart) Message = "Add a GolfCart to the authoring scene to author world contacts.";
+                else EnterSeat();
             }
             else
             {
@@ -189,7 +197,13 @@ namespace TwoBirds
             if (!contact) Equip();
         }
 
-        public void EnterSeat() { if (attached && cart && !seating.Seated) seating.Request(cart, 0); }
+        public void EnterSeat()
+        {
+            if (!attached || !cart || seating.Seated) return;
+            Message = !input.GameplayActive ? "Can't enter the seat: gameplay input is unavailable." :
+                seating.TransitionPending ? "Can't enter the seat: a seat transition is in progress." : "";
+            if (Message.Length == 0) seating.Request(cart, 0);
+        }
         public void ExitSeat() { if (attached && seating.Seated) seating.RequestExit(); }
 
         private void ApplyPhase(bool reapply = true)
@@ -204,6 +218,7 @@ namespace TwoBirds
         {
             if (state == null) return;
             state.AuthoringPhase = Phase;
+            state.AuthoringMirror = Mirror && state == edited;
             if (!reapply) return;
             state.AuthoringLocked = false;
             state.ReapplyAuthored();
@@ -248,6 +263,8 @@ namespace TwoBirds
             var state = EditedState;
             return state != null && state.TryAuthored(target, out transform, out stored, out layer, out dirty);
         }
+
+        public void ResetTarget(GripTarget target) => EditedState?.ResetAuthored(target);
 
         public void Reapply()
         {

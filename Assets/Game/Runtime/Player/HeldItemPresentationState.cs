@@ -477,7 +477,11 @@ namespace TwoBirds
             }
             rig.Anchor(slot, anchorCharge, active ? draw : 0f, slingshot ? slingshot.RestOffset : Vector3.zero, pitch, pivot);
 #if UNITY_INCLUDE_INSTRUMENTATION
-            if (rig.Locked && binding != null) FollowAutomaticHints(binding);
+            if (rig.Locked)
+            {
+                rig.MirrorFollow(slot);
+                if (binding != null) FollowAutomaticHints(binding);
+            }
 #endif
             if (Following) { PoseFollowHints(); return; }
             var frameTransform = rig.Frame;
@@ -616,6 +620,8 @@ namespace TwoBirds
         internal GripAuthoringPhase AuthoringPhase;
         private bool Frozen => AuthoringPhase != GripAuthoringPhase.Live;
         internal bool AuthoringLocked { set => rig.Locked = value; }
+        internal bool AuthoringMirror { set => rig.Mirror = value; }
+        internal void ResetAuthored(GripTarget target) { if (selectedDefinition) rig.ResetAuthored(selectedSlot, target); }
         internal bool TryAuthored(GripTarget authored, out Transform transform, out Pose stored, out GripLayer layer, out bool dirty)
         {
             transform = null; stored = default; layer = GripLayer.None; dirty = false;

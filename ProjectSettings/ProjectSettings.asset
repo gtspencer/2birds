@@ -855,7 +855,7 @@ PlayerSettings:
   gcIncremental: 1
   gcWBarrierValidation: 0
   managedCodeVariant:
-    Standalone: 3
+    Standalone: 1
   apiCompatibilityLevelPerPlatform: {}
   editorAssembliesCompatibilityLevel: 1
   m_RenderingPath: 1

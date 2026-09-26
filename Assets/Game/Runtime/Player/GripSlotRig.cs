@@ -28,6 +28,9 @@ namespace TwoBirds
             internal readonly Applied[] Records = new Applied[TargetCount];
             internal (HoldSlot, ItemDefinition, AvatarId, bool, float) Key;
             internal bool Keyed;
+#if UNITY_INCLUDE_INSTRUMENTATION
+            internal readonly Pose[] Synced = new Pose[TargetCount];
+#endif
         }
 
         internal Transform Frame { get; }
@@ -88,6 +91,9 @@ namespace TwoBirds
                 if (GripPoses.InSlotFrame(target)) pose.position *= scale;
                 transform.SetLocalPositionAndRotation(pose.position, pose.rotation);
                 slot.Records[i] = new Applied { Defined = defined, Stored = new Pose(transform.localPosition, transform.localRotation), Layer = layer };
+#if UNITY_INCLUDE_INSTRUMENTATION
+                slot.Synced[i] = slot.Records[i].Stored;
+#endif
             }
         }
 
@@ -144,6 +150,68 @@ namespace TwoBirds
             var transform = slot.Targets[(int)target];
             transform.position = world;
             record.Stored = new Pose(transform.localPosition, transform.localRotation);
+            slot.Synced[(int)target] = record.Stored;
+        }
+
+        private static readonly (GripTarget right, GripTarget left)[] MirrorPairs =
+        {
+            (GripTarget.RightHand, GripTarget.LeftHand), (GripTarget.RightElbowHold, GripTarget.LeftElbowHold),
+            (GripTarget.RightElbowCharge, GripTarget.LeftElbowCharge)
+        };
+        private bool mirror;
+
+        internal bool Mirror
+        {
+            set
+            {
+                mirror = value;
+                if (value) { Resync(Hand); Resync(Heavy); }
+            }
+        }
+
+        private void Resync(Slot slot)
+        {
+            for (int i = 0; i < TargetCount; i++)
+            {
+                var transform = Target(slot, (GripTarget)i);
+                if (transform) slot.Synced[i] = new Pose(transform.localPosition, transform.localRotation);
+            }
+        }
+
+        // Hands mirror in item space, hints across the body midline; each pair shares a parent.
+        internal void MirrorFollow(Slot slot)
+        {
+            if (!mirror || slot.Mode != HoldSlotMode.Heavy) return;
+            foreach (var (right, left) in MirrorPairs)
+            {
+                Transform a = Target(slot, right), b = Target(slot, left);
+                var poseA = new Pose(a.localPosition, a.localRotation);
+                var poseB = new Pose(b.localPosition, b.localRotation);
+                bool movedA = Changed(right, poseA, slot.Synced[(int)right]), movedB = Changed(left, poseB, slot.Synced[(int)left]);
+                if (movedA != movedB)
+                {
+                    var mirrored = Reflect(movedA ? poseA : poseB);
+                    (movedA ? b : a).SetLocalPositionAndRotation(mirrored.position, mirrored.rotation);
+                }
+                slot.Synced[(int)right] = new Pose(a.localPosition, a.localRotation);
+                slot.Synced[(int)left] = new Pose(b.localPosition, b.localRotation);
+            }
+        }
+
+        private static bool Changed(GripTarget target, Pose current, Pose synced) => GripPoses.IsHint(target)
+            ? (current.position - synced.position).sqrMagnitude > GripPoses.DirtyDistance * GripPoses.DirtyDistance
+            : GripPoses.Differs(current, synced);
+
+        private static Pose Reflect(Pose pose) => new(new Vector3(-pose.position.x, pose.position.y, pose.position.z),
+            new Quaternion(pose.rotation.x, -pose.rotation.y, -pose.rotation.z, pose.rotation.w));
+
+        internal void ResetAuthored(Slot slot, GripTarget target)
+        {
+            var transform = GripPoses.Uses(slot.Mode, target) ? Target(slot, target) : null;
+            if (!transform) return;
+            var stored = slot.Records[(int)target].Stored;
+            transform.SetLocalPositionAndRotation(stored.position, stored.rotation);
+            slot.Synced[(int)target] = stored;
         }
 
         internal bool TryAuthored(Slot slot, GripTarget target, float scale, out Transform transform, out Pose stored, out GripLayer layer, out bool dirty)
