@@ -19,7 +19,7 @@ namespace TwoBirds.Editor
         private const string ClipFolder = "Assets/Art/Animations/Hands";
         private static readonly string[] Sides = { "Right", "Left" };
         private static readonly string[] Fingers = { "Thumb", "Index", "Middle", "Ring", "Little" };
-        private const int Parts = 4, PerHand = 20, Slots = 40;
+        private const int Parts = 4, PerHand = 20, Slots = 40, BonesPerHand = 15;
         // Slot = hand * PerHand + finger * Parts + part; parts 0-2 are the joints (1/2/3 Stretched), 3 is Spread.
         private static readonly int[] Muscles = new int[Slots];
         private static readonly EditorCurveBinding[] Bindings = new EditorCurveBinding[Slots];
@@ -34,10 +34,13 @@ namespace TwoBirds.Editor
         private Animator animator;
         private HumanPoseHandler handler;
         private HumanPose pose;
+        private readonly Transform[] bones = new Transform[BonesPerHand * 2];
         private readonly List<Action> refreshers = new();
 
-        static FingerPoseGeneratorWindow()
+        // HumanTrait can't be read during ScriptableObject construction, so this runs from OnEnable.
+        private static void MapMuscles()
         {
+            if (Muscles[Slots - 1] != 0) return;
             for (int hand = 0; hand < 2; hand++)
                 for (int finger = 0; finger < Fingers.Length; finger++)
                     for (int part = 0; part < Parts; part++)
@@ -56,6 +59,7 @@ namespace TwoBirds.Editor
 
         private void OnEnable()
         {
+            MapMuscles();
             registry = AssetDatabase.LoadAssetAtPath<AvatarRegistry>(AvatarRegistryPath);
             if (registry && !avatarId.IsValid) avatarId = registry.DefaultId;
             if (!sourceClip && registry && registry.Animations)
@@ -66,6 +70,7 @@ namespace TwoBirds.Editor
             EditorApplication.playModeStateChanged += PlayModeChanged;
             EditorSceneManager.sceneOpened += SceneOpened;
             Undo.undoRedoPerformed += UndoRedo;
+            SceneView.duringSceneGui += SceneGUI;
             Spawn();
         }
 
@@ -74,6 +79,7 @@ namespace TwoBirds.Editor
             EditorApplication.playModeStateChanged -= PlayModeChanged;
             EditorSceneManager.sceneOpened -= SceneOpened;
             Undo.undoRedoPerformed -= UndoRedo;
+            SceneView.duringSceneGui -= SceneGUI;
             Despawn();
         }
 
@@ -103,6 +109,9 @@ namespace TwoBirds.Editor
             if (!animator) animator = preview.AddComponent<Animator>();
             animator.avatar = data.HumanoidAvatar;
             handler = new HumanPoseHandler(data.HumanoidAvatar, preview.transform);
+            for (int bone = 0; bone < bones.Length; bone++)
+                bones[bone] = animator.GetBoneTransform((bone < BonesPerHand ? HumanBodyBones.RightThumbProximal : HumanBodyBones.LeftThumbProximal) +
+                    bone % BonesPerHand);
             ApplyPose();
         }
 
@@ -112,6 +121,7 @@ namespace TwoBirds.Editor
             handler = null;
             if (preview) DestroyImmediate(preview);
             preview = null; animator = null;
+            Array.Clear(bones, 0, bones.Length);
         }
 
         private void ApplyPose()
@@ -120,7 +130,52 @@ namespace TwoBirds.Editor
             handler.GetHumanPose(ref pose);
             for (int slot = 0; slot < Slots; slot++) if (Muscles[slot] >= 0) pose.muscles[Muscles[slot]] = values[slot];
             handler.SetHumanPose(ref pose);
+            ClearChanged();
             SceneView.RepaintAll();
+        }
+
+        // Reads gizmo rotations back into muscles, then snaps the bones to what the muscles can represent.
+        private void ReadPose()
+        {
+            Undo.RecordObject(this, "Rotate finger");
+            handler.GetHumanPose(ref pose);
+            for (int slot = 0; slot < Slots; slot++) if (Muscles[slot] >= 0) values[slot] = pose.muscles[Muscles[slot]];
+            handler.SetHumanPose(ref pose);
+            ClearChanged();
+            Refresh();
+        }
+
+        private void ClearChanged() { foreach (var bone in bones) if (bone) bone.hasChanged = false; }
+
+        private static int BoneIndex(int slot) => slot / PerHand * BonesPerHand + slot % PerHand / Parts * 3 + (slot % Parts == Parts - 1 ? 0 : slot % Parts);
+
+        private static void SelectBone(Transform bone)
+        {
+            if (!bone) return;
+            Selection.activeTransform = bone;
+            Tools.current = Tool.Rotate;
+            Tools.pivotRotation = PivotRotation.Local;
+            SceneView.RepaintAll();
+        }
+
+        private void SceneGUI(SceneView view)
+        {
+            if (handler == null) return;
+            foreach (var bone in bones)
+                if (bone && bone.hasChanged) { ReadPose(); break; }
+            var zTest = Handles.zTest;
+            Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+            int first = left ? BonesPerHand : 0;
+            for (int index = first; index < first + BonesPerHand; index++)
+            {
+                var bone = bones[index];
+                if (!bone) continue;
+                bool selected = Selection.activeTransform == bone;
+                float size = HandleUtility.GetHandleSize(bone.position) * (selected ? 0.08f : 0.05f);
+                Handles.color = selected ? Color.yellow : new Color(0.3f, 0.8f, 1f, 0.8f);
+                if (Handles.Button(bone.position, bone.rotation, size, size, Handles.SphereHandleCap)) SelectBone(bone);
+            }
+            Handles.zTest = zTest;
         }
 
         private void ReadClip()
@@ -205,9 +260,20 @@ namespace TwoBirds.Editor
             box.Add(MuscleSlider("Spread", first + 3));
             var joints = new Foldout { text = "Joints", value = jointsOpen[finger] };
             joints.RegisterValueChangedCallback(evt => { if (evt.target == joints) jointsOpen[finger] = evt.newValue; });
-            for (int part = 0; part < 3; part++) joints.Add(MuscleSlider($"Joint {part + 1}", first + part));
+            for (int part = 0; part < 3; part++) joints.Add(JointRow(part, first + part));
             box.Add(joints);
             root.Add(box);
+        }
+
+        private VisualElement JointRow(int part, int slot)
+        {
+            var row = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center } };
+            var slider = MuscleSlider($"Joint {part + 1}", slot);
+            slider.style.flexGrow = 1;
+            row.Add(slider);
+            row.Add(new Button(() => SelectBone(bones[BoneIndex(slot)]))
+                { text = "Select", tooltip = "Highlight the joint and rotate it with the Scene view gizmo." });
+            return row;
         }
 
         private Slider MuscleSlider(string label, int slot)
