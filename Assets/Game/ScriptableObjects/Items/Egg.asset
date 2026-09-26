@@ -1,0 +1,89 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 907777a9d2d92aa4b85683d696523192, type: 3}
+  m_Name: Egg
+  m_EditorClassIdentifier: Assembly-CSharp::TwoBirds.ItemDefinition
+  ItemId: 10
+  ItemName: Egg
+  Icon: {fileID: 21300000, guid: 6b58be4f5b87c7549b25095bced3256a, type: 3}
+  WorldPrefab: {fileID: 37104667520598086, guid: 40a7d43f8cde22242a4df7ed7373e846, type: 3}
+  Stackable: 0
+  MaxStack: 1
+  MinThrowSpeed: 3
+  MaxThrowSpeed: 14
+  ThrowChargeTime: 1
+  HoldSlot: {fileID: 11400000, guid: 23988aa6cd0882d45adbe832cb24e8db, type: 2}
+  ChargePoseDuration: 0.35
+  GripPoses:
+    Entries:
+    - Target: 2
+      FirstPerson: 0
+      Position: {x: 0.00011350917, y: -0.008298419, z: -7.7103873e-10}
+      Rotation: {x: 0.00000003235627, y: 0.000000019443634, z: 0.01011556, w: 0.99994886}
+    - Target: 2
+      FirstPerson: 1
+      Position: {x: 0.00011350917, y: -0.008298419, z: -7.7103873e-10}
+      Rotation: {x: 0.00000003235627, y: 0.000000019443634, z: 0.01011556, w: 0.99994886}
+  AvatarGripPoses:
+  - Avatar:
+      high: 1149333059
+      low: 2402174837
+    Poses:
+      Entries:
+      - Target: 0
+        FirstPerson: 1
+        Position: {x: 0.2865868, y: 1.3008353, z: 0.3347244}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 2
+        FirstPerson: 1
+        Position: {x: 0.004, y: -0.024, z: -7.7103873e-10}
+        Rotation: {x: 0.00000003235627, y: 0.000000019443634, z: 0.01011556, w: 0.99994886}
+      - Target: 1
+        FirstPerson: 1
+        Position: {x: 0.17463882, y: 1.5471208, z: 0.23732968}
+        Rotation: {x: 0.014087282, y: 0.9481564, z: 0.31464082, w: -0.04245142}
+      - Target: 2
+        FirstPerson: 0
+        Position: {x: 0.004, y: -0.024, z: -7.7103873e-10}
+        Rotation: {x: 0.00000003235627, y: 0.000000019443634, z: 0.01011556, w: 0.99994886}
+      - Target: 0
+        FirstPerson: 0
+        Position: {x: 0.1981479, y: 0.096275255, z: 0.36718935}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 1
+        FirstPerson: 0
+        Position: {x: 0.25971928, y: 0.65489554, z: 0.16680247}
+        Rotation: {x: -0.00090128055, y: 0.99404013, z: 0.10869921, w: 0.008242094}
+  GripFingers: {fileID: 0}
+  DontPushPlayer: 0
+  UseSharedImpactThreshold: 0
+  MinimumImpactSpeed: 1
+  ImpulseMultiplier: 1
+  OverrideCollisionDamage: 0
+  CollisionDamage: 0
+  SpawnSplat: 1
+  DestroyOnSplat: 1
+  SplatDefinition: {fileID: 11400000, guid: 4b3e881dc0ade8f44ad1af72a6117de9, type: 2}
+  SyncRotation: 1
+  DropSpeed: 1.5
+  VelocityInheritance: 1
+  Mass: 1
+  LinearDamping: 0.05
+  AngularDamping: 0.1
+  InitialSpin: {x: 3, y: 1, z: 2}
+  PhysicsMaterial: {fileID: 0}
+  CollisionDetection: 2
+  MaxSpeed: 50
+  OverrideSleepThreshold: 0
+  CollideWhileSleeping: 0
+  SimulateOnReleasingClient: 0
+  SleepThreshold: 0.005
