@@ -21,14 +21,72 @@ MonoBehaviour:
   MinThrowSpeed: 2
   MaxThrowSpeed: 5
   ThrowChargeTime: 1
-  HoldClass: {fileID: 11400000, guid: 4bba886c76e307a45bdbc1fd96669089, type: 2}
-  ThirdPersonGrip:
-    Position: {x: -0.0378, y: -0.2565, z: 0}
-    Euler: {x: 270, y: 0, z: 0}
-  FirstPersonGrip:
-    Position: {x: -0.0378, y: -0.2565, z: 0}
-    Euler: {x: 270, y: 0, z: 0}
-  AvatarGrips: []
+  HoldSlot: {fileID: 11400000, guid: 4bba886c76e307a45bdbc1fd96669089, type: 2}
+  ChargePoseDuration: 0.35
+  GripPoses:
+    Entries:
+    - Target: 0
+      FirstPerson: 1
+      Position: {x: -0, y: 1.131794, z: 0.2093427}
+      Rotation: {x: 0, y: 0, z: 0, w: 1}
+    - Target: 2
+      FirstPerson: 1
+      Position: {x: 0.29699993, y: 0.116000056, z: 0.26200005}
+      Rotation: {x: -0.15487985, y: 0.128823, z: 0.7530535, w: 0.6263605}
+    - Target: 5
+      FirstPerson: 1
+      Position: {x: 0.5440671, y: 1.103807, z: 0.15001027}
+      Rotation: {x: 0, y: 0, z: 0, w: 1}
+    - Target: 3
+      FirstPerson: 1
+      Position: {x: -0.251, y: 0.129, z: 0.254}
+      Rotation: {x: 0.00000002235174, y: -0.0000000074505797, z: -0.80612105, w: 0.5917507}
+    - Target: 7
+      FirstPerson: 1
+      Position: {x: -0.54294765, y: 1.1441082, z: 0.14553235}
+      Rotation: {x: 0, y: 0, z: 0, w: 1}
+    - Target: 2
+      FirstPerson: 0
+      Position: {x: 0.29699993, y: 0.116000056, z: 0.26200005}
+      Rotation: {x: -0.15487985, y: 0.128823, z: 0.7530535, w: 0.6263605}
+    - Target: 3
+      FirstPerson: 0
+      Position: {x: -0.251, y: 0.129, z: 0.254}
+      Rotation: {x: 0.00000002235174, y: -0.0000000074505797, z: -0.80612105, w: 0.5917507}
+    - Target: 1
+      FirstPerson: 0
+      Position: {x: 0, y: 0.8004279, z: 0.15672715}
+      Rotation: {x: 0, y: 0, z: 0, w: 1}
+  AvatarGripPoses:
+  - Avatar:
+      high: 1149333059
+      low: 2402174837
+    Poses:
+      Entries:
+      - Target: 0
+        FirstPerson: 0
+        Position: {x: 0, y: 0, z: 0.11418692}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 1
+        FirstPerson: 1
+        Position: {x: 0, y: 1.8068401, z: 0.16568299}
+        Rotation: {x: 0, y: 0, z: 0, w: 1}
+      - Target: 2
+        FirstPerson: 1
+        Position: {x: 0.32, y: -0.06, z: 0.276}
+        Rotation: {x: -0.34988612, y: 0.36901453, z: 0.63892955, w: 0.57721496}
+      - Target: 3
+        FirstPerson: 1
+        Position: {x: -0.31, y: -0.059000015, z: 0.254}
+        Rotation: {x: -0.39644665, y: -0.29102018, z: -0.7018983, w: 0.5152437}
+      - Target: 2
+        FirstPerson: 0
+        Position: {x: 0.32, y: -0.06, z: 0.276}
+        Rotation: {x: -0.34988612, y: 0.36901453, z: 0.63892955, w: 0.57721496}
+      - Target: 3
+        FirstPerson: 0
+        Position: {x: -0.31, y: -0.059000015, z: 0.254}
+        Rotation: {x: -0.39644668, y: -0.2910202, z: -0.70189834, w: 0.51524377}
   GripFingers: {fileID: 0}
   DontPushPlayer: 0
   UseSharedImpactThreshold: 1
@@ -36,6 +94,9 @@ MonoBehaviour:
   ImpulseMultiplier: 1
   OverrideCollisionDamage: 1
   CollisionDamage: 25
+  SpawnSplat: 0
+  DestroyOnSplat: 0
+  SplatDefinition: {fileID: 0}
   SyncRotation: 1
   DropSpeed: 1.5
   VelocityInheritance: 1
