@@ -72,11 +72,11 @@ namespace TwoBirds
             if (positionWeight <= 0f && rotationWeight <= 0f) return;
             if (clavicle && arm.Clavicle && positionWeight > 0f)
             {
-                Vector3 clavicle = arm.Clavicle.position;
+                Vector3 pivot = arm.Clavicle.position;
                 float t = Mathf.InverseLerp(ClavicleStart, 1f, delta.magnitude / length) * positionWeight;
                 if (t > 0f)
                     arm.Clavicle.rotation = Quaternion.RotateTowards(Quaternion.identity,
-                        Quaternion.FromToRotation(root - clavicle, wristTarget - clavicle), MaxClavicleAngle * t) * arm.Clavicle.rotation;
+                        Quaternion.FromToRotation(root - pivot, wristTarget - pivot), MaxClavicleAngle * t) * arm.Clavicle.rotation;
                 root = arm.Upper.position;
                 delta = wristTarget - root;
             }

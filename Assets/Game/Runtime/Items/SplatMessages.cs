@@ -67,7 +67,7 @@ namespace TwoBirds
                 target.Reset = reader.ReadUInt32();
                 target.Bone = (HumanBodyBones)reader.ReadUInt8Unpacked();
             }
-            if (target.Kind is SplatTargetKind.Scene or SplatTargetKind.Network or SplatTargetKind.Cart) target.Path = reader.ReadString();
+            if (target.Kind is SplatTargetKind.Scene or SplatTargetKind.Network or SplatTargetKind.Cart) target.Path = reader.ReadStringAllocated();
             return target;
         }
 

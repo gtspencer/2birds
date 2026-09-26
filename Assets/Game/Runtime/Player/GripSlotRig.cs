@@ -12,7 +12,7 @@ namespace TwoBirds
             GripTarget.LeftElbowHold, GripTarget.LeftElbowCharge
         };
 
-        private struct Applied
+        internal struct Applied
         {
             internal bool Defined;
             internal Pose Stored;
